@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FenixFlix Studio</title>
+    <title>Fenix Studio</title>
     
     <link rel="icon" href="data:image/svg+xml,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'&gt;&lt;path fill='%23facc15' d='M511.6 36.86l-64 415.1c-1.5 9.734-7.375 18.22-15.97 23.05c-4.844 2.719-10.27 4.097-15.68 4.097c-4.188 0-8.319-812-12.29-2.472l-122.6-69.66l-122.6 69.66c-3.973 1.66-8.106 2.472-12.29 2.472c-5.418 0-10.84-1.378-15.68-4.097c-8.594-4.828-14.47-13.32-15.97-23.05l-64-415.1C48.59 18.4 64.14 1.375 82.99 1.375c7.95 0 15.41 3.03 20.98 8.485l152 148.9l152-148.9c5.574-5.454 13.04-8.485 20.98-8.485C447.9 1.375 463.4 18.4 460.4 36.86z'/&gt;&lt;/svg&gt;">
 
@@ -87,7 +87,7 @@
             <div class="flex items-center gap-3 mr-6 flex-shrink-0">
                 <i class="fa-brands fa-phoenix-squadron text-white text-xl"></i>
                 <div>
-                    <h1 class="font-semibold text-base leading-tight tracking-tight text-white">FenixFlix Studio</h1>
+                    <h1 class="font-semibold text-base leading-tight tracking-tight text-white">Fenix Studio</h1>
                 </div>
             </div>
             
@@ -2182,7 +2182,7 @@
                 let addedCount = 0;
 
                 const firstLine = baseAudio;
-                const secondLine = quality ? quality : "Fenixflix";
+                const secondLine = quality ? quality : "FenixStudio";
 
                 if (type === 'series') {
                     let manualSeason = document.getElementById('seasonNum').value || '1';
@@ -2191,45 +2191,75 @@
                     let currentSmartEp = null;
 
                     lines.forEach(line => {
-                        const sxeMatch = line.match(/S(\d+)\s*E(\d+)|T(\d+)\s*EP?(\d+)|(\d+)x(\d+)/i);
+                        const url = gen.cleanUrl(line);
+                        
+                        let lineSeason = null;
+                        let lineEp = null;
+                        
+                        // Remove URL to avoid false matches (e.g. hex hashes like 'e842', resolutions like '1080x720')
+                        let parseLine = line;
+                        if (url) {
+                            parseLine = line.replace(/https?:\/\/\S+/gi, '');
+                        }
+                        
+                        const sxeMatch = parseLine.match(/S(\d+)\s*E(\d+)|T(\d+)\s*EP?(\d+)|(\d+)x(\d+)/i);
                         if (sxeMatch) {
-                            const s = parseInt(sxeMatch[1] || sxeMatch[3] || sxeMatch[5]).toString();
-                            const e = parseInt(sxeMatch[2] || sxeMatch[4] || sxeMatch[6]).toString();
-                            currentSmartSeason = s;
-                            currentSmartEp = e;
+                            lineSeason = parseInt(sxeMatch[1] || sxeMatch[3] || sxeMatch[5]).toString();
+                            lineEp = parseInt(sxeMatch[2] || sxeMatch[4] || sxeMatch[6]).toString();
+                        } else {
+                            const epMatch = parseLine.match(/(?:^|[^a-zA-Z])(?:EPIS[ÓÕOÃA]DIO|EPISODE|EP|E)[\s_]*#?[\s_]*(\d+)/i);
+                            if (epMatch) {
+                                lineEp = parseInt(epMatch[1]).toString();
+                            }
+                            const seasonMatch = parseLine.match(/(?:^|[^a-zA-Z])(?:TEMPORADA|TEMP)[\s_]*#?[\s_]*(\d+)/i) || parseLine.match(/(?:^|[^a-zA-Z])[TS][\s_]*#?[\s_]*(\d+)(?:[^a-zA-Z]|$)/i);
+                            if (seasonMatch) {
+                                lineSeason = parseInt(seasonMatch[1]).toString();
+                            }
+                        }
+
+                        if (!url) {
+                            if (lineSeason || lineEp) {
+                                if (lineSeason) currentSmartSeason = lineSeason;
+                                if (lineEp) currentSmartEp = lineEp;
+                            }
                             return; 
                         }
-                        const url = gen.cleanUrl(line);
-                        if (url) {
-                            const targetSeason = currentSmartSeason || manualSeason;
-                            const targetEp = currentSmartEp || manualEp.toString();
 
-                            if (!gen.currentData.streams[targetSeason]) gen.currentData.streams[targetSeason] = {};
-                            if (!gen.currentData.streams[targetSeason][targetEp]) gen.currentData.streams[targetSeason][targetEp] = [];
-                            
-                            const count = gen.currentData.streams[targetSeason][targetEp].filter(s => {
-                                const parts = s.name.split('\n');
-                                const sAudio = parts[0] ? parts[0].replace(/\s+\d+$/, '') : '';
-                                const sQuality = parts[1] || '';
-                                return sAudio === firstLine && sQuality === secondLine;
-                            }).length;
-                            
-                            const finalFirstLine = count > 0 ? `${firstLine} ${count + 1}` : firstLine;
-                            const finalName = `${finalFirstLine}\n${secondLine}`;
+                        const targetSeason = lineSeason || currentSmartSeason || manualSeason;
+                        const targetEp = lineEp || currentSmartEp || manualEp.toString();
 
-                            gen.currentData.streams[targetSeason][targetEp].push({ "url": url, "name": finalName });
-                            addedCount++;
-                            
-                            if (currentSmartSeason) {
-                                currentSmartEp = null;
+                        if (!gen.currentData.streams[targetSeason]) gen.currentData.streams[targetSeason] = {};
+                        if (!gen.currentData.streams[targetSeason][targetEp]) gen.currentData.streams[targetSeason][targetEp] = [];
+                        
+                        const count = gen.currentData.streams[targetSeason][targetEp].filter(s => {
+                            const parts = s.name.split('\n');
+                            const sAudio = parts[0] ? parts[0].replace(/\s+\d+$/, '') : '';
+                            const sQuality = parts[1] || '';
+                            return sAudio === firstLine && sQuality === secondLine;
+                        }).length;
+                        
+                        const finalFirstLine = count > 0 ? `${firstLine} ${count + 1}` : firstLine;
+                        const finalName = `${finalFirstLine}\n${secondLine}`;
+
+                        gen.currentData.streams[targetSeason][targetEp].push({ "url": url, "name": finalName });
+                        addedCount++;
+                        
+                        if (lineSeason) {
+                            manualSeason = lineSeason;
+                        }
+                        if (lineEp) {
+                            manualEp = parseInt(lineEp) + 1;
+                        }
+
+                        if (currentSmartSeason) {
+                            currentSmartEp = null;
+                        } else if (!lineSeason && !lineEp) {
+                            const maxEp = gen.getMaxEpForSeason(manualSeason);
+                            if (maxEp && manualEp >= maxEp) {
+                                manualSeason = (parseInt(manualSeason) + 1).toString();
+                                manualEp = 1;
                             } else {
-                                const maxEp = gen.getMaxEpForSeason(manualSeason);
-                                if (maxEp && manualEp >= maxEp) {
-                                    manualSeason = (parseInt(manualSeason) + 1).toString();
-                                    manualEp = 1;
-                                } else {
-                                    manualEp++;
-                                }
+                                manualEp++;
                             }
                         }
                     });
@@ -2326,6 +2356,11 @@
                     const formData = new FormData();
                     formData.append("nome", nomeArquivo);
                     formData.append("conteudo", JSON.stringify(gen.currentData));
+
+                    const senha = sessionStorage.getItem('fenixflix_senha');
+                    if (senha) {
+                        formData.append("senha", senha);
+                    }
 
                     const response = await fetch(API_URL + '/upload', {
                         method: 'POST',
@@ -2765,6 +2800,11 @@
                         const formData = new FormData();
                         formData.append("nome", nomeArquivo);
                         formData.append("conteudo", JSON.stringify(json));
+
+                        const senha = sessionStorage.getItem('fenixflix_senha');
+                        if (senha) {
+                            formData.append("senha", senha);
+                        }
 
                         const response = await fetch(API_URL + '/upload', {
                             method: 'POST',
