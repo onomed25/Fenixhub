@@ -95,6 +95,9 @@
                 <button onclick="switchView('generator')" id="btn-generator" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 hover:bg-zinc-900">
                     <i class="fa-solid fa-code"></i> <span class="hidden sm:inline">Criar JSON</span>
                 </button>
+                <button onclick="switchView('ranking'); loadRankingStats();" id="btn-ranking" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 hover:bg-zinc-900">
+                    <i class="fa-solid fa-trophy"></i> <span class="hidden sm:inline">Ranking</span>
+                </button>
                 <button onclick="switchView('requests'); reqProcessor.loadFromDB();" id="btn-requests" class="nav-btn hidden px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 hover:bg-zinc-900">
                     <i class="fa-solid fa-list-check"></i> <span class="hidden md:inline">Pedidos</span>
                 </button>
@@ -104,11 +107,14 @@
                 <button onclick="switchView('storage'); loadStorageStats();" id="btn-storage" class="nav-btn hidden px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 hover:bg-zinc-900">
                     <i class="fa-solid fa-database"></i> <span class="hidden sm:inline">Armazenamento</span>
                 </button>
+                <button onclick="switchView('reports'); loadReportsList();" id="btn-reports" class="nav-btn hidden px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 hover:bg-zinc-900">
+                    <i class="fa-solid fa-triangle-exclamation"></i> <span class="hidden sm:inline">Denúncias</span>
+                </button>
                 <a href="https://fenixflix-ur9u.onrender.com/" target="_blank" class="px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white">
-                    <i class="fa-solid fa-puzzle-piece"></i> <span>Addon</span>
+                    <i class="fa-solid fa-puzzle-piece"></i> <span class="hidden sm:inline">Addon</span>
                 </a>
                 <button onclick="toggleAdminLogin()" id="btn-login-admin" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 hover:bg-zinc-900">
-                    <i class="fa-solid fa-user-shield"></i> <span>Login Admin</span>
+                    <i class="fa-solid fa-user-shield"></i> <span class="hidden sm:inline">Login Admin</span>
                 </button>
             </div>
         </div>
@@ -118,8 +124,18 @@
 
         <!-- ABA 1: GERADOR -->
         <div id="view-generator" class="tab-content">
+            <!-- Seletor de visualização exclusivo para mobile -->
+            <div class="flex lg:hidden bg-zinc-950 p-1 rounded-xl border border-zinc-800 mb-6 w-full gap-1">
+                <button onclick="toggleGeneratorSubView('editor')" id="btn-sub-editor" class="flex-grow py-2 text-xs font-semibold rounded-lg text-white bg-zinc-900 border border-zinc-800/80 transition-all text-center">
+                    <i class="fa-solid fa-pen-to-square mr-1.5"></i>Formulário
+                </button>
+                <button onclick="toggleGeneratorSubView('preview')" id="btn-sub-preview" class="flex-grow py-2 text-xs font-semibold rounded-lg text-zinc-400 hover:text-white transition-all text-center">
+                    <i class="fa-solid fa-code mr-1.5"></i>Visualizar JSON
+                </button>
+            </div>
+
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div class="lg:col-span-2 space-y-6">
+                <div id="generator-main-column" class="lg:col-span-2 space-y-6 block">
                     <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 md:p-8">
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
                             <h2 class="text-lg font-semibold text-white">Detalhes do Conteúdo</h2>
@@ -199,14 +215,38 @@
                             </div>
                         </div>
 
+                        <!-- Discord Auth Status -->
+                        <div id="discordAuthCard" class="mb-6 p-4 rounded-xl border border-zinc-800/80 bg-zinc-950/30 flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <div class="flex items-center gap-3">
+                                <div id="discordUserAvatar" class="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-600 border border-zinc-700/60 overflow-hidden shrink-0">
+                                    <i class="fa-brands fa-discord text-lg text-indigo-400"></i>
+                                </div>
+                                <div class="text-left">
+                                    <h4 id="discordUserStatus" class="text-xs font-semibold text-zinc-400">Desconectado</h4>
+                                    <p id="discordUserName" class="text-[11px] text-zinc-500">Faça login com o Discord para poder enviar links.</p>
+                                </div>
+                            </div>
+                            <div class="w-full sm:w-auto">
+                                <a id="discordLoginBtn" href="/api/auth/discord" class="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-4 py-2.5 rounded-lg transition shadow-md shadow-indigo-500/10 w-full text-center">
+                                    <i class="fa-brands fa-discord text-sm"></i>
+                                    Login com Discord
+                                </a>
+                                <button id="discordLogoutBtn" onclick="discordLogout()" class="hidden flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium text-xs px-4 py-2.5 rounded-lg transition w-full text-center">
+                                    <i class="fa-solid fa-right-from-bracket"></i>
+                                    Sair
+                                </button>
+                            </div>
+                        </div>
+                        <input type="hidden" id="uploaderNick">
+
                         <!-- Caixa de Info do Cinemeta -->
                         <div id="cinemetaInfoBox" class="hidden bg-zinc-950/40 border border-zinc-800/80 rounded-xl p-4 mb-6 flex flex-col gap-3">
-                            <div class="flex items-start justify-between">
+                            <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
                                 <div>
                                     <span id="cinemetaInfoType" class="text-[9px] uppercase tracking-wider text-indigo-400 font-semibold border border-indigo-500/30 px-1.5 py-0.5 rounded">SÉRIE</span>
                                     <h4 id="cinemetaInfoTitle" class="font-medium text-white text-sm mt-1.5">-</h4>
                                 </div>
-                                <button type="button" onclick="gen.fillFromCinemeta()" class="text-xs bg-white text-zinc-950 font-medium px-3 py-1.5 rounded-lg hover:bg-zinc-200 transition">Preencher Campos</button>
+                                <button type="button" onclick="gen.fillFromCinemeta()" class="text-xs bg-white text-zinc-950 font-medium px-3 py-1.5 rounded-lg hover:bg-zinc-200 transition w-full sm:w-auto text-center">Preencher Campos</button>
                             </div>
                             <div id="cinemetaInfoSeriesDetails" class="grid grid-cols-2 gap-3 mt-1 text-xs">
                                 <div class="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800/40">
@@ -231,15 +271,18 @@
                             <div class="flex justify-between items-end mb-3">
                                 <label class="block text-xs font-medium text-zinc-500">Links de Transmissão</label>
                                 <div class="flex gap-2">
-                                    <button onclick="tg.migrateAllLinks()" class="text-[10px] text-sky-400 hover:text-sky-300 px-2 py-1 rounded transition flex items-center gap-1" title="Enviar links externos para o Telegram para gerar links do bot">
-                                        <i class="fa-brands fa-telegram"></i> Converter p/ Telegram
+                                    <button onclick="tg.migrateAllLinks()" class="text-[10px] text-sky-400 hover:text-sky-300 px-2 py-1 rounded transition flex items-center gap-1" title="Converter p/ Telegram">
+                                        <i class="fa-brands fa-telegram"></i> <span class="hidden sm:inline">Converter p/ Telegram</span>
                                     </button>
-                                    <button onclick="gen.migrateHost()" class="text-[10px] text-zinc-400 hover:text-white px-2 py-1 rounded transition flex items-center gap-1">
-                                        <i class="fa-solid fa-rotate"></i> Migrar Render
+                                    <button onclick="gen.sortLinksByName()" class="text-[10px] text-indigo-400 hover:text-indigo-300 px-2 py-1 rounded transition flex items-center gap-1" title="Ordenar p/ Nome">
+                                        <i class="fa-solid fa-arrow-down-a-z"></i> <span class="hidden sm:inline">Ordenar p/ Nome</span>
                                     </button>
-                                    <label class="text-[10px] text-zinc-400 hover:text-white px-2 py-1 rounded cursor-pointer transition flex items-center gap-1">
+                                    <button onclick="gen.migrateHost()" class="text-[10px] text-zinc-400 hover:text-white px-2 py-1 rounded transition flex items-center gap-1" title="Migrar Render">
+                                        <i class="fa-solid fa-rotate"></i> <span class="hidden sm:inline">Migrar Render</span>
+                                    </button>
+                                    <label class="text-[10px] text-zinc-400 hover:text-white px-2 py-1 rounded cursor-pointer transition flex items-center gap-1" title="Importar TXT">
                                         <input type="file" accept=".txt" class="hidden" onchange="gen.loadTxt(this)">
-                                        <i class="fa-solid fa-file-lines"></i> TXT
+                                        <i class="fa-solid fa-file-lines"></i> <span class="hidden sm:inline">TXT</span>
                                     </label>
                                 </div>
                             </div>
@@ -285,23 +328,50 @@
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div class="space-y-3">
                                 <!-- Opção de Envio: Navegador vs Local -->
-                                <div class="flex gap-4 border-b border-zinc-800/60 pb-2 text-[11px]">
+                                <div class="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/60 pb-2 text-[11px]">
+                                    <div class="flex gap-4">
+                                        <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
+                                            <input type="radio" name="tgMode" value="browser" checked onchange="tg.switchMode('browser')" class="text-sky-500 bg-zinc-900 border-zinc-800 focus:ring-sky-500 w-3 h-3">
+                                            <span>Pelo Navegador</span>
+                                        </label>
+                                        <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
+                                            <input type="radio" name="tgMode" value="local" onchange="tg.switchMode('local')" class="text-sky-500 bg-zinc-900 border-zinc-800 focus:ring-sky-500 w-3 h-3">
+                                            <span>Caminho Local (PC)</span>
+                                        </label>
+                                    </div>
                                     <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
-                                        <input type="radio" name="tgMode" value="browser" checked onchange="tg.switchMode('browser')" class="text-sky-500 bg-zinc-900 border-zinc-800 focus:ring-sky-500 w-3 h-3">
-                                        <span>Pelo Navegador</span>
+                                        <input type="checkbox" id="tgAutoSave" checked class="rounded border-zinc-800 bg-zinc-900 text-sky-500 focus:ring-sky-500 w-3 h-3 cursor-pointer">
+                                        <span>Auto-salvar no banco</span>
                                     </label>
-                                    <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
-                                        <input type="radio" name="tgMode" value="local" onchange="tg.switchMode('local')" class="text-sky-500 bg-zinc-900 border-zinc-800 focus:ring-sky-500 w-3 h-3">
-                                        <span>Caminho Local (PC)</span>
-                                    </label>
+                                </div>
+
+                                <!-- Campos Obrigatórios: ID IMDb e Qualidade para o Upload -->
+                                <div class="grid grid-cols-2 gap-2.5">
+                                    <div>
+                                        <label class="block text-[10px] text-zinc-500 mb-1">ID IMDb <span class="text-red-400">*</span></label>
+                                        <input type="text" id="tgImdbId" class="input-unified w-full p-2.5 rounded-lg text-xs" placeholder="Ex: tt0903747" oninput="tg.syncToMainForm()">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-zinc-500 mb-1">Qualidade <span class="text-red-400">*</span></label>
+                                        <select id="tgQuality" class="input-unified w-full p-2.5 rounded-lg text-xs appearance-none" onchange="tg.syncToMainForm()">
+                                            <option value="">Selecione...</option>
+                                            <option value="1080p">1080p</option>
+                                            <option value="720p">720p</option>
+                                            <option value="4K">4K</option>
+                                            <option value="SD">SD</option>
+                                            <option value="FHD">FHD</option>
+                                            <option value="HD">HD</option>
+                                            <option value="CAM">CAM</option>
+                                        </select>
+                                    </div>
                                 </div>
 
                                 <!-- Upload pelo Navegador -->
                                 <div id="tgBrowserSection" class="flex gap-2">
-                                    <input type="file" id="tgFile" class="hidden" multiple onchange="tg.handleFileChange(this)">
+                                    <input type="file" id="tgFile" class="hidden" multiple accept="video/*,.mkv,.mp4,.avi,.webm,.ts,.mov,.flv,.3gp,.mpeg,.m4v" onchange="tg.handleFileChange(this)">
                                     <label for="tgFile" class="input-unified flex-grow p-2.5 rounded-lg text-xs cursor-pointer flex items-center gap-2 hover:bg-zinc-900 truncate">
                                         <i class="fa-solid fa-file-video text-zinc-500"></i>
                                         <span id="tgFileName" class="text-zinc-500">Selecionar vídeo...</span>
@@ -367,7 +437,7 @@
                 </div>
 
                 <!-- Painel de Preview -->
-                <div class="lg:col-span-1">
+                <div id="generator-preview-column" class="lg:col-span-1 lg:block hidden">
                     <div class="bg-zinc-900 rounded-2xl border border-zinc-800 flex flex-col h-full">
                         <div class="p-5 border-b border-zinc-800 flex justify-between items-center">
                             <h3 class="font-medium text-white text-sm">Preview JSON</h3>
@@ -563,6 +633,35 @@
             </div>
         </div>
 
+        <!-- ABA 3.5: RANKING -->
+        <div id="view-ranking" class="tab-content">
+            <div class="max-w-2xl mx-auto">
+                <!-- Coluna: Top Colaboradores -->
+                <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 md:p-8">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-zinc-800 pb-4 gap-3">
+                        <div>
+                            <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-medal text-indigo-500"></i> Top Colaboradores
+                            </h2>
+                            <p class="text-xs text-zinc-500 mt-1">Quem mais contribuiu com conteúdos para o catálogo.</p>
+                        </div>
+                        <div class="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800 text-xs shrink-0 self-start sm:self-center">
+                            <button onclick="changeColabPeriod('semana')" id="btn-period-semana" class="px-2.5 py-1 rounded-md text-zinc-400 hover:text-white font-medium transition-all">Semana</button>
+                            <button onclick="changeColabPeriod('mes')" id="btn-period-mes" class="px-2.5 py-1 rounded-md text-zinc-400 hover:text-white font-medium transition-all">Mês</button>
+                            <button onclick="changeColabPeriod('ano')" id="btn-period-ano" class="px-2.5 py-1 rounded-md text-zinc-400 hover:text-white font-medium transition-all">Ano</button>
+                            <button onclick="changeColabPeriod('todos')" id="btn-period-todos" class="px-2.5 py-1 rounded-md bg-indigo-600 text-white font-medium transition-all">Geral</button>
+                        </div>
+                    </div>
+                    <div id="ranking-top-collaborators" class="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
+                        <div class="text-center py-12 text-zinc-500">
+                            <i class="fa-solid fa-spinner animate-spin text-xl mb-2"></i>
+                            <p class="text-xs">Carregando dados...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- ABA 4: ARMAZENAMENTO -->
         <div id="view-storage" class="tab-content">
             <div class="max-w-3xl mx-auto space-y-6">
@@ -683,6 +782,47 @@
             </div>
         </div>
 
+        <!-- ABA 5: DENÚNCIAS (Admin-only) -->
+        <div id="view-reports" class="tab-content">
+            <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 md:p-8">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-b border-zinc-800 pb-8">
+                    <div>
+                        <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-triangle-exclamation text-red-500"></i> Denúncias de Conteúdo
+                        </h2>
+                        <p class="text-sm text-zinc-500 mt-1">Gerencie os relatos de problemas e links offline enviados pelos usuários.</p>
+                    </div>
+                    <div>
+                        <button onclick="loadReportsList()" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-xl text-xs font-medium transition flex items-center gap-2">
+                            <i class="fa-solid fa-rotate"></i> Atualizar
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-zinc-800 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                                <th class="pb-3 pr-4">Conteúdo</th>
+                                <th class="pb-3 px-4">Motivo</th>
+                                <th class="pb-3 px-4">Detalhes</th>
+                                <th class="pb-3 px-4">Enviado em</th>
+                                <th class="pb-3 pl-4 text-right">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reports-table-body" class="divide-y divide-zinc-800/50 text-sm text-zinc-300">
+                            <!-- Preenchido via JS -->
+                        </tbody>
+                    </table>
+                    <div id="reports-empty-state" class="hidden text-center py-12">
+                        <i class="fa-solid fa-circle-check text-4xl text-zinc-600 mb-3 block"></i>
+                        <p class="text-sm font-medium text-zinc-400">Nenhuma denúncia ativa!</p>
+                        <p class="text-xs text-zinc-600 mt-1">Todos os conteúdos estão funcionando corretamente.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <!-- Modal do Catálogo (Ver Links) -->
@@ -695,6 +835,7 @@
                 </div>
                 <div class="flex gap-2 items-center flex-shrink-0">
                     <button id="btnModalEdit" class="text-[10px] uppercase font-bold bg-white text-zinc-900 hover:bg-zinc-200 px-3 py-2 rounded-lg transition">Editar JSON</button>
+                    <button onclick="openReportModal()" class="text-[10px] uppercase font-bold bg-red-650 hover:bg-red-600 text-white px-3 py-2 rounded-lg transition flex items-center gap-1.5"><i class="fa-solid fa-triangle-exclamation"></i> Denunciar</button>
                     <button onclick="cat.closeModal()" class="text-zinc-500 hover:text-white bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 w-9 h-9 rounded-full transition flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
                 </div>
             </div>
@@ -721,6 +862,47 @@
                 <button onclick="gen.closeVisualEditor()" class="px-5 py-2.5 bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 text-xs font-medium rounded-xl transition">Descartar</button>
                 <button onclick="gen.saveVisualEditor()" class="px-6 py-2.5 bg-white hover:bg-zinc-200 text-zinc-900 text-xs font-medium rounded-xl transition">Salvar Mudanças</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal de Denúncia de Conteúdo -->
+    <div id="reportModal" class="fixed inset-0 bg-black/90 backdrop-blur-sm hidden flex items-center justify-center z-[150] p-4">
+        <div class="bg-zinc-900 w-full max-w-md rounded-2xl border border-zinc-800 p-6 shadow-2xl flex flex-col">
+            <div class="flex justify-between items-start mb-4 border-b border-zinc-850 pb-3">
+                <div>
+                    <h3 class="text-white font-semibold text-base flex items-center gap-2">
+                        <i class="fa-solid fa-triangle-exclamation text-red-500"></i> Denunciar Conteúdo
+                    </h3>
+                    <p id="reportTargetLabel" class="text-xs text-zinc-400 mt-1 truncate max-w-[280px]"></p>
+                </div>
+                <button onclick="closeReportModal()" class="text-zinc-500 hover:text-white bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 w-8 h-8 rounded-full transition flex items-center justify-center"><i class="fa-solid fa-xmark text-sm"></i></button>
+            </div>
+            
+            <form id="reportForm" onsubmit="submitReport(event)" class="space-y-4">
+                <input type="hidden" id="reportItemName">
+                <input type="hidden" id="reportItemTitle">
+                
+                <div>
+                    <label class="block text-zinc-400 text-xs font-semibold mb-1.5">Motivo da Denúncia</label>
+                    <select id="reportReason" required class="w-full bg-zinc-950 text-white text-sm rounded-xl px-3.5 py-2.5 border border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none transition-all">
+                        <option value="" disabled selected>Selecione um motivo...</option>
+                        <option value="Link Fora do Ar / Quebrado">Link Fora do Ar / Quebrado</option>
+                        <option value="Áudio / Legenda com Defeito">Áudio / Legenda com Defeito</option>
+                        <option value="Filme ou Série Trocada">Filme ou Série Trocada</option>
+                        <option value="Outro Motivo">Outro Motivo</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-zinc-400 text-xs font-semibold mb-1.5">Detalhes Adicionais (opcional)</label>
+                    <textarea id="reportDetails" rows="3" placeholder="Descreva o problema aqui..." class="w-full bg-zinc-950 text-white text-sm rounded-xl px-3.5 py-2.5 border border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none transition-all resize-none"></textarea>
+                </div>
+                
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="closeReportModal()" class="flex-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-400 border border-zinc-800 py-2.5 rounded-xl text-xs font-semibold transition-all">Cancelar</button>
+                    <button type="submit" class="flex-1 bg-red-650 hover:bg-red-600 text-white py-2.5 rounded-xl text-xs font-semibold transition-all shadow-lg shadow-red-600/10">Enviar</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -776,9 +958,9 @@
 
     <script>
         // --- CONFIGURAÇÃO API ---
-        const API_URL = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1')
+        const API_URL = (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1'))
             ? ''
-            : 'https://fenixflix-fenixstudio.hf.space';
+            : (window.location.hostname.includes('fenixflix-fenixstudio.hf.space') ? '' : 'https://fenixflix-fenixstudio.hf.space');
 
         // --- UTILIDADES ---
         function showToast(message, type = 'success') {
@@ -942,6 +1124,7 @@
             const btnGenerator = document.getElementById('btn-generator');
             const btnStorage = document.getElementById('btn-storage');
             const btnRequests = document.getElementById('btn-requests');
+            const btnReports = document.getElementById('btn-reports');
             
             if (btnGenerator) {
                 // O Gerador é público para que qualquer um possa usar o buscador e upload do Telegram
@@ -961,10 +1144,17 @@
                     btnRequests.classList.add('hidden');
                 }
             }
+            if (btnReports) {
+                if (isLogged) {
+                    btnReports.classList.remove('hidden');
+                } else {
+                    btnReports.classList.add('hidden');
+                }
+            }
             
-            // Se não estiver logado e estiver na aba de pedidos ou armazenamento, volta para o catálogo (o gerador agora é público)
+            // Se não estiver logado e estiver na aba de pedidos, armazenamento ou denúncias, volta para o catálogo (o gerador agora é público)
             const activeTab = document.querySelector('.tab-content.active');
-            if (!isLogged && activeTab && (activeTab.id === 'view-requests' || activeTab.id === 'view-storage')) {
+            if (!isLogged && activeTab && (activeTab.id === 'view-requests' || activeTab.id === 'view-storage' || activeTab.id === 'view-reports')) {
                 switchView('catalog');
                 setTimeout(() => cat.filter('all'), 50);
             }
@@ -997,6 +1187,9 @@
             }
             if (typeof reqProcessor !== 'undefined' && typeof reqProcessor.renderList === 'function') {
                 reqProcessor.renderList();
+            }
+            if (typeof updateDiscordUI === 'function') {
+                updateDiscordUI();
             }
         }
 
@@ -1057,6 +1250,37 @@
             }
         }
 
+        function toggleGeneratorSubView(subView) {
+            const mainCol = document.getElementById('generator-main-column');
+            const prevCol = document.getElementById('generator-preview-column');
+            const btnEditor = document.getElementById('btn-sub-editor');
+            const btnPreview = document.getElementById('btn-sub-preview');
+            
+            if (!mainCol || !prevCol || !btnEditor || !btnPreview) return;
+            
+            if (subView === 'editor') {
+                mainCol.classList.remove('hidden');
+                mainCol.classList.add('block');
+                prevCol.classList.add('hidden');
+                prevCol.classList.remove('block');
+                
+                btnEditor.classList.add('bg-zinc-900', 'text-white', 'border-zinc-800/80');
+                btnEditor.classList.remove('text-zinc-400');
+                btnPreview.classList.remove('bg-zinc-900', 'text-white', 'border-zinc-800/80');
+                btnPreview.classList.add('text-zinc-400');
+            } else {
+                mainCol.classList.add('hidden');
+                mainCol.classList.remove('block');
+                prevCol.classList.remove('hidden');
+                prevCol.classList.add('block');
+                
+                btnPreview.classList.add('bg-zinc-900', 'text-white', 'border-zinc-800/80');
+                btnPreview.classList.remove('text-zinc-400');
+                btnEditor.classList.remove('bg-zinc-900', 'text-white', 'border-zinc-800/80');
+                btnEditor.classList.add('text-zinc-400');
+            }
+        }
+
         // --- MÓDULO 0: SERVIÇO TELEGRAM ---
         const tg = {
             status: { configured: false, connected: false },
@@ -1078,8 +1302,58 @@
                     });
                 }
 
+                // Sincroniza campos principais com o painel do Telegram
+                const mainImdbInput = document.getElementById('contentId');
+                const mainQualitySelect = document.getElementById('videoQuality');
+                const tgImdbInput = document.getElementById('tgImdbId');
+                const tgQualitySelect = document.getElementById('tgQuality');
+
+                if (mainImdbInput && tgImdbInput) {
+                    mainImdbInput.addEventListener('input', (e) => {
+                        tgImdbInput.value = e.target.value;
+                    });
+                    tgImdbInput.value = mainImdbInput.value;
+                }
+                if (mainQualitySelect && tgQualitySelect) {
+                    mainQualitySelect.addEventListener('change', (e) => {
+                        tgQualitySelect.value = e.target.value;
+                    });
+                    tgQualitySelect.value = mainQualitySelect.value;
+                }
+
                 await tg.checkStatus();
                 setInterval(tg.checkStatus, 15000);
+            },
+
+            syncToMainForm: () => {
+                const mainImdbInput = document.getElementById('contentId');
+                const mainQualitySelect = document.getElementById('videoQuality');
+                const tgImdbId = document.getElementById('tgImdbId').value.trim();
+                const tgQuality = document.getElementById('tgQuality').value.trim();
+
+                if (mainImdbInput) {
+                    mainImdbInput.value = tgImdbId;
+                    mainImdbInput.dispatchEvent(new Event('input'));
+                }
+                if (mainQualitySelect) {
+                    if (tgQuality) {
+                        let optionExists = false;
+                        for (let i = 0; i < mainQualitySelect.options.length; i++) {
+                            if (mainQualitySelect.options[i].value === tgQuality) {
+                                optionExists = true;
+                                break;
+                            }
+                        }
+                        if (!optionExists) {
+                            const opt = document.createElement('option');
+                            opt.value = tgQuality;
+                            opt.innerText = tgQuality;
+                            mainQualitySelect.insertBefore(opt, mainQualitySelect.lastChild);
+                        }
+                        mainQualitySelect.value = tgQuality;
+                        mainQualitySelect.dispatchEvent(new Event('change'));
+                    }
+                }
             },
 
             toggleAdvanced: () => {
@@ -1243,6 +1517,13 @@
                             showToast("Esta conta possui verificação de duas etapas. Digite sua senha de 2FA.", "warning");
                         } else if (data.sucesso && data.session) {
                             localStorage.setItem('fenixflix_tg_session', data.session);
+                            if (data.telegramUser) {
+                                localStorage.setItem('fenix_uploader_nick', data.telegramUser);
+                                const nickInput = document.getElementById('uploaderNick');
+                                if (nickInput) {
+                                    nickInput.value = data.telegramUser;
+                                }
+                            }
                             document.getElementById('tgLoginPanel').classList.add('hidden');
                             showToast("Telegram conectado com sucesso!", "success");
                             tg.updateUIStatus();
@@ -1270,10 +1551,27 @@
                 }
             },
 
-            handleFileChange: (input) => {
-                const files = input.files;
+             handleFileChange: (input) => {
+                const files = Array.from(input.files);
                 const label = document.getElementById('tgFileName');
                 if (files && files.length > 0) {
+                    const videoExtensions = ['.mp4', '.mkv', '.avi', '.webm', '.ts', '.mov', '.flv', '.3gp', '.mpeg', '.m4v'];
+                    const invalidFiles = files.filter(file => {
+                        const nameLower = file.name.toLowerCase();
+                        const extensionMatch = videoExtensions.some(ext => nameLower.endsWith(ext));
+                        const mimeMatch = file.type && file.type.startsWith('video/');
+                        return !extensionMatch && !mimeMatch;
+                    });
+
+                    if (invalidFiles.length > 0) {
+                        showToast("Apenas arquivos de vídeo são permitidos (mp4, mkv, etc.)!", "error");
+                        input.value = '';
+                        label.innerText = "Selecionar vídeo...";
+                        label.classList.remove('text-zinc-200');
+                        label.classList.add('text-zinc-500');
+                        return;
+                    }
+
                     if (files.length === 1) {
                         label.innerText = files[0].name;
                     } else {
@@ -1292,6 +1590,35 @@
                 const fileInput = document.getElementById('tgFile');
                 const files = Array.from(fileInput.files);
                 if (files.length === 0) return showToast("Selecione pelo menos um arquivo primeiro!", "warning");
+
+                // Validar campos obrigatórios
+                const tgImdbId = document.getElementById('tgImdbId').value.trim();
+                const tgQuality = document.getElementById('tgQuality').value.trim();
+
+                if (!tgImdbId) {
+                    return showToast("O ID IMDb é obrigatório para enviar o vídeo!", "error");
+                }
+                if (!/^tt\d{7,10}$/.test(tgImdbId)) {
+                    return showToast("O ID IMDb informado é inválido! Deve começar com 'tt' e conter de 7 a 10 dígitos (ex: tt0903747).", "error");
+                }
+                if (!tgQuality) {
+                    return showToast("A qualidade do vídeo é obrigatória para enviar o vídeo!", "error");
+                }
+
+                // Garantir que todos os arquivos selecionados são vídeos
+                const videoExtensions = ['.mp4', '.mkv', '.avi', '.webm', '.ts', '.mov', '.flv', '.3gp', '.mpeg', '.m4v'];
+                const invalidFiles = files.filter(file => {
+                    const nameLower = file.name.toLowerCase();
+                    const extensionMatch = videoExtensions.some(ext => nameLower.endsWith(ext));
+                    const mimeMatch = file.type && file.type.startsWith('video/');
+                    return !extensionMatch && !mimeMatch;
+                });
+                if (invalidFiles.length > 0) {
+                    return showToast("Apenas arquivos de vídeo são permitidos (mp4, mkv, etc.)!", "error");
+                }
+
+                // Sincronizar com os campos principais do gerador
+                tg.syncToMainForm();
 
                 // 1. Ordena os arquivos de forma natural (ex: Episódio 2 antes de Episódio 10)
                 files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
@@ -1347,7 +1674,7 @@
                         formData.append('video', file);
 
                         const xhr = new XMLHttpRequest();
-                        xhr.open('POST', '/api/telegram/upload', true);
+                        xhr.open('POST', API_URL + '/api/telegram/upload', true);
 
                         const session = localStorage.getItem('fenixflix_tg_session');
                         if (session) {
@@ -1380,9 +1707,9 @@
                                 try {
                                     const res = JSON.parse(xhr.responseText);
                                     if (res.sucesso && res.link) {
-                                        // Substitui o placeholder pelo link retornado
+                                        // Substitui o placeholder pelo link retornado (preservando o nome do arquivo como comentário)
                                         const currentLines = textarea.value.split('\n');
-                                        currentLines[startLineIndex + index] = res.link;
+                                        currentLines[startLineIndex + index] = `${res.link} # ${file.name}`;
                                         textarea.value = currentLines.join('\n');
                                         textarea.dispatchEvent(new Event('input'));
 
@@ -1458,14 +1785,86 @@
                     showToast("Falha ao enviar os vídeos.", "error");
                 }
 
+                if (successCount > 0) {
+                    const finalLines = textarea.value.split('\n');
+                    const failedIndices = new Set();
+                    for (let i = 0; i < files.length; i++) {
+                        const lineIndex = startLineIndex + i;
+                        const line = finalLines[lineIndex];
+                        if (line && (line.includes('[Erro') || line.includes('[Aguardando'))) {
+                            failedIndices.add(lineIndex);
+                        }
+                    }
+
+                    // 1. Filtrar linhas bem sucedidas e definir no textarea para processamento
+                    const successLines = [];
+                    for (let i = 0; i < finalLines.length; i++) {
+                        if (!failedIndices.has(i)) {
+                            successLines.push(finalLines[i]);
+                        }
+                    }
+                    textarea.value = successLines.join('\n');
+                    textarea.dispatchEvent(new Event('input'));
+                    
+                    // 2. Processar automaticamente
+                    gen.process();
+
+                    // 3. Salvar JSON no banco se auto-salvar estiver ativado
+                    const autoSave = document.getElementById('tgAutoSave')?.checked !== false;
+                    const keepFields = failedIndices.size > 0;
+                    if (autoSave) {
+                        showToast("Salvando JSON automaticamente no banco de dados...", "info");
+                        await gen.uploadParaBanco(keepFields);
+                    } else {
+                        showToast("Processamento concluído. JSON gerado no painel lateral para revisão.", "success");
+                    }
+
+                    // 4. Se houveram falhas, restaurar apenas os links que falharam na caixa para revisão
+                    if (keepFields) {
+                        const failedLines = [];
+                        for (let i = 0; i < finalLines.length; i++) {
+                            if (failedIndices.has(i)) {
+                                failedLines.push(finalLines[i]);
+                            }
+                        }
+                        textarea.value = failedLines.join('\n');
+                        textarea.dispatchEvent(new Event('input'));
+                        showToast(`${failedIndices.size} envios falharam e foram mantidos para revisão.`, "warning");
+                    }
+                }
+
                 fileInput.value = '';
                 tg.handleFileChange(fileInput);
             },
 
-            sendLocal: async () => {
+             sendLocal: async () => {
                 const pathInput = document.getElementById('tgLocalPath');
                 const localPath = pathInput.value.trim();
                 if (!localPath) return showToast("Digite o caminho do arquivo local!", "warning");
+
+                // Validar campos obrigatórios
+                const tgImdbId = document.getElementById('tgImdbId').value.trim();
+                const tgQuality = document.getElementById('tgQuality').value.trim();
+
+                if (!tgImdbId) {
+                    return showToast("O ID IMDb é obrigatório para enviar o vídeo!", "error");
+                }
+                if (!/^tt\d{7,10}$/.test(tgImdbId)) {
+                    return showToast("O ID IMDb informado é inválido! Deve começar com 'tt' e conter de 7 a 10 dígitos (ex: tt0903747).", "error");
+                }
+                if (!tgQuality) {
+                    return showToast("A qualidade do vídeo é obrigatória para enviar o vídeo!", "error");
+                }
+
+                // Validar extensão do arquivo local
+                const videoExtensions = ['.mp4', '.mkv', '.avi', '.webm', '.ts', '.mov', '.flv', '.3gp', '.mpeg', '.m4v'];
+                const pathLower = localPath.toLowerCase();
+                if (!videoExtensions.some(ext => pathLower.endsWith(ext))) {
+                    return showToast("O arquivo local precisa ser um vídeo (mp4, mkv, etc.)!", "error");
+                }
+
+                // Sincronizar com os campos principais do gerador
+                tg.syncToMainForm();
 
                 const btn = document.getElementById('btnTgLocalSend');
                 const progressBox = document.getElementById('tgProgressBox');
@@ -1506,7 +1905,8 @@
 
                     const data = await res.json();
                     if (res.ok && data.sucesso && data.link) {
-                        tg.appendLink(data.link);
+                        const fileName = localPath.split(/[/\\]/).pop();
+                        tg.appendLink(`${data.link} # ${fileName}`);
                         showToast("Vídeo local enviado e link capturado com sucesso!", "success");
                         pathInput.value = '';
                     } else {
@@ -1530,6 +1930,7 @@
 
                 const lines = textarea.value.split('\n');
                 const urlsToMigrate = [];
+                const processedLines = [...lines];
 
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i].trim();
@@ -1575,6 +1976,7 @@
 
                 let completedCount = 0;
                 let successCount = 0;
+                let failedItems = [];
 
                 const updateMigrateProgress = () => {
                     const percent = Math.round((completedCount / urlsToMigrate.length) * 100);
@@ -1626,6 +2028,8 @@
 
                         const data = await res.json();
                         if (res.ok && data.sucesso && data.link) {
+                            processedLines[item.index] = item.line.replace(item.url, data.link);
+                            
                             // Atualiza a linha correspondente no textarea em tempo real
                             const currentLines = textarea.value.split('\n');
                             currentLines[item.index] = item.line.replace(item.url, data.link);
@@ -1633,26 +2037,42 @@
                             textarea.dispatchEvent(new Event('input'));
                             successCount++;
                         } else {
-                            showToast(`Erro ao converter link para ${fileName}: ${data.erro || 'Falha no servidor.'}`, "error");
+                            failedItems.push(item);
                         }
                     } catch (err) {
-                        showToast(`Erro de rede ao conectar para o link de ${fileName}`, "error");
+                        failedItems.push(item);
                     } finally {
                         completedCount++;
                         updateMigrateProgress();
                     }
                 };
 
-                const queue = [...urlsToMigrate.entries()];
-                
-                const workers = Array(Math.min(concurrencyLimit, urlsToMigrate.length)).fill(null).map(async () => {
-                    while (queue.length > 0) {
-                        const [index, item] = queue.shift();
-                        await migrateSingleLink(item, index);
-                    }
-                });
+                const runMigrationBatch = async (itemsToMigrate) => {
+                    const queue = [...itemsToMigrate.entries()];
+                    const workers = Array(Math.min(concurrencyLimit, itemsToMigrate.length)).fill(null).map(async () => {
+                        while (queue.length > 0) {
+                            const [index, item] = queue.shift();
+                            await migrateSingleLink(item, index);
+                        }
+                    });
+                    await Promise.all(workers);
+                };
 
-                await Promise.all(workers);
+                // Executar primeira tentativa
+                await runMigrationBatch(urlsToMigrate);
+
+                // Executar segunda tentativa (retentativa) se houver falhas
+                if (failedItems.length > 0) {
+                    showToast(`Tentando novamente ${failedItems.length} links que falharam...`, "info");
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    
+                    const firstRoundFailed = [...failedItems];
+                    failedItems = []; // Limpa para a rodada de retentativa
+                    completedCount = urlsToMigrate.length - firstRoundFailed.length;
+                    updateMigrateProgress();
+                    
+                    await runMigrationBatch(firstRoundFailed);
+                }
 
                 progressBox.classList.add('hidden');
                 progressBar.style.width = '0%';
@@ -1660,9 +2080,53 @@
                 if (successCount === urlsToMigrate.length) {
                     showToast("Todos os links foram convertidos com sucesso!", "success");
                 } else if (successCount > 0) {
-                    showToast(`Conversão concluída: ${successCount} de ${urlsToMigrate.length} links convertidos com sucesso.`, "warning");
+                    showToast(`Conversão concluída com avisos: ${successCount} de ${urlsToMigrate.length} links convertidos.`, "warning");
                 } else {
                     showToast("Falha ao converter os links.", "error");
+                }
+
+                if (successCount > 0) {
+                    const failedIndices = new Set(failedItems.map(item => item.index));
+                    
+                    // 1. Filtrar linhas bem sucedidas e definir no textarea para processamento
+                    const successLines = [];
+                    for (let i = 0; i < processedLines.length; i++) {
+                        if (!failedIndices.has(i)) {
+                            successLines.push(processedLines[i]);
+                        }
+                    }
+                    textarea.value = successLines.join('\n');
+                    textarea.dispatchEvent(new Event('input'));
+                    
+                    // 2. Processar automaticamente
+                    gen.process();
+
+                    // 3. Salvar JSON no banco se auto-salvar estiver ativado
+                    const autoSave = document.getElementById('tgAutoSave')?.checked !== false;
+                    const keepFields = failedItems.length > 0;
+                    if (autoSave) {
+                        showToast("Salvando JSON automaticamente no banco de dados...", "info");
+                        await gen.uploadParaBanco(keepFields);
+                    } else {
+                        showToast("Processamento concluído. JSON gerado no painel lateral para revisão.", "success");
+                    }
+
+                    // 4. Se houveram falhas, restaurar apenas os links que falharam na caixa para revisão
+                    if (keepFields) {
+                        const failedLines = [];
+                        for (let i = 0; i < processedLines.length; i++) {
+                            if (failedIndices.has(i)) {
+                                failedLines.push(processedLines[i]);
+                            }
+                        }
+                        textarea.value = failedLines.join('\n');
+                        textarea.dispatchEvent(new Event('input'));
+                        showToast(`${failedItems.length} links falharam e foram mantidos para revisão.`, "warning");
+                    }
+                } else {
+                    // Nenhuma migração com sucesso: mantém todo o conteúdo original
+                    textarea.value = processedLines.join('\n');
+                    textarea.dispatchEvent(new Event('input'));
                 }
             },
 
@@ -2044,6 +2508,17 @@
             init: () => {
                 gen.loadQualities();
                 gen.clearFields();
+                
+                const savedNick = localStorage.getItem('fenix_uploader_nick');
+                const nickInput = document.getElementById('uploaderNick');
+                if (savedNick && nickInput) {
+                    nickInput.value = savedNick;
+                }
+                if (nickInput) {
+                    nickInput.addEventListener('input', (e) => {
+                        localStorage.setItem('fenix_uploader_nick', e.target.value.trim());
+                    });
+                }
             },
             toggleInputs: () => {
                 const type = document.querySelector('input[name="contentType"]:checked').value;
@@ -2116,6 +2591,36 @@
                 input.value = newText;
                 showToast("Domínios atualizados para Render!", "success");
             },
+            sortLinksByName: () => {
+                const textarea = document.getElementById('manualLinks');
+                if (!textarea) return;
+                const rawText = textarea.value;
+                if (!rawText.trim()) return showToast("Cole os links primeiro!", "warning");
+                
+                const lines = rawText.split('\n').filter(line => line.trim());
+                
+                const getNameForSort = (line) => {
+                    const parts = line.split(/[#|]/);
+                    if (parts.length > 1) {
+                        return parts[parts.length - 1].trim();
+                    }
+                    const urlMatch = line.match(/(https?:\/\/[^\s]+)/);
+                    if (urlMatch) {
+                        return line.replace(urlMatch[0], '').trim() || line;
+                    }
+                    return line;
+                };
+
+                lines.sort((a, b) => {
+                    const nameA = getNameForSort(a);
+                    const nameB = getNameForSort(b);
+                    return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+                });
+
+                textarea.value = lines.join('\n');
+                textarea.dispatchEvent(new Event('input'));
+                showToast("Links ordenados com sucesso!", "success");
+            },
             clearFields: () => {
                 gen.currentData = null;
                 const cid = document.getElementById('contentId');
@@ -2180,6 +2685,7 @@
 
                 const lines = rawText.split('\n').map(l => l.trim()).filter(l => l);
                 let addedCount = 0;
+                const nickVal = document.getElementById('uploaderNick')?.value.trim();
 
                 const firstLine = baseAudio;
                 const secondLine = quality ? quality : "FenixStudio";
@@ -2241,7 +2747,9 @@
                         const finalFirstLine = count > 0 ? `${firstLine} ${count + 1}` : firstLine;
                         const finalName = `${finalFirstLine}\n${secondLine}`;
 
-                        gen.currentData.streams[targetSeason][targetEp].push({ "url": url, "name": finalName });
+                        const streamObj = { "url": url, "name": finalName };
+                        if (nickVal) streamObj.colaborador = nickVal;
+                        gen.currentData.streams[targetSeason][targetEp].push(streamObj);
                         addedCount++;
                         
                         if (lineSeason) {
@@ -2282,10 +2790,17 @@
                             const finalFirstLine = count > 0 ? `${firstLine} ${count + 1}` : firstLine;
                             const finalName = `${finalFirstLine}\n${secondLine}`;
                             
-                            gen.currentData.streams.push({ "url": url, "name": finalName });
+                            const streamObj = { "url": url, "name": finalName };
+                            if (nickVal) streamObj.colaborador = nickVal;
+                            gen.currentData.streams.push(streamObj);
                             addedCount++;
                         }
                     });
+                }
+                if (nickVal) {
+                    gen.currentData.colaborador = nickVal;
+                } else {
+                    delete gen.currentData.colaborador;
                 }
                 gen.updateDisplay();
                 document.getElementById('manualLinks').value = '';
@@ -2309,6 +2824,11 @@
                 document.getElementById('fileNamePreview').innerText = `${fName}.json`;
 
                 if(save) localStorage.setItem('fenixflix_draft', jsonStr);
+                
+                // No celular, muda automaticamente a visualização para a aba de Visualizar JSON
+                if (window.innerWidth < 1024) {
+                    toggleGeneratorSubView('preview');
+                }
             },
             syncManualEdit: () => {
                 try {
@@ -2344,9 +2864,32 @@
                 showToast("Download iniciado");
             },
 
-            uploadParaBanco: async () => {
+            uploadParaBanco: async (keepFields = false) => {
                 if (!gen.currentData) {
                     return showToast("Nenhum dado para salvar.", "warning");
+                }
+                
+                const nick = document.getElementById('uploaderNick')?.value.trim();
+                if (nick) {
+                    gen.currentData.colaborador = nick;
+                    // Injetar nos streams que ainda não possuem colaborador
+                    if (gen.currentData.type === 'movie' && Array.isArray(gen.currentData.streams)) {
+                        gen.currentData.streams.forEach(s => {
+                            if (!s.colaborador) s.colaborador = nick;
+                        });
+                    } else if (gen.currentData.type === 'series' && gen.currentData.streams && typeof gen.currentData.streams === 'object') {
+                        Object.keys(gen.currentData.streams).forEach(seasonNum => {
+                            const season = gen.currentData.streams[seasonNum] || {};
+                            Object.keys(season).forEach(epNum => {
+                                const epStreams = season[epNum] || [];
+                                if (Array.isArray(epStreams)) {
+                                    epStreams.forEach(s => {
+                                        if (!s.colaborador) s.colaborador = nick;
+                                    });
+                                }
+                            });
+                        });
+                    }
                 }
                 
                 try {
@@ -2362,8 +2905,15 @@
                         formData.append("senha", senha);
                     }
 
+                    const headers = {};
+                    const discordToken = localStorage.getItem('discord_token');
+                    if (discordToken) {
+                        headers['Authorization'] = `Bearer ${discordToken}`;
+                    }
+
                     const response = await fetch(API_URL + '/upload', {
                         method: 'POST',
+                        headers: headers,
                         body: formData
                     });
 
@@ -2371,7 +2921,18 @@
                     
                     if (response.ok) {
                         showToast(result.mensagem || "JSON enviado com sucesso!", "success");
-                        gen.clearFields();
+                        if (!keepFields) {
+                            gen.clearFields();
+                        } else {
+                            gen.currentData = null;
+                            const jout = document.getElementById('jsonOutput');
+                            if (jout) jout.value = '';
+                            const jstat = document.getElementById('jsonStats');
+                            if (jstat) jstat.innerText = 'Vazio';
+                            const actions = document.getElementById('resultActions');
+                            if (actions) actions.classList.add('hidden');
+                            localStorage.removeItem('fenixflix_draft');
+                        }
                     } else {
                         showToast("Erro: " + result.erro, "error");
                     }
@@ -2486,6 +3047,21 @@
             allItems: [],
             filteredItems: [],
             currentSort: 'newest',
+            visibleCount: 36,
+            isLoadingMore: false,
+            
+            loadMore: () => {
+                if (cat.isLoadingMore) return;
+                if (cat.visibleCount >= cat.filteredItems.length) return;
+                
+                cat.isLoadingMore = true;
+                cat.visibleCount += 36;
+                cat.renderFiltered();
+                
+                setTimeout(() => {
+                    cat.isLoadingMore = false;
+                }, 200); // Throttle de 200ms
+            },
             
             init: async () => {
                 cat.setLoading(true);
@@ -2575,9 +3151,11 @@
             },
 
             sort: (mode) => {
+                cat.visibleCount = 36;
                 cat.currentSort = mode;
                 if (mode === 'newest') cat.filteredItems.sort((a, b) => a.recentOrder - b.recentOrder);
                 else if (mode === 'oldest') cat.filteredItems.sort((a, b) => b.recentOrder - a.recentOrder);
+                else if (mode === 'views') cat.filteredItems.sort((a, b) => (parseInt(b.views) || 0) - (parseInt(a.views) || 0));
                 else if (mode === 'year') cat.filteredItems.sort((a, b) => { const yA = parseInt(a.year) || 0; const yB = parseInt(b.year) || 0; return yB - yA; });
                 else if (mode === 'name') cat.filteredItems.sort((a, b) => (a.title||a.id).localeCompare(b.title||b.id));
                 cat.renderFiltered();
@@ -2756,7 +3334,8 @@
             renderFiltered: () => {
                 const container = document.getElementById('gridContainer');
                 if(!cat.filteredItems.length) { container.innerHTML = '<div class="col-span-full text-center text-zinc-600 py-12 text-sm">Nenhum resultado.</div>'; return; }
-                container.innerHTML = cat.filteredItems.map(item => cat.renderCard(item)).join('');
+                const itemsToRender = cat.filteredItems.slice(0, cat.visibleCount);
+                container.innerHTML = itemsToRender.map(item => cat.renderCard(item)).join('');
             },
 
             updateGlobalStats: () => {
@@ -3833,8 +4412,133 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
+        function handleDiscordAuth() {
+            const loginBtn = document.getElementById('discordLoginBtn');
+            if (loginBtn) {
+                const currentOrigin = window.location.origin + window.location.pathname;
+                loginBtn.href = `${API_URL || window.location.origin}/api/auth/discord?state=${encodeURIComponent(currentOrigin)}`;
+            }
+
+            const params = new URLSearchParams(window.location.search);
+            const token = params.get('discord_token');
+            const username = params.get('discord_username');
+            const globalName = params.get('discord_global_name');
+            const avatar = params.get('discord_avatar');
+            const id = params.get('discord_id');
+            
+            if (token) {
+                localStorage.setItem('discord_token', token);
+                localStorage.setItem('discord_username', username || '');
+                localStorage.setItem('discord_global_name', globalName || '');
+                localStorage.setItem('discord_avatar', avatar || '');
+                localStorage.setItem('discord_id', id || '');
+                
+                // Clean URL parameters
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+            
+            updateDiscordUI();
+        }
+
+        function updateDiscordUI() {
+            const token = localStorage.getItem('discord_token');
+            const username = localStorage.getItem('discord_username');
+            const globalName = localStorage.getItem('discord_global_name');
+            const avatar = localStorage.getItem('discord_avatar');
+            const id = localStorage.getItem('discord_id');
+            
+            const avatarDiv = document.getElementById('discordUserAvatar');
+            const statusText = document.getElementById('discordUserStatus');
+            const nameText = document.getElementById('discordUserName');
+            const loginBtn = document.getElementById('discordLoginBtn');
+            const logoutBtn = document.getElementById('discordLogoutBtn');
+            
+            const nickInput = document.getElementById('uploaderNick');
+            
+            // Save button
+            const saveBtn = document.querySelector('button[onclick="gen.uploadParaBanco()"]');
+            
+            if (token && username) {
+                if (statusText) {
+                    statusText.innerText = "Conectado como Discord";
+                    statusText.classList.remove('text-zinc-400');
+                    statusText.classList.add('text-indigo-400');
+                }
+                
+                if (nameText) {
+                    nameText.innerText = `${globalName || username} (@${username})`;
+                }
+                
+                if (avatarDiv) {
+                    if (avatar && avatar !== 'null') {
+                        const avatarUrl = `https://cdn.discordapp.com/avatars/${id}/${avatar}.png?size=64`;
+                        avatarDiv.innerHTML = `<img src="${avatarUrl}" class="w-full h-full object-cover">`;
+                    } else {
+                        avatarDiv.innerHTML = `<i class="fa-brands fa-discord text-lg text-indigo-400"></i>`;
+                    }
+                }
+                
+                if (loginBtn) loginBtn.classList.add('hidden');
+                if (logoutBtn) logoutBtn.classList.remove('hidden');
+                
+                if (nickInput) {
+                    nickInput.value = globalName || username;
+                }
+                
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    saveBtn.setAttribute('title', 'Salvar JSON no Banco');
+                }
+            } else {
+                if (statusText) {
+                    statusText.innerText = "Desconectado";
+                    statusText.classList.remove('text-indigo-400');
+                    statusText.classList.add('text-zinc-400');
+                }
+                
+                if (nameText) {
+                    nameText.innerText = "Faça login com o Discord para poder enviar links.";
+                }
+                if (avatarDiv) {
+                    avatarDiv.innerHTML = `<i class="fa-brands fa-discord text-lg text-zinc-600"></i>`;
+                }
+                
+                if (loginBtn) loginBtn.classList.remove('hidden');
+                if (logoutBtn) logoutBtn.classList.add('hidden');
+                
+                if (nickInput) {
+                    nickInput.value = '';
+                }
+                
+                const hasAdminSession = sessionStorage.getItem('fenixflix_senha');
+                if (saveBtn) {
+                    if (!hasAdminSession) {
+                        saveBtn.disabled = true;
+                        saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                        saveBtn.setAttribute('title', 'Você precisa estar logado com o Discord para salvar links.');
+                    } else {
+                        saveBtn.disabled = false;
+                        saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                        saveBtn.setAttribute('title', 'Salvar JSON no Banco (Admin)');
+                    }
+                }
+            }
+        }
+
+        function discordLogout() {
+            localStorage.removeItem('discord_token');
+            localStorage.removeItem('discord_username');
+            localStorage.removeItem('discord_global_name');
+            localStorage.removeItem('discord_avatar');
+            localStorage.removeItem('discord_id');
+            updateDiscordUI();
+            showToast("Desconectado com sucesso.", "success");
+        }
+
         // Start by loading the catalog automatically on page load
         document.addEventListener('DOMContentLoaded', async () => {
+            handleDiscordAuth();
             await checkAdminSession();
             await cat.init();
             await tg.init();
@@ -3901,6 +4605,259 @@
                 }
             });
         }
+
+        // =========================================================================
+        // MÓDULO 4: SESSÃO DE DENÚNCIAS E RANKINGS (ADICIONADO)
+        // =========================================================================
+        function openReportModal() {
+            if (!cat.currentOpenItem) return;
+            
+            const item = cat.currentOpenItem;
+            document.getElementById('reportItemName').value = item.id;
+            
+            let displayTitle = item.title || item.id;
+            let reportTargetText = displayTitle;
+            
+            if (item.type === 'series') {
+                const s = cat.currentSelectedSeason;
+                const e = cat.currentSelectedEpisode;
+                if (s && e) {
+                    reportTargetText = `${displayTitle} (T${s.padStart(2, '0')}EP${e.padStart(2, '0')})`;
+                    document.getElementById('reportItemTitle').value = `${displayTitle} - Temp. ${s}, Ep. ${e}`;
+                } else {
+                    document.getElementById('reportItemTitle').value = displayTitle;
+                }
+            } else {
+                document.getElementById('reportItemTitle').value = displayTitle;
+            }
+            
+            const labelEl = document.getElementById('reportTargetLabel');
+            if (labelEl) labelEl.textContent = reportTargetText;
+            
+            // Reseta formulário
+            document.getElementById('reportReason').value = "";
+            document.getElementById('reportDetails').value = "";
+            
+            // Mostra modal
+            document.getElementById('reportModal').classList.remove('hidden');
+        }
+
+        function closeReportModal() {
+            document.getElementById('reportModal').classList.add('hidden');
+        }
+
+        async function submitReport(event) {
+            event.preventDefault();
+            const nome = document.getElementById('reportItemName').value;
+            const titulo = document.getElementById('reportItemTitle').value;
+            const motivo = document.getElementById('reportReason').value;
+            const detalhes = document.getElementById('reportDetails').value.trim();
+
+            if (!nome || !titulo || !motivo) {
+                return showToast("Preencha todos os campos obrigatórios.", "warning");
+            }
+
+            try {
+                const res = await fetch(API_URL + '/api/denunciar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nome, titulo, motivo, detalhes })
+                });
+
+                if (res.ok) {
+                    showToast("Denúncia enviada com sucesso! Obrigado pelo aviso.", "success");
+                    closeReportModal();
+                    
+                    // Fecha também o modal do catálogo para uma experiência mais limpa
+                    cat.closeModal();
+                } else {
+                    const data = await res.json();
+                    showToast(data.erro || "Falha ao enviar denúncia.", "error");
+                }
+            } catch (e) {
+                console.error("Erro ao enviar denúncia:", e);
+                showToast("Erro de conexão ao enviar denúncia.", "error");
+            }
+        }
+
+        let currentColabPeriod = 'todos';
+
+        async function changeColabPeriod(period) {
+            currentColabPeriod = period;
+            
+            const periods = ['semana', 'mes', 'ano', 'todos'];
+            periods.forEach(p => {
+                const btn = document.getElementById(`btn-period-${p}`);
+                if (btn) {
+                    if (p === period) {
+                        btn.className = "px-2.5 py-1 rounded-md bg-indigo-600 text-white font-medium transition-all";
+                    } else {
+                        btn.className = "px-2.5 py-1 rounded-md text-zinc-400 hover:text-white font-medium transition-all";
+                    }
+                }
+            });
+
+            await loadRankingStats(period);
+        }
+
+        async function loadRankingStats(period = 'todos') {
+            const tcContainer = document.getElementById('ranking-top-collaborators');
+            tcContainer.innerHTML = `<div class="text-center py-12 text-zinc-500"><i class="fa-solid fa-spinner animate-spin text-xl mb-2"></i><p class="text-xs">Carregando colaboradores...</p></div>`;
+
+            try {
+                const resColab = await fetch(API_URL + `/api/colaboradores?periodo=${period}`);
+                if (!resColab.ok) throw new Error("Erro na API de colaboradores");
+                const colaboradores = await resColab.json();
+
+                let tcHtml = '';
+                if (colaboradores.length === 0) {
+                    const periodLabel = period === 'semana' ? 'esta semana' : (period === 'mes' ? 'este mês' : (period === 'ano' ? 'este ano' : 'geral'));
+                    tcHtml = `<p class="text-zinc-500 text-center py-12 text-xs">Nenhum envio registrado para ${periodLabel}.</p>`;
+                } else {
+                    colaboradores.slice(0, 15).forEach((col, index) => {
+                        let medal = '';
+                        if (index === 0) medal = '🥇 ';
+                        else if (index === 1) medal = '🥈 ';
+                        else if (index === 2) medal = '🥉 ';
+                        else medal = `<span class="text-zinc-500 font-mono text-xs w-5 inline-block text-center">${index + 1}.</span>`;
+
+                        const details = col.envios_detalhes || [];
+                        const uniqueTitles = [...new Set(details.map(d => d.title))];
+                        const maxToShow = 3;
+                        let titlesStr = uniqueTitles.slice(0, maxToShow).join(', ');
+                        if (uniqueTitles.length > maxToShow) {
+                            titlesStr += ` e mais ${uniqueTitles.length - maxToShow}`;
+                        }
+
+                        tcHtml += `
+                            <div class="flex items-center gap-3 bg-zinc-950/50 p-3.5 rounded-xl border border-zinc-800/40 hover:border-zinc-800 transition">
+                                <div class="w-8 text-center shrink-0">${medal}</div>
+                                <div class="w-9 h-9 bg-indigo-950/40 border border-indigo-900/30 flex items-center justify-center rounded-xl shrink-0">
+                                    <i class="fa-solid fa-user text-indigo-400 text-sm"></i>
+                                </div>
+                                <div class="flex-grow min-w-0">
+                                    <h4 class="text-white text-xs font-semibold truncate">${col.nome}</h4>
+                                    <span class="text-[10px] text-zinc-500 block truncate mt-0.5" title="${uniqueTitles.join(', ')}">Últimos envios: <b class="text-zinc-400 font-medium">${titlesStr}</b></span>
+                                </div>
+                                <div class="text-right shrink-0">
+                                    <span class="text-zinc-200 font-semibold text-xs font-mono">${col.count}</span>
+                                    <span class="text-[9px] text-zinc-500 block uppercase">links</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                tcContainer.innerHTML = tcHtml;
+            } catch (e) {
+                console.error(e);
+                tcContainer.innerHTML = '<p class="text-red-500 text-center py-6 text-xs">Falha ao carregar ranking de colaboradores.</p>';
+            }
+        }
+
+        async function loadReportsList() {
+            const tableBody = document.getElementById('reports-table-body');
+            const emptyState = document.getElementById('reports-empty-state');
+            tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-zinc-500"><i class="fa-solid fa-spinner animate-spin mr-1.5"></i> Carregando denúncias...</td></tr>`;
+            emptyState.classList.add('hidden');
+
+            const adminSenha = sessionStorage.getItem('fenixflix_senha');
+            if (!adminSenha) {
+                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">Acesso negado. Faça login como admin.</td></tr>`;
+                return;
+            }
+
+            try {
+                const res = await fetch(API_URL + `/api/denuncias?senha=${encodeURIComponent(adminSenha)}`);
+                if (!res.ok) {
+                    if (res.status === 401) {
+                        return tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">Senha expirada ou incorreta.</td></tr>`;
+                    }
+                    throw new Error("Falha ao carregar denúncias");
+                }
+                const reports = await res.json();
+
+                if (reports.length === 0) {
+                    tableBody.innerHTML = '';
+                    emptyState.classList.remove('hidden');
+                    return;
+                }
+
+                let html = '';
+                reports.forEach(rep => {
+                    const dataStr = new Date(rep.criado_em).toLocaleString('pt-BR');
+                    html += `
+                        <tr class="border-b border-zinc-800/40 hover:bg-zinc-900/20 transition-colors">
+                            <td class="py-3.5 pr-4 font-semibold text-white">
+                                <span class="cursor-pointer hover:underline text-indigo-400" onclick="switchView('catalog'); setTimeout(() => cat.openLinks('${rep.nome_do_json}'), 100);">${rep.titulo}</span>
+                                <span class="block text-[10px] text-zinc-500 font-mono font-normal mt-0.5">${rep.nome_do_json}</span>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <span class="px-2 py-0.5 bg-red-950/60 border border-red-900/30 text-red-400 rounded text-[10px] font-medium">${rep.motivo}</span>
+                            </td>
+                            <td class="py-3.5 px-4 text-xs text-zinc-400 max-w-xs truncate" title="${rep.detalhes || ''}">
+                                ${rep.detalhes || '<span class="text-zinc-650 italic">Sem detalhes</span>'}
+                            </td>
+                            <td class="py-3.5 px-4 text-xs text-zinc-500 font-mono">
+                                ${dataStr}
+                            </td>
+                            <td class="py-3.5 pl-4 text-right">
+                                <div class="flex justify-end gap-2">
+                                    <button onclick="deleteReport(${rep.id})" class="bg-emerald-950 hover:bg-emerald-900 text-emerald-400 border border-emerald-900/30 px-3 py-1.5 rounded-lg text-xs font-semibold transition" title="Marcar como Resolvido / Excluir Denúncia">
+                                        <i class="fa-solid fa-check mr-1"></i> Resolver
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+                tableBody.innerHTML = html;
+            } catch (e) {
+                console.error(e);
+                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-500">Erro ao carregar denúncias.</td></tr>`;
+            }
+        }
+
+        async function deleteReport(id) {
+            if (!confirm("Deseja realmente marcar essa denúncia como resolvida? Ela será removida da lista.")) return;
+
+            const adminSenha = sessionStorage.getItem('fenixflix_senha');
+            if (!adminSenha) return showToast("Senha de Admin necessária.", "error");
+
+            try {
+                const res = await fetch(API_URL + '/api/denuncias/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, senha: adminSenha })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    showToast(data.mensagem || "Denúncia resolvida!", "success");
+                    loadReportsList();
+                } else {
+                    showToast(data.erro || "Erro ao excluir denúncia.", "error");
+                }
+            } catch (e) {
+                console.error(e);
+                showToast("Erro ao conectar com o servidor.", "error");
+            }
+        }
+
+        // Scroll listener com Throttle para carregamento dinâmico (Lazy Loading) do catálogo
+        let scrollTimeout;
+        window.addEventListener('scroll', () => {
+            if (scrollTimeout) return;
+            
+            scrollTimeout = setTimeout(() => {
+                scrollTimeout = null;
+                const activeTab = document.querySelector('.tab-content:not(.hidden)');
+                if (activeTab && activeTab.id === 'view-catalog') {
+                    if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 900) {
+                        cat.loadMore();
+                    }
+                }
+            }, 100); // Limita verificação a cada 100ms
+        });
     </script>
 
     <!-- Overlay para arrastar e soltar arquivos -->
