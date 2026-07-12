@@ -1014,9 +1014,10 @@ app.get('/api/colaboradores', async (req, res) => {
                     conteudo->>'title' AS title,
                     conteudo->>'type' AS type,
                     criado_em,
-                    jsonb_path_query(conteudo, '$.streams[*]') AS stream
+                    jsonb_array_elements(conteudo->'streams') AS stream
                 FROM arquivos_json
-                WHERE conteudo->>'type' = 'movie'
+                WHERE conteudo->>'type' = 'movie' 
+                  AND jsonb_typeof(conteudo->'streams') = 'array'
                 
                 UNION ALL
                 
@@ -1025,9 +1026,14 @@ app.get('/api/colaboradores', async (req, res) => {
                     conteudo->>'title' AS title,
                     conteudo->>'type' AS type,
                     criado_em,
-                    jsonb_path_query(conteudo, '$.streams.*.*[*]') AS stream
-                FROM arquivos_json
-                WHERE conteudo->>'type' = 'series'
+                    jsonb_array_elements(ep.value) AS stream
+                FROM arquivos_json,
+                     jsonb_each(conteudo->'streams') AS season,
+                     jsonb_each(season.value) AS ep
+                WHERE conteudo->>'type' = 'series' 
+                  AND jsonb_typeof(conteudo->'streams') = 'object'
+                  AND jsonb_typeof(season.value) = 'object'
+                  AND jsonb_typeof(ep.value) = 'array'
             )
             SELECT 
                 stream->>'colaborador' AS nome,
