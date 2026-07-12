@@ -1,0 +1,20 @@
+{
+  "name": "fenix-studio",
+  "version": "1.0.1",
+  "description": "Fenix Studio Application",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "multer": "^2.2.0",
+    "pg": "^8.21.0",
+    "sqlite3": "^6.0.1",
+    "telegram": "^2.26.22"
+  },
+  "allowScripts": {
+    "sqlite3@6.0.1": true
+  }
+}
