@@ -1014,10 +1014,14 @@ app.get('/api/colaboradores', async (req, res) => {
                     conteudo->>'title' AS title,
                     conteudo->>'type' AS type,
                     criado_em,
-                    jsonb_array_elements(conteudo->'streams') AS stream
+                    jsonb_array_elements(
+                        CASE 
+                            WHEN jsonb_typeof(conteudo->'streams') = 'array' THEN conteudo->'streams'
+                            ELSE '[]'::jsonb 
+                        END
+                    ) AS stream
                 FROM arquivos_json
-                WHERE conteudo->>'type' = 'movie' 
-                  AND jsonb_typeof(conteudo->'streams') = 'array'
+                WHERE conteudo->>'type' = 'movie'
                 
                 UNION ALL
                 
@@ -1026,14 +1030,26 @@ app.get('/api/colaboradores', async (req, res) => {
                     conteudo->>'title' AS title,
                     conteudo->>'type' AS type,
                     criado_em,
-                    jsonb_array_elements(ep.value) AS stream
+                    jsonb_array_elements(
+                        CASE 
+                            WHEN jsonb_typeof(ep.value) = 'array' THEN ep.value
+                            ELSE '[]'::jsonb 
+                        END
+                    ) AS stream
                 FROM arquivos_json,
-                     jsonb_each(conteudo->'streams') AS season,
-                     jsonb_each(season.value) AS ep
-                WHERE conteudo->>'type' = 'series' 
-                  AND jsonb_typeof(conteudo->'streams') = 'object'
-                  AND jsonb_typeof(season.value) = 'object'
-                  AND jsonb_typeof(ep.value) = 'array'
+                     jsonb_each(
+                         CASE 
+                             WHEN jsonb_typeof(conteudo->'streams') = 'object' THEN conteudo->'streams'
+                             ELSE '{}'::jsonb 
+                         END
+                     ) AS season,
+                     jsonb_each(
+                         CASE 
+                             WHEN jsonb_typeof(season.value) = 'object' THEN season.value
+                             ELSE '{}'::jsonb 
+                         END
+                     ) AS ep
+                WHERE conteudo->>'type' = 'series'
             )
             SELECT 
                 stream->>'colaborador' AS nome,
