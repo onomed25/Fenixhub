@@ -14,7 +14,7 @@ const sqlite3 = require('sqlite3');
 
 const USER_AGENT = 'VLC/3.0.18 LibVLC/3.0.18';
 const CACHE_DIR = path.join(__dirname, 'cache');
-const CACHE_TTL = 3600 * 1000; // 1 hora para recriar o catálogo
+const CACHE_TTL = 21600 * 1000; // 6 horas para recriar o catálogo
 const STREAM_CACHE_TTL = 21600 * 1000; // 6 horas para streams resolvidos
 
 // Garante que a pasta cache existe
@@ -136,6 +136,22 @@ class XtreamClient {
         this._catNamesTime = 0;
         this._seriesInfoCache = new Map();
         this._knownSeriesIds = new Map();
+
+        // Loop proativo para garantir que o catálogo esteja sempre atualizado em background
+        setInterval(() => {
+            if (this.enabled) {
+                this._ensureCatalog('movie').catch(() => {});
+                this._ensureCatalog('series').catch(() => {});
+            }
+        }, 6 * 60 * 60 * 1000); // 6 horas
+
+        // Checagem inicial após 10 segundos
+        setTimeout(() => {
+            if (this.enabled) {
+                this._ensureCatalog('movie').catch(() => {});
+                this._ensureCatalog('series').catch(() => {});
+            }
+        }, 10000);
     }
 
     get enabled() {

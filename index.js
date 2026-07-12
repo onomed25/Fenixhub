@@ -610,8 +610,8 @@ app.get('/count', async (req, res) => {
 function verificarSenhaIPTV(req, res, next) {
     const adminPassword = process.env.ADMIN_PASSWORD || "ajzjJBDJwlDvE5RrQAXMOW8eq0jdQs3O";
     if (req.params.senha !== adminPassword) {
-        // Se a senha estiver incorreta, passamos para a próxima rota (vai dar 404 genérico do site)
-        return next();
+        // Se a senha estiver incorreta, passamos para a próxima rota usando next('route')
+        return next('route');
     }
     next();
 }
