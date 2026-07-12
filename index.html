@@ -958,9 +958,7 @@
 
     <script>
         // --- CONFIGURAÇÃO API ---
-        const API_URL = (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1'))
-            ? ''
-            : (window.location.hostname.includes('fenixflix-fenixstudio.hf.space') ? '' : 'https://fenixflix-fenixstudio.hf.space');
+        const API_URL = ''; // Sempre usa o backend do próprio domínio (Render/DuckDNS)
 
         // --- UTILIDADES ---
         function showToast(message, type = 'success') {
