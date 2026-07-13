@@ -284,7 +284,7 @@ async function uploadFileAndGetLink(filePath, fileName, onProgress, customSessio
         // 2. Faz o upload das partes do arquivo
         const inputFile = await activeUploader.uploadFile({
             file: customFile,
-            workers: 16,
+            workers: 8,
             onProgress: (progress) => {
                 if (onProgress) onProgress(progress);
             }
