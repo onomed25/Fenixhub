@@ -1687,8 +1687,8 @@
                     });
                 };
 
-                // Força upload sequencial (1 por vez) para não estourar a memória/disco do Hugging Face Spaces
-                const concurrencyLimit = 1;
+                // Força upload com concorrência = 2 para agilizar
+                const concurrencyLimit = 2;
                 const queue = [...files.entries()];
                 
                 const workers = Array(Math.min(concurrencyLimit, files.length)).fill(null).map(async () => {
@@ -1880,8 +1880,8 @@
                 const channelId = document.getElementById('tgChannelId').value.trim();
                 const botTokens = botTokenInput ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
                 const hasBotConfig = botTokens.length > 0 && channelId;
-                // Força concorrência = 1 para evitar sobrecarga no backend do Hugging Face
-                const concurrencyLimit = 1;
+                // Força concorrência = 2
+                const concurrencyLimit = 2;
 
                 if (!confirm(`Deseja converter ${urlsToMigrate.length} link(s) externo(s) enviando-os para o Telegram?\nO processo executará até ${concurrencyLimit} conversões simultâneas.`)) {
                     return;
