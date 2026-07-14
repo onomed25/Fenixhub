@@ -40,7 +40,8 @@ async function initClient() {
         client = new TelegramClient(stringSession, apiId, apiHash, {
             connectionRetries: 5,
             requestRetries: 5,
-            floodSleepThreshold: 300
+            floodSleepThreshold: 300,
+            useWSS: true
         });
 
         await client.connect();
@@ -101,7 +102,8 @@ async function getSharedClient(customSessionString) {
         const tempClient = new TelegramClient(stringSession, apiId, apiHash, {
             connectionRetries: 5,
             requestRetries: 5,
-            floodSleepThreshold: 300
+            floodSleepThreshold: 300,
+            useWSS: true
         });
         await tempClient.connect();
         
@@ -180,7 +182,8 @@ async function getSharedBot(botToken) {
         const tempClient = new TelegramClient(stringSession, apiId, apiHash, {
             connectionRetries: 5,
             requestRetries: 5,
-            floodSleepThreshold: 300
+            floodSleepThreshold: 300,
+            useWSS: true
         });
         await tempClient.start({
             botAuthToken: botToken
@@ -284,7 +287,7 @@ async function uploadFileAndGetLink(filePath, fileName, onProgress, customSessio
         // 2. Faz o upload das partes do arquivo
         const inputFile = await activeUploader.uploadFile({
             file: customFile,
-            workers: 4,
+            workers: 1, // Fix para evitar travamentos no upload em servidores (gram.js trava com > 1)
             onProgress: (progress) => {
                 if (onProgress) onProgress(progress);
             }
@@ -323,6 +326,7 @@ async function uploadFileAndGetLink(filePath, fileName, onProgress, customSessio
                     sentMsg = await activeUploader.sendFile(channelPeer, {
                         file: inputFile,
                         forceDocument: true,
+                        workers: 1,
                         attributes: [
                             new Api.DocumentAttributeFilename({
                                 fileName: fileName
@@ -362,6 +366,7 @@ async function uploadFileAndGetLink(filePath, fileName, onProgress, customSessio
                     sentMsg = await activeClient.sendFile(botUsername, {
                         file: inputFile,
                         forceDocument: true,
+                        workers: 1,
                         attributes: [
                             new Api.DocumentAttributeFilename({
                                 fileName: fileName
