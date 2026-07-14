@@ -1672,12 +1672,23 @@
                             resolve();
                         };
 
+                        xhr.onabort = function () {
+                            const currentLines = textarea.value.split('\n');
+                            currentLines[startLineIndex + index] = `[Upload cancelado: ${file.name}]`;
+                            textarea.value = currentLines.join('\n');
+                            textarea.dispatchEvent(new Event('input'));
+                            showToast(`Upload cancelado: ${file.name}`, "warning");
+                            completedCount++;
+                            updateGlobalProgress();
+                            resolve();
+                        };
+
                         xhr.send(formData);
                     });
                 };
 
-                // Se os bots e o canal estiverem configurados, podemos rodar múltiplos uploads paralelos (concorrência = bots + 1). Caso contrário, 1 por vez.
-                const concurrencyLimit = hasBotConfig ? (botTokens.length + 1) : 1;
+                // Força upload sequencial (1 por vez) para não estourar a memória/disco do Hugging Face Spaces
+                const concurrencyLimit = 1;
                 const queue = [...files.entries()];
                 
                 const workers = Array(Math.min(concurrencyLimit, files.length)).fill(null).map(async () => {
@@ -1869,7 +1880,8 @@
                 const channelId = document.getElementById('tgChannelId').value.trim();
                 const botTokens = botTokenInput ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
                 const hasBotConfig = botTokens.length > 0 && channelId;
-                const concurrencyLimit = hasBotConfig ? (botTokens.length + 1) : 1;
+                // Força concorrência = 1 para evitar sobrecarga no backend do Hugging Face
+                const concurrencyLimit = 1;
 
                 if (!confirm(`Deseja converter ${urlsToMigrate.length} link(s) externo(s) enviando-os para o Telegram?\nO processo executará até ${concurrencyLimit} conversões simultâneas.`)) {
                     return;
