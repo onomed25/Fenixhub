@@ -7,9 +7,7 @@ const cors = require('cors');
 const path = require('path');
 const multer = require('multer');
 const { Pool } = require('pg');
-const tgService = require('./telegram-service');
 const fs = require('fs');
-const iptvService = require('./iptv-service');
 const crypto = require('crypto');
 
 // Configuração JWT para Discord
@@ -38,11 +36,6 @@ function verifyToken(token) {
     } catch (err) {
         return null;
     }
-}
-
-// Inicializa os provedores IPTV lendo o .env
-iptvService.initProviders();
-
 const app = express();
 const upload = multer();
 
@@ -81,8 +74,6 @@ function logProcessProgress(key, name, progress) {
     }
 }
 
-// Inicializar cliente do Telegram em segundo plano
-tgService.initClient();
 
 
 // Otimização: Limita o tamanho do JSON para 2MB para não estourar a RAM no plano gratuito
@@ -162,7 +153,14 @@ initDB();
 // ROTA 0: Servir o Frontend (index.html)
 // ==========================================
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    // Lê o index.html de forma síncrona/rápida, injeta a variável de ambiente e envia
+    let html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+    
+    // Injeta a URL do Hugging Face vinda do .env (ou usa string vazia como fallback)
+    const telegramUrl = process.env.TELEGRAM_API_URL || '';
+    html = html.replace('__TELEGRAM_API_URL_PLACEHOLDER__', telegramUrl);
+    
+    res.send(html);
 });
 
 // ==========================================
@@ -334,7 +332,11 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         const tokenResponse = await fetch('https://discord.com/api/v10/oauth2/token', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Connection': 'keep-alive'
             },
             body: new URLSearchParams({
                 client_id: clientId,
@@ -356,7 +358,11 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         
         const userResponse = await fetch('https://discord.com/api/v10/users/@me', {
             headers: {
-                'Authorization': `Bearer ${accessToken}`
+                'Authorization': `Bearer ${accessToken}`,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Connection': 'keep-alive'
             }
         });
         
@@ -602,115 +608,6 @@ app.get('/count', async (req, res) => {
     }
 });
 
-// ==========================================
-// ROTAS IPTV PROTEGIDAS (escondidas atrás da senha admin)
-// ==========================================
-
-// Rota auxiliar para verificar senha de admin nas rotas IPTV
-function verificarSenhaIPTV(req, res, next) {
-    const adminPassword = process.env.ADMIN_PASSWORD || "ajzjJBDJwlDvE5RrQAXMOW8eq0jdQs3O";
-    if (req.params.senha !== adminPassword) {
-        // Se a senha estiver incorreta, passamos para a próxima rota usando next('route')
-        return next('route');
-    }
-    next();
-}
-
-// Filme: /:senha/:imdbId
-app.get('/:senha/:imdbId', verificarSenhaIPTV, async (req, res) => {
-    const { imdbId } = req.params;
-
-    if (!imdbId.startsWith('tt')) {
-        return res.status(400).json({ erro: 'ID do IMDb inválido (deve começar com "tt").' });
-    }
-
-    try {
-        console.log(`[IPTV Route] Buscando dados do TMDB para ${imdbId}`);
-        const tmdb = await getTMDBInfo(imdbId);
-        
-        let titles = [];
-        let year = null;
-        
-        if (tmdb) {
-            titles.push(tmdb.title);
-            if (tmdb.year) year = tmdb.year;
-        }
-        
-        // Também busca info no Cinemeta para ter mais títulos alternativos (como o original_name/english title)
-        const cinemeta = await getCinemetaInfo(imdbId, 'movie');
-        if (cinemeta) {
-            if (cinemeta.name && !titles.includes(cinemeta.name)) {
-                titles.push(cinemeta.name);
-            }
-            if (!year && cinemeta.year) {
-                year = cinemeta.year;
-            }
-        }
-
-        if (titles.length === 0) {
-            return res.status(404).json({ erro: 'Não foi possível encontrar metadados para este IMDb ID.' });
-        }
-
-        console.log(`[IPTV Route] Iniciando busca nos scrapers para títulos: ${titles.join(', ')} (Ano: ${year})`);
-        const streams = await iptvService.searchAllProviders(titles, 'movie', null, null, year);
-        
-        res.json({ imdb_id: imdbId, type: 'movie', streams });
-    } catch (err) {
-        console.error('[IPTV Route] Erro:', err);
-        res.status(500).json({ erro: 'Erro interno ao processar busca IPTV.' });
-    }
-});
-
-// Série: /:senha/:imdbId/:season/:episode
-app.get('/:senha/:imdbId/:season/:episode', verificarSenhaIPTV, async (req, res) => {
-    const { imdbId, season, episode } = req.params;
-
-    if (!imdbId.startsWith('tt')) {
-        return res.status(400).json({ erro: 'ID do IMDb inválido (deve começar com "tt").' });
-    }
-
-    const sNum = parseInt(season);
-    const eNum = parseInt(episode);
-
-    if (isNaN(sNum) || isNaN(eNum)) {
-        return res.status(400).json({ erro: 'Temporada e episódio devem ser números válidos.' });
-    }
-
-    try {
-        console.log(`[IPTV Route] Buscando dados do TMDB para ${imdbId}`);
-        const tmdb = await getTMDBInfo(imdbId);
-        
-        let titles = [];
-        let year = null;
-        
-        if (tmdb) {
-            titles.push(tmdb.title);
-            if (tmdb.year) year = tmdb.year;
-        }
-        
-        const cinemeta = await getCinemetaInfo(imdbId, 'series');
-        if (cinemeta) {
-            if (cinemeta.name && !titles.includes(cinemeta.name)) {
-                titles.push(cinemeta.name);
-            }
-            if (!year && cinemeta.year) {
-                year = cinemeta.year;
-            }
-        }
-
-        if (titles.length === 0) {
-            return res.status(404).json({ erro: 'Não foi possível encontrar metadados para este IMDb ID.' });
-        }
-
-        console.log(`[IPTV Route] Iniciando busca nos scrapers para títulos: ${titles.join(', ')} | S${sNum}E${eNum} (Ano: ${year})`);
-        const streams = await iptvService.searchAllProviders(titles, 'series', sNum, eNum, year);
-        
-        res.json({ imdb_id: imdbId, type: 'series', season: sNum, episode: eNum, streams });
-    } catch (err) {
-        console.error('[IPTV Route] Erro:', err);
-        res.status(500).json({ erro: 'Erro interno ao processar busca IPTV.' });
-    }
-});
 
 // ==========================================
 // ROTA 4: Visualizar JSON específico (/:nome)
@@ -1074,163 +971,6 @@ app.get('/api/colaboradores', async (req, res) => {
 });
 
 // ==========================================
-// ROTAS DO TELEGRAM
-// ==========================================
-
-// Rota 10: Obter Status do Telegram
-app.get('/api/telegram/status', (req, res) => {
-    // Retorna se o servidor possui sessão global ou está pronto
-    const status = tgService.getStatus();
-    res.json(status);
-});
-
-// Nova Rota: Iniciar login do Telegram por telefone
-app.post('/api/telegram/login-phone', async (req, res) => {
-    const { phone } = req.body;
-    if (!phone) {
-        return res.status(400).json({ erro: 'O número de telefone é obrigatório.' });
-    }
-    try {
-        const result = await tgService.sendPhoneCode(phone);
-        res.json(result);
-    } catch (err) {
-        console.error("Erro ao solicitar código do Telegram:", err);
-        res.status(500).json({ erro: err.message || 'Erro ao enviar código de login.' });
-    }
-});
-
-// Nova Rota: Concluir login do Telegram com código e 2FA
-app.post('/api/telegram/login-code', async (req, res) => {
-    const { loginId, code, password } = req.body;
-    if (!loginId || !code) {
-        return res.status(400).json({ erro: 'O loginId e o código de verificação são obrigatórios.' });
-    }
-    try {
-        const result = await tgService.verifyPhoneCode(loginId, code, password);
-        res.json({ sucesso: true, session: result.session, telegramUser: result.telegramUser });
-    } catch (err) {
-        console.error("Erro ao verificar código do Telegram:", err);
-        if (err.message === "SESSION_PASSWORD_NEEDED") {
-            return res.json({ sucesso: false, precisa2FA: true, erro: "Senha de verificação em duas etapas (2FA) necessária." });
-        }
-        res.status(500).json({ erro: err.message || 'Erro ao validar login.' });
-    }
-});
-
-// Rota 11: Upload de arquivo pelo navegador e envio ao Telegram (Público)
-app.post('/api/telegram/upload', diskUpload.single('video'), async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ erro: 'Nenhum arquivo enviado.' });
-    }
-
-    const tempFilePath = req.file.path;
-    const originalName = req.file.originalname;
-    const customSession = req.headers['x-telegram-session'] || null;
-    const botToken = req.headers['x-telegram-bot-token'] || null;
-    const channelId = req.headers['x-telegram-channel-id'] || null;
-
-    // Validação de tipo de arquivo de vídeo no backend
-    const videoExtensions = ['.mp4', '.mkv', '.avi', '.webm', '.ts', '.mov', '.flv', '.3gp', '.mpeg', '.m4v'];
-    const ext = path.extname(originalName).toLowerCase();
-    if (!videoExtensions.includes(ext)) {
-        if (fs.existsSync(tempFilePath)) {
-            fs.unlinkSync(tempFilePath);
-        }
-        return res.status(400).json({ erro: 'Tipo de arquivo não permitido. Apenas vídeos (mp4, mkv, etc.) são aceitos.' });
-    }
-
-    try {
-        const link = await tgService.uploadFileAndGetLink(tempFilePath, originalName, (progress) => {
-            logProcessProgress('upload-' + originalName, originalName, progress);
-        }, customSession, botToken, channelId);
-
-        res.json({ sucesso: true, link: link });
-    } catch (err) {
-        console.error("Erro no upload para o Telegram:", err);
-        res.status(500).json({ erro: err.message || 'Erro ao enviar arquivo para o Telegram.' });
-    } finally {
-        if (fs.existsSync(tempFilePath)) {
-            fs.unlinkSync(tempFilePath);
-        }
-    }
-});
-
-// Rota 12: Envio de arquivo local (por caminho no disco)
-app.post('/api/telegram/local-path', async (req, res) => {
-    const { localPath, senha } = req.body;
-    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
-
-    if (senha !== adminPassword) {
-        return res.status(401).json({ erro: 'Senha incorreta.' });
-    }
-
-    if (!localPath) {
-        return res.status(400).json({ erro: 'O caminho do arquivo local (localPath) é obrigatório.' });
-    }
-
-    const resolvedPath = path.resolve(localPath);
-    if (!fs.existsSync(resolvedPath)) {
-        return res.status(400).json({ erro: `Arquivo não encontrado no caminho: ${resolvedPath}` });
-    }
-
-    const fileName = path.basename(resolvedPath);
-    const customSession = req.headers['x-telegram-session'] || null;
-    const botToken = req.headers['x-telegram-bot-token'] || null;
-    const channelId = req.headers['x-telegram-channel-id'] || null;
-
-    // Validação de tipo de arquivo de vídeo no backend para envio local
-    const videoExtensions = ['.mp4', '.mkv', '.avi', '.webm', '.ts', '.mov', '.flv', '.3gp', '.mpeg', '.m4v'];
-    const ext = path.extname(fileName).toLowerCase();
-    if (!videoExtensions.includes(ext)) {
-        return res.status(400).json({ erro: 'Tipo de arquivo não permitido. Apenas vídeos (mp4, mkv, etc.) são aceitos.' });
-    }
-
-    try {
-        const link = await tgService.uploadFileAndGetLink(resolvedPath, fileName, (progress) => {
-            logProcessProgress('upload-' + fileName, fileName, progress);
-        }, customSession, botToken, channelId);
-
-        res.json({ sucesso: true, link: link });
-    } catch (err) {
-        console.error("Erro no envio local para o Telegram:", err);
-        res.status(500).json({ erro: err.message || 'Erro ao enviar arquivo local para o Telegram.' });
-    }
-});
-
-// Rota 13: Baixar vídeo de uma URL externa, enviar ao Telegram e retornar o link (Público)
-app.post('/api/telegram/migrate-url', async (req, res) => {
-    const { url, fileName } = req.body;
-
-    if (!url) {
-        return res.status(400).json({ erro: 'A URL do vídeo é obrigatória.' });
-    }
-
-    const defaultName = fileName || `video-${Date.now()}.mp4`;
-    const customSession = req.headers['x-telegram-session'] || null;
-    const botToken = req.headers['x-telegram-bot-token'] || null;
-    const channelId = req.headers['x-telegram-channel-id'] || null;
-
-    try {
-        const link = await tgService.downloadAndUploadUrl(
-            url,
-            defaultName,
-            (progress) => {
-                logProcessProgress('download-' + defaultName, defaultName, progress);
-            },
-            (progress) => {
-                logProcessProgress('upload-' + defaultName, defaultName, progress);
-            },
-            customSession,
-            botToken,
-            channelId
-        );
-
-        res.json({ sucesso: true, link: link });
-    } catch (err) {
-        console.error("Erro na migração de URL:", err);
-        res.status(500).json({ erro: err.message || 'Erro ao processar e enviar link para o Telegram.' });
-    }
-});
 
 // ==========================================
 // TAREFA AGENDADA: Limpeza semanal dos arquivos mais vistos

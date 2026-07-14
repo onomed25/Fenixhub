@@ -924,7 +924,8 @@
 
     <script>
         // --- CONFIGURAÇÃO API ---
-        const API_URL = ''; // Sempre usa o backend do próprio domínio (Render/DuckDNS)
+        const API_URL = '';
+        const TELEGRAM_API_URL = '__TELEGRAM_API_URL_PLACEHOLDER__';
 
         // --- UTILIDADES ---
         function showToast(message, type = 'success') {
@@ -1296,7 +1297,7 @@
                 }
 
                 try {
-                    const res = await fetch(API_URL + '/api/telegram/status');
+                    const res = await fetch(TELEGRAM_API_URL + '/api/telegram/status');
                     if (res.ok) {
                         const globalStatus = await res.json();
                         tg.status = { ...globalStatus, local: false };
@@ -1387,7 +1388,7 @@
                 btn.innerHTML = '<div class="loader"></div>';
 
                 try {
-                    const res = await fetch(API_URL + '/api/telegram/login-phone', {
+                    const res = await fetch(TELEGRAM_API_URL + '/api/telegram/login-phone', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ phone })
@@ -1422,7 +1423,7 @@
                 btn.innerHTML = '<div class="loader"></div>';
 
                 try {
-                    const res = await fetch(API_URL + '/api/telegram/login-code', {
+                    const res = await fetch(TELEGRAM_API_URL + '/api/telegram/login-code', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ loginId, code, password })
@@ -1590,7 +1591,7 @@
                         formData.append('video', file);
 
                         const xhr = new XMLHttpRequest();
-                        xhr.open('POST', API_URL + '/api/telegram/upload', true);
+                        xhr.open('POST', TELEGRAM_API_URL + '/api/telegram/upload', true);
 
                         const session = localStorage.getItem('fenixflix_tg_session');
                         if (session) {
@@ -1811,7 +1812,7 @@
                 }
 
                 try {
-                    const res = await fetch(API_URL + '/api/telegram/local-path', {
+                    const res = await fetch(TELEGRAM_API_URL + '/api/telegram/local-path', {
                         method: 'POST',
                         headers: headers,
                         body: JSON.stringify({ localPath })
@@ -1934,7 +1935,7 @@
                     }
 
                     try {
-                        const res = await fetch(API_URL + '/api/telegram/migrate-url', {
+                        const res = await fetch(TELEGRAM_API_URL + '/api/telegram/migrate-url', {
                             method: 'POST',
                             headers: headers,
                             body: JSON.stringify({ url: item.url, fileName: fileName })
