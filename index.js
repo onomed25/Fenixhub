@@ -36,6 +36,8 @@ function verifyToken(token) {
     } catch (err) {
         return null;
     }
+}
+
 const app = express();
 const upload = multer();
 
