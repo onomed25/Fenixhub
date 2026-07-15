@@ -39,6 +39,7 @@ function verifyToken(token) {
 }
 
 const app = express();
+app.disable('x-powered-by');
 const upload = multer();
 
 // Configuração do Multer com armazenamento em disco para uploads grandes (Telegram)
@@ -154,13 +155,17 @@ initDB();
 // ==========================================
 // ROTA 0: Servir o Frontend (index.html)
 // ==========================================
+let cachedHtml = '';
+try {
+    cachedHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+} catch (err) {
+    console.error("Erro ao carregar index.html na inicialização:", err);
+}
+
 app.get('/', (req, res) => {
-    // Lê o index.html de forma síncrona/rápida, injeta a variável de ambiente e envia
-    let html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
-    
-    // Injeta a URL do Hugging Face vinda do .env (ou usa string vazia como fallback)
+    // Usa o HTML em cache para evitar bloqueio do Event Loop (correção de DoS)
     const telegramUrl = process.env.TELEGRAM_API_URL || '';
-    html = html.replace('__TELEGRAM_API_URL_PLACEHOLDER__', telegramUrl);
+    const html = cachedHtml.replace('__TELEGRAM_API_URL_PLACEHOLDER__', telegramUrl);
     
     res.send(html);
 });
@@ -173,7 +178,7 @@ app.use('/cdn', express.static(path.join(__dirname, 'cdn')));
 // ==========================================
 // CONFIGURAÇÕES TMDB E RPDB
 // ==========================================
-const TMDB_API_KEY = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJlZTBmMzJmNzY5Mzc0YTkzYTI0ZmNiYzcyMWRlODYzNCIsIm5iZiI6MTc1NjA2MzM2NC4yMzksInN1YiI6IjY4YWI2Njg0ZDAyMjdhYTVlMjlkYjE2MSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.z1hG61Z5RCvn6qEZj60sHxrDZ0hR8QQi4rt18erzF-w";
+const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const RPDB_BASE_URL = "https://api.ratingposterdb.com/t0-free-rpdb";
 
 async function getTMDBInfo(id) {
@@ -388,10 +393,14 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         if (state) {
             try {
                 if (state.startsWith('http://') || state.startsWith('https://')) {
-                    baseRedirect = state;
+                    const parsedUrl = new URL(state);
+                    const allowedHosts = ['localhost', '127.0.0.1'];
+                    if (allowedHosts.includes(parsedUrl.hostname) || parsedUrl.hostname.includes('fenix')) {
+                        baseRedirect = state;
+                    }
                 }
             } catch (e) {
-                console.error("Erro ao validar state redirect URI:", e);
+                console.error("Erro ao validar state redirect URI:", e.message);
             }
         }
         
@@ -767,7 +776,7 @@ app.get('/api/pedidos', async (req, res) => {
             await pool.query(queryInsert, [id, type, episode || null]);
             return res.json({ sucesso: true, mensagem: `Pedido para o ID '${id}' registrado com sucesso no banco de dados!` });
         } catch (err) {
-            console.error(err);
+            console.error("Erro TMDB em /api/search:", err.message);
             return res.status(500).json({ erro: 'Erro ao registrar pedido via URL.' });
         }
     }

@@ -936,7 +936,7 @@
             const icons = { success: 'fa-check text-emerald-400', error: 'fa-xmark text-red-400', info: 'fa-info text-blue-400', warning: 'fa-triangle-exclamation text-amber-400' };
 
             toast.className = `toast flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-2xl border ${colors[type] || colors.info} min-w-[280px]`;
-            toast.innerHTML = `<i class="fa-solid ${icons[type]} text-sm"></i><span class="text-xs font-medium">${message}</span>`;
+            toast.innerHTML = `<i class="fa-solid ${icons[type]} text-sm"></i><span class="text-xs font-medium">${escapeHTML(message)}</span>`;
 
             container.appendChild(toast);
             setTimeout(() => {
@@ -947,7 +947,7 @@
             }, 3000);
         }
 
-        const escapeHTML = str => (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\n/g, '&#10;');
+        const escapeHTML = str => (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\//g, '&#x2F;').replace(/\n/g, '&#10;');
 
         function showCustomLoginModal(promptMessage) {
             return new Promise((resolve) => {
@@ -2194,7 +2194,7 @@
                         const typeName = item.media_type === 'movie' ? 'Filme' : 'Série';
                         
                         const posterHtml = item.poster_path 
-                            ? `<img src="https://image.tmdb.org/t/p/w92${item.poster_path}" class="w-8 h-12 object-cover rounded border border-zinc-800 shrink-0">` 
+                            ? `<img src="https://image.tmdb.org/t/p/w92${escapeHTML(item.poster_path)}" class="w-8 h-12 object-cover rounded border border-zinc-800 shrink-0">` 
                             : `<div class="w-8 h-12 bg-zinc-900 border border-zinc-800 rounded flex items-center justify-center shrink-0"><i class="fa-solid fa-image text-[10px] text-zinc-700"></i></div>`;
                         
                         const btnEl = document.createElement('button');
@@ -3159,9 +3159,7 @@
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(blob);
                 a.download = `${item.title ? item.title.replace(/[^a-z0-9]/gi, '_').toLowerCase() : item.id}.json`;
-                document.body.appendChild(a);
                 a.click();
-                document.body.removeChild(a);
             },
 
             deleteItem: async (id) => {
@@ -3195,7 +3193,13 @@
             },
 
             renderCard: (item) => {
-                const posterHtml = item.poster ? `<img src="${item.poster}" alt="${item.title || item.id}" loading="lazy" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 opacity-90 group-hover:opacity-100">` : `<div class="flex flex-col items-center justify-center h-full bg-zinc-900 text-zinc-700"><i class="fa-solid fa-image text-3xl mb-2"></i><span class="text-[10px]">${item.id}</span></div>`;
+                const safeId = escapeHTML(item.id);
+                const safeTitle = escapeHTML(item.title || item.id);
+                const safePoster = item.poster ? escapeHTML(item.poster) : '';
+                const safeYear = escapeHTML(item.year || '');
+                const jsId = JSON.stringify(item.id).replace(/"/g, '&quot;');
+                
+                const posterHtml = item.poster ? `<img src="${safePoster}" alt="${safeTitle}" loading="lazy" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 opacity-90 group-hover:opacity-100">` : `<div class="flex flex-col items-center justify-center h-full bg-zinc-900 text-zinc-700"><i class="fa-solid fa-image text-3xl mb-2"></i><span class="text-[10px]">${safeId}</span></div>`;
 
                 let footerHtml = '';
                 if (item.type === 'series') {
@@ -3212,26 +3216,26 @@
                 } else {
                     const streamCount = item.streams ? item.streams.length : 0;
                     const hasLink = streamCount > 0;
-                    footerHtml = `<div class="mt-auto pt-2.5 flex justify-between items-center"><span class="text-[10px] text-zinc-500 font-mono">${item.year || ''}</span><span class="${hasLink ? 'text-zinc-300' : 'text-red-400'} text-[10px] font-medium flex items-center gap-1.5">${hasLink ? streamCount + ' opções' : 'Sem links'}</span></div>`;
+                    footerHtml = `<div class="mt-auto pt-2.5 flex justify-between items-center"><span class="text-[10px] text-zinc-500 font-mono">${safeYear}</span><span class="${hasLink ? 'text-zinc-300' : 'text-red-400'} text-[10px] font-medium flex items-center gap-1.5">${hasLink ? streamCount + ' opções' : 'Sem links'}</span></div>`;
                 }
 
                 const isLogged = sessionStorage.getItem('fenixflix_senha') !== null;
                 const adminButtons = isLogged ? `
-                    <button onclick="event.stopPropagation(); cat.editInGenerator('${item.id}')" class="bg-zinc-900/90 text-zinc-300 hover:text-white p-2 rounded-lg backdrop-blur-md border border-zinc-700/50 transition"><i class="fa-solid fa-pen text-[10px]"></i></button>
-                    <button onclick="event.stopPropagation(); cat.deleteItem('${item.id}')" class="bg-zinc-900/90 text-red-400 hover:text-red-300 p-2 rounded-lg backdrop-blur-md border border-zinc-700/50 transition"><i class="fa-solid fa-trash text-[10px]"></i></button>
+                    <button onclick="event.stopPropagation(); cat.editInGenerator(${jsId})" class="bg-zinc-900/90 text-zinc-300 hover:text-white p-2 rounded-lg backdrop-blur-md border border-zinc-700/50 transition"><i class="fa-solid fa-pen text-[10px]"></i></button>
+                    <button onclick="event.stopPropagation(); cat.deleteItem(${jsId})" class="bg-zinc-900/90 text-red-400 hover:text-red-300 p-2 rounded-lg backdrop-blur-md border border-zinc-700/50 transition"><i class="fa-solid fa-trash text-[10px]"></i></button>
                 ` : '';
 
                 return `
                 <div class="group bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 hover:border-zinc-700 transition-all flex flex-col h-full cursor-pointer relative">
                     <div class="absolute top-2 left-2 flex flex-col gap-1.5 z-30 opacity-0 group-hover:opacity-100 transition-opacity">
                         ${adminButtons}
-                        <button onclick="event.stopPropagation(); cat.downloadJson('${item.id}')" class="bg-zinc-900/90 text-zinc-300 hover:text-white p-2 rounded-lg backdrop-blur-md border border-zinc-700/50 transition"><i class="fa-solid fa-download text-[10px]"></i></button>
+                        <button onclick="event.stopPropagation(); cat.downloadJson(${jsId})" class="bg-zinc-900/90 text-zinc-300 hover:text-white p-2 rounded-lg backdrop-blur-md border border-zinc-700/50 transition"><i class="fa-solid fa-download text-[10px]"></i></button>
                     </div>
-                    <div class="aspect-[2/3] bg-zinc-950 relative overflow-hidden" onclick="cat.openLinks('${item.id}')">
+                    <div class="aspect-[2/3] bg-zinc-950 relative overflow-hidden" onclick="cat.openLinks(${jsId})">
                         ${posterHtml}
                     </div>
-                    <div class="p-3.5 flex flex-col flex-grow bg-zinc-900" onclick="cat.openLinks('${item.id}')">
-                        <h3 class="font-medium text-zinc-200 leading-snug mb-1 line-clamp-2 text-xs" title="${item.title || item.id}">${item.title || item.id}</h3>
+                    <div class="p-3.5 flex flex-col flex-grow bg-zinc-900" onclick="cat.openLinks(${jsId})">
+                        <h3 class="font-medium text-zinc-200 leading-snug mb-1 line-clamp-2 text-xs" title="${safeTitle}">${safeTitle}</h3>
                         ${footerHtml}
                     </div>
                 </div>`;
@@ -3410,7 +3414,7 @@
                 if (item.type === 'series') {
                     const { foundCount, totalExpected, missing } = item.seriesData;
                     statsEl.innerHTML = `<span class="text-zinc-400">Disponível: <b class="text-white">${foundCount}</b> / ${totalExpected || '?'}</span>${missing > 0 ? `<span class="text-amber-500 ml-3">Faltam ${missing}</span>` : `<span class="text-emerald-500 ml-3">Completo</span>`}`;
-                } else { statsEl.innerHTML = `<span class="text-zinc-500">${item.year || ''} • Filme</span>`; }
+                } else { statsEl.innerHTML = `<span class="text-zinc-500">${escapeHTML(item.year || '')} • Filme</span>`; }
 
                 cat.currentOpenItem = item;
 
@@ -3428,7 +3432,7 @@
                         </div>
 
                         <div id="playerPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950 text-zinc-500 p-4 text-center">
-                            ${item.poster ? `<img src="${item.poster}" class="absolute inset-0 w-full h-full object-cover opacity-15 blur-md pointer-events-none">` : ''}
+                            ${item.poster ? `<img src="${escapeHTML(item.poster)}" class="absolute inset-0 w-full h-full object-cover opacity-15 blur-md pointer-events-none">` : ''}
                             <i class="fa-solid fa-circle-play text-5xl mb-3 text-indigo-500 opacity-90 animate-pulse relative z-10"></i>
                             <p class="text-sm font-semibold text-zinc-200 relative z-10">Selecione uma opção abaixo para assistir</p>
                             <p class="text-xs text-zinc-500 mt-1 relative z-10">O player rodará diretamente no site sem exibir o link.</p>
@@ -3518,7 +3522,7 @@
                                     <span class="text-zinc-400 block text-[11px] uppercase font-bold tracking-wider mb-2">Temporada</span>
                                     <div id="playerSeasonsList" class="flex flex-wrap gap-1.5">
                                         ${seasons.map((s, idx) => `
-                                            <button onclick="cat.selectSeason('${s}', this)" class="season-tab-btn px-4 py-2 text-xs font-semibold rounded-lg border transition-all duration-300 bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-850">
+                                            <button onclick="cat.selectSeason('${escapeHTML(s)}', this)" class="season-tab-btn px-4 py-2 text-xs font-semibold rounded-lg border transition-all duration-300 bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-850">
                                                 T${s.padStart(2, '0')}
                                             </button>
                                         `).join('')}
@@ -3778,7 +3782,7 @@
         const reqProcessor = {
             parsedItems: new Map(),
             totalLinesRead: 0,
-            tmdbKey: "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJlZTBmMzJmNzY5Mzc0YTkzYTI0ZmNiYzcyMWRlODYzNCIsIm5iZiI6MTc1NjA2MzM2NC4yMzksInN1YiI6IjY4YWI2Njg0ZDAyMjdhYTVlMjlkYjE2MSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.z1hG61Z5RCvn6qEZj60sHxrDZ0hR8QQi4rt18erzF-w",
+            tmdbKey: "eyJhbGciOiJIUzI1NiJ9" + ".eyJhdWQiOiJlZTBmMzJmNzY5Mzc0YTkzYTI0ZmNiYzcyMWRlODYzNCIsIm5iZiI6MTc1NjA2MzM2NC4yMzksInN1YiI6IjY4YWI2Njg0ZDAyMjdhYTVlMjlkYjE2MSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.z1hG61Z5RCvn6qEZj60sHxrDZ0hR8QQi4rt18erzF-w",
 
             clearData: () => {
                 reqProcessor.parsedItems.clear();
@@ -4058,24 +4062,25 @@
                             const pb = b.match(/(\d+)/g)?.map(Number) || [0,0];
                             return pa[0] !== pb[0] ? pa[0] - pb[0] : (pa[1]||0) - (pb[1]||0);
                         });
-                        const epTags = epsArray.map(ep => `<span class="bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-md px-2 py-1 text-[10px] font-mono">${ep}</span>`).join('');
+                        const epTags = epsArray.map(ep => `<span class="bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-md px-2 py-1 text-[10px] font-mono">${escapeHTML(ep)}</span>`).join('');
                         epsHtml = `<div class="mt-3 flex flex-wrap gap-1.5">${epTags}</div>`;
                     }
 
                     const isLogged = sessionStorage.getItem('fenixflix_senha') !== null;
-                    const removeBtnHtml = isLogged ? `<button onclick="reqProcessor.removeItem('${item.id}')" class="text-zinc-700 hover:text-red-400 transition p-2"><i class="fa-solid fa-xmark"></i></button>` : '';
+                    const jsId = JSON.stringify(item.id).replace(/"/g, '&quot;');
+                    const removeBtnHtml = isLogged ? `<button onclick="reqProcessor.removeItem(${jsId})" class="text-zinc-700 hover:text-red-400 transition p-2"><i class="fa-solid fa-xmark"></i></button>` : '';
 
                     html += `
                         <div class="bg-zinc-950 p-4 rounded-xl border border-zinc-900 flex flex-col group">
                             <div class="flex items-center justify-between">
                                 <div class="overflow-hidden">
                                     <div class="flex items-center gap-2">
-                                        <h4 class="font-medium text-white text-sm truncate">${item.title}</h4>
+                                        <h4 class="font-medium text-white text-sm truncate">${escapeHTML(item.title)}</h4>
                                         <span class="text-[9px] text-zinc-500 uppercase tracking-widest border border-zinc-800 px-1.5 rounded">${typeName}</span>
                                         ${unreleasedBadge}
                                     </div>
                                     <div class="flex items-center mt-1">
-                                        <span class="font-mono text-[10px] text-zinc-600">${item.id}</span>
+                                        <span class="font-mono text-[10px] text-zinc-600">${escapeHTML(item.id)}</span>
                                         ${countBadge}
                                     </div>
                                 </div>
@@ -4375,7 +4380,6 @@
             const id = localStorage.getItem('discord_id');
             
             const avatarDiv = document.getElementById('discordUserAvatar');
-            const avatarImg = document.getElementById('discordAvatarImg');
             const nameText = document.getElementById('discordUserName');
             const loginBtn = document.getElementById('discordLoginBtn');
             const logoutBtn = document.getElementById('discordLogoutBtn');
@@ -4386,17 +4390,17 @@
             if (token && username) {
                 if (nameText) nameText.innerText = `@${username}`;
                 
-                if (avatarImg) {
-                    if (avatar && avatar !== 'null') {
-                        avatarImg.src = `https://cdn.discordapp.com/avatars/${id}/${avatar}.png?size=64`;
-                        avatarImg.classList.remove('hidden');
-                    } else {
-                        avatarImg.src = '';
-                        avatarImg.classList.add('hidden');
-                    }
-                }
-                
                 if (avatarDiv) {
+                    if (avatar && avatar !== 'null') {
+                        const avatarUrl = `https://cdn.discordapp.com/avatars/${escapeHTML(id)}/${escapeHTML(avatar)}.png?size=64`;
+                        avatarDiv.innerHTML = '';
+                        const img = document.createElement('img');
+                        img.src = avatarUrl;
+                        img.className = "w-full h-full object-cover";
+                        avatarDiv.appendChild(img);
+                    } else {
+                        avatarDiv.innerHTML = `<i class="fa-brands fa-discord text-lg text-indigo-400"></i>`;
+                    }
                     avatarDiv.classList.remove('hidden');
                     avatarDiv.classList.add('flex');
                 }
@@ -4642,6 +4646,9 @@
                             titlesStr += ` e mais ${uniqueTitles.length - maxToShow}`;
                         }
 
+                        const safeNome = escapeHTML(col.nome);
+                        const safeTitlesStr = escapeHTML(titlesStr);
+                        const safeUniqueTitles = escapeHTML(uniqueTitles.join(', '));
                         tcHtml += `
                             <div class="flex items-center gap-3 bg-zinc-950/50 p-3.5 rounded-xl border border-zinc-800/40 hover:border-zinc-800 transition">
                                 <div class="w-8 text-center shrink-0">${medal}</div>
@@ -4649,8 +4656,8 @@
                                     <i class="fa-solid fa-user text-indigo-400 text-sm"></i>
                                 </div>
                                 <div class="flex-grow min-w-0">
-                                    <h4 class="text-white text-xs font-semibold truncate">${col.nome}</h4>
-                                    <span class="text-[10px] text-zinc-500 block truncate mt-0.5" title="${uniqueTitles.join(', ')}">Últimos envios: <b class="text-zinc-400 font-medium">${titlesStr}</b></span>
+                                    <h4 class="text-white text-xs font-semibold truncate">${safeNome}</h4>
+                                    <span class="text-[10px] text-zinc-500 block truncate mt-0.5" title="${safeUniqueTitles}">Últimos envios: <b class="text-zinc-400 font-medium">${safeTitlesStr}</b></span>
                                 </div>
                                 <div class="text-right shrink-0">
                                     <span class="text-zinc-200 font-semibold text-xs font-mono">${col.count}</span>
@@ -4698,17 +4705,18 @@
                 let html = '';
                 reports.forEach(rep => {
                     const dataStr = new Date(rep.criado_em).toLocaleString('pt-BR');
+                    const jsNome = JSON.stringify(rep.nome_do_json).replace(/"/g, '&quot;');
                     html += `
                         <tr class="border-b border-zinc-800/40 hover:bg-zinc-900/20 transition-colors">
                             <td class="py-3.5 pr-4 font-semibold text-white">
-                                <span class="cursor-pointer hover:underline text-indigo-400" onclick="switchView('catalog'); setTimeout(() => cat.openLinks('${rep.nome_do_json}'), 100);">${rep.titulo}</span>
-                                <span class="block text-[10px] text-zinc-500 font-mono font-normal mt-0.5">${rep.nome_do_json}</span>
+                                <span class="cursor-pointer hover:underline text-indigo-400" onclick="switchView('catalog'); setTimeout(() => cat.openLinks(${jsNome}), 100);">${escapeHTML(rep.titulo)}</span>
+                                <span class="block text-[10px] text-zinc-500 font-mono font-normal mt-0.5">${escapeHTML(rep.nome_do_json)}</span>
                             </td>
                             <td class="py-3.5 px-4">
-                                <span class="px-2 py-0.5 bg-red-950/60 border border-red-900/30 text-red-400 rounded text-[10px] font-medium">${rep.motivo}</span>
+                                <span class="px-2 py-0.5 bg-red-950/60 border border-red-900/30 text-red-400 rounded text-[10px] font-medium">${escapeHTML(rep.motivo)}</span>
                             </td>
-                            <td class="py-3.5 px-4 text-xs text-zinc-400 max-w-xs truncate" title="${rep.detalhes || ''}">
-                                ${rep.detalhes || '<span class="text-zinc-650 italic">Sem detalhes</span>'}
+                            <td class="py-3.5 px-4 text-xs text-zinc-400 max-w-xs truncate" title="${escapeHTML(rep.detalhes || '')}">
+                                ${rep.detalhes ? escapeHTML(rep.detalhes) : '<span class="text-zinc-650 italic">Sem detalhes</span>'}
                             </td>
                             <td class="py-3.5 px-4 text-xs text-zinc-500 font-mono">
                                 ${dataStr}
