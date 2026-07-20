@@ -130,7 +130,7 @@
             <button onclick="switchView('ranking'); loadRankingStats();" id="btn-ranking" class="nav-btn px-4 py-2 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0" title="Ranking">
                 <i class="fa-solid fa-trophy text-yellow-500"></i> <span class="hidden md:inline text-zinc-300">Ranking</span>
             </button>
-            <a href="https://fenixflix-ur9u.onrender.com/" target="_blank" class="px-4 py-2 rounded-full text-xs font-medium transition-colors flex items-center gap-2 bg-white hover:bg-zinc-200 text-obsidian-950 shrink-0 shadow-lg">
+            <a id="btn-addon" href="https://fenixflix-ur9u.onrender.com/" target="_blank" class="hidden px-4 py-2 rounded-full text-xs font-medium transition-colors items-center gap-2 bg-white hover:bg-zinc-200 text-obsidian-950 shrink-0 shadow-lg">
                 <i class="fa-solid fa-puzzle-piece"></i> <span class="hidden sm:inline">Extensão</span>
             </a>
             <a id="discordLoginBtn" href="/api/auth/discord" class="px-4 py-2 rounded-full text-xs font-medium transition-colors flex items-center gap-2 bg-indigo-600/10 hover:bg-indigo-600 border border-indigo-500/20 text-indigo-400 hover:text-white shrink-0">
@@ -142,8 +142,8 @@
                 <span id="discordUserName" class="hidden"></span>
                 <button id="discordLogoutBtn" onclick="discordLogout()" class="text-zinc-500 hover:text-red-400 p-1 rounded-full transition-colors" title="Sair"><i class="fa-solid fa-right-from-bracket text-[10px]"></i></button>
             </div>
-            <button onclick="toggleAdminLogin()" id="btn-login-admin" class="w-8 h-8 flex items-center justify-center rounded-full border border-obsidian-800 bg-obsidian-900 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all">
-                <i class="fa-solid fa-user-shield text-xs"></i>
+            <button onclick="toggleAdminLogin()" id="btn-login-admin" class="px-4 py-2 rounded-full text-xs font-medium transition-colors flex items-center gap-2 border border-obsidian-800 bg-obsidian-900 text-zinc-400 hover:text-white hover:border-zinc-600 shrink-0">
+                <i class="fa-solid fa-user-shield"></i> <span class="hidden sm:inline">Admin</span>
             </button>
         </div>
     </header>
@@ -1194,12 +1194,14 @@
             // 3. Atualizar botão de Login Admin
             const btnLoginAdmin = document.getElementById('btn-login-admin');
             if (btnLoginAdmin) {
-                if (isLogged) {
-                    btnLoginAdmin.innerHTML = '<i class="fa-solid fa-right-from-bracket"></i> <span>Sair Admin</span>';
+                if (isAdmin) {
+                    btnLoginAdmin.innerHTML = '<i class="fa-solid fa-right-from-bracket"></i> <span class="hidden sm:inline">Sair Admin</span>';
                     btnLoginAdmin.classList.add('border-red-500/30', 'text-red-400');
+                    btnLoginAdmin.classList.remove('border-obsidian-800', 'text-zinc-400');
                 } else {
-                    btnLoginAdmin.innerHTML = '<i class="fa-solid fa-user-shield"></i> <span>Login Admin</span>';
+                    btnLoginAdmin.innerHTML = '<i class="fa-solid fa-user-shield"></i> <span class="hidden sm:inline">Admin</span>';
                     btnLoginAdmin.classList.remove('border-red-500/30', 'text-red-400');
+                    btnLoginAdmin.classList.add('border-obsidian-800', 'text-zinc-400');
                 }
             }
             
@@ -4486,6 +4488,7 @@
             const nameText = document.getElementById('discordUserName');
             const loginBtn = document.getElementById('discordLoginBtn');
             const logoutBtn = document.getElementById('discordLogoutBtn');
+            const addonBtn = document.getElementById('btn-addon');
             
             const nickInput = document.getElementById('uploaderNick');
             const saveBtn = document.querySelector('button[onclick="gen.uploadParaBanco()"]');
@@ -4510,6 +4513,10 @@
                 
                 if (loginBtn) loginBtn.classList.add('hidden');
                 if (logoutBtn) logoutBtn.classList.remove('hidden');
+                if (addonBtn) {
+                    addonBtn.classList.remove('hidden');
+                    addonBtn.classList.add('flex');
+                }
                 
                 if (nickInput) nickInput.value = globalName || username;
                 
@@ -4528,6 +4535,10 @@
                 
                 if (loginBtn) loginBtn.classList.remove('hidden');
                 if (logoutBtn) logoutBtn.classList.add('hidden');
+                if (addonBtn) {
+                    addonBtn.classList.add('hidden');
+                    addonBtn.classList.remove('flex');
+                }
                 
                 if (nickInput) nickInput.value = '';
                 
@@ -4775,14 +4786,19 @@
                                     <h4 class="text-white text-xs font-bold font-display tracking-wide truncate">${safeNome}</h4>
                                     <span class="text-[10px] text-zinc-500 block truncate mt-0.5" title="${safeUniqueTitles}">Últimos envios: <b class="text-zinc-400 font-medium">${safeTitlesStr}</b></span>
                                 </div>
-                                <div class="text-right shrink-0 flex flex-col items-end gap-1">
-                                    <div class="flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded-md border border-white/5" title="Filmes enviados">
-                                        <i class="fa-solid fa-film text-ember-500 text-[9px]"></i>
-                                        <span class="text-[10px] text-zinc-300 font-mono font-medium">${countMovies}</span>
+                                <div class="text-right shrink-0 flex flex-col items-end justify-center ml-2">
+                                    <div class="mb-1">
+                                        <span class="text-[11px] font-bold text-white bg-white/10 px-2.5 py-0.5 rounded-full border border-white/10" title="Total de envios">
+                                            ${countMovies + countSeries} Total
+                                        </span>
                                     </div>
-                                    <div class="flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded-md border border-white/5" title="Séries/Episódios enviados">
-                                        <i class="fa-solid fa-tv text-sky-400 text-[9px]"></i>
-                                        <span class="text-[10px] text-zinc-300 font-mono font-medium">${countSeries}</span>
+                                    <div class="flex items-center gap-2.5 text-[10px]">
+                                        <div class="flex items-center text-zinc-400" title="Filmes enviados">
+                                            <i class="fa-solid fa-film text-ember-500 mr-1"></i>${countMovies} <span class="hidden sm:inline ml-0.5">Filmes</span>
+                                        </div>
+                                        <div class="flex items-center text-zinc-400" title="Episódios de Séries enviados">
+                                            <i class="fa-solid fa-tv text-sky-400 mr-1"></i>${countSeries} <span class="hidden sm:inline ml-0.5">Eps</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
