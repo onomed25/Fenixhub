@@ -140,7 +140,10 @@
                 <img id="discordAvatarImg" class="w-6 h-6 rounded-full object-cover" src="" alt="Avatar">
                 <!-- Nome Ocultado para poupar espaço -->
                 <span id="discordUserName" class="hidden"></span>
-                <button id="discordLogoutBtn" onclick="discordLogout()" class="text-zinc-500 hover:text-red-400 p-1 rounded-full transition-colors" title="Sair"><i class="fa-solid fa-right-from-bracket text-[10px]"></i></button>
+                <button id="discordLogoutBtn" onclick="discordLogout()" class="text-red-400/80 hover:text-red-400 hover:bg-red-500/10 px-2 py-1 rounded-full transition-colors flex items-center gap-1.5" title="Sair do Discord">
+                    <span class="text-xs font-medium">Sair</span>
+                    <i class="fa-solid fa-right-from-bracket text-[10px]"></i>
+                </button>
             </div>
             <button onclick="toggleAdminLogin()" id="btn-login-admin" class="px-4 py-2 rounded-full text-xs font-medium transition-colors flex items-center gap-2 border border-obsidian-800 bg-obsidian-900 text-zinc-400 hover:text-white hover:border-zinc-600 shrink-0">
                 <i class="fa-solid fa-user-shield"></i> <span class="hidden sm:inline">Admin</span>
@@ -4497,15 +4500,17 @@
                 if (nameText) nameText.innerText = `@${username}`;
                 
                 if (avatarDiv) {
+                    const imgEl = document.getElementById('discordAvatarImg');
                     if (avatar && avatar !== 'null') {
                         const avatarUrl = `https://cdn.discordapp.com/avatars/${escapeHTML(id)}/${escapeHTML(avatar)}.png?size=64`;
-                        avatarDiv.innerHTML = '';
-                        const img = document.createElement('img');
-                        img.src = avatarUrl;
-                        img.className = "w-full h-full object-cover";
-                        avatarDiv.appendChild(img);
+                        if (imgEl) {
+                            imgEl.src = avatarUrl;
+                            imgEl.classList.remove('hidden');
+                        }
                     } else {
-                        avatarDiv.innerHTML = `<i class="fa-brands fa-discord text-lg text-indigo-400"></i>`;
+                        if (imgEl) imgEl.classList.add('hidden');
+                        // Se não tiver avatar, podemos apenas exibir o ícone padrão, 
+                        // mas manter o innerHTML intacto para não quebrar o botão de sair
                     }
                     avatarDiv.classList.remove('hidden');
                     avatarDiv.classList.add('flex');
