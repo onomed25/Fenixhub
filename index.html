@@ -7,10 +7,11 @@
     
     <link rel="icon" href="data:image/svg+xml,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'&gt;&lt;path fill='%23facc15' d='M511.6 36.86l-64 415.1c-1.5 9.734-7.375 18.22-15.97 23.05c-4.844 2.719-10.27 4.097-15.68 4.097c-4.188 0-8.319-812-12.29-2.472l-122.6-69.66l-122.6 69.66c-3.973 1.66-8.106 2.472-12.29 2.472c-5.418 0-10.84-1.378-15.68-4.097c-8.594-4.828-14.47-13.32-15.97-23.05l-64-415.1C48.59 18.4 64.14 1.375 82.99 1.375c7.95 0 15.41 3.03 20.98 8.485l152 148.9l152-148.9c5.574-5.454 13.04-8.485 20.98-8.485C447.9 1.375 463.4 18.4 460.4 36.86z'/&gt;&lt;/svg&gt;">
 
-    <!-- Tipografia Inter -->
+    <!-- Tipografia Clash Display & Outfit -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap" rel="stylesheet">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -19,9 +20,17 @@
         tailwind.config = {
             theme: {
                 extend: {
-                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    fontFamily: { 
+                        sans: ['Outfit', 'sans-serif'],
+                        display: ['Clash Display', 'sans-serif']
+                    },
                     colors: {
+                        obsidian: { 800: '#161619', 900: '#0f0f11', 950: '#0a0a0c' },
+                        ember: { 400: '#ff8a50', 500: '#ff5722', 600: '#e64a19' },
                         zinc: { 850: '#111113', 900: '#18181b', 950: '#09090b' }
+                    },
+                    backgroundImage: {
+                        'glass-gradient': 'linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%)',
                     }
                 }
             }
@@ -29,26 +38,36 @@
     </script>
 
     <style>
-        body { background-color: #09090b; color: #e4e4e7; }
+        body { 
+            background-color: #0a0a0c; 
+            color: #e4e4e7; 
+            background-image: radial-gradient(circle at top right, rgba(255,87,34,0.03), transparent 40%),
+                              radial-gradient(circle at bottom left, rgba(255,138,80,0.02), transparent 40%);
+            background-attachment: fixed;
+        }
         
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        h1, h2, h3, h4, h5, h6 { font-family: 'Clash Display', sans-serif; letter-spacing: 0.02em; }
+
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,87,34,0.5); }
 
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* Inputs Minimalistas */
+        /* Inputs Glassmorphism */
         .input-unified {
-            background-color: #09090b;
-            border: 1px solid #27272a;
+            background-color: rgba(15,15,17,0.6);
+            border: 1px solid rgba(255,255,255,0.05);
             color: #f4f4f5;
-            transition: all 0.2s ease;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            transition: all 0.3s ease;
         }
         .input-unified:focus {
-            border-color: #6366f1;
-            box-shadow: 0 0 0 1px #6366f1;
+            border-color: #ff5722;
+            box-shadow: 0 0 15px rgba(255,87,34,0.15);
             outline: none;
         }
 
@@ -66,9 +85,24 @@
         .tab-content.active { display: block; }
         @keyframes fadeSlide { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Botões de Navegação Ultra-Clean */
-        .nav-btn.active { background-color: #fafafa; color: #09090b; border-color: #fafafa; }
-        .nav-btn { background-color: transparent; color: #a1a1aa; border: 1px solid #27272a; }
+        /* Botões da Ilha Flutuante */
+        .nav-btn.active { 
+            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05)); 
+            color: #fff; 
+            border-color: rgba(255,255,255,0.2);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+        }
+        .nav-btn { 
+            background-color: transparent; 
+            color: #a1a1aa; 
+            border: 1px solid transparent;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .nav-btn:hover:not(.active) {
+            color: #fff;
+            background: rgba(255,255,255,0.03);
+            border-color: rgba(255,255,255,0.05);
+        }
 
         @keyframes slideIn {
             from { transform: translateY(100%) scale(0.95); opacity: 0; }
@@ -81,60 +115,65 @@
 </head>
 <body class="min-h-screen flex flex-col selection:bg-indigo-500/30">
 
-    <!-- Navbar Minimalista -->
-    <nav class="sticky top-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-900">
-        <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center overflow-x-auto scrollbar-hide">
-            <div class="flex items-center gap-3 mr-6 flex-shrink-0">
-                <i class="fa-brands fa-phoenix-squadron text-white text-xl"></i>
-                <div>
-                    <h1 class="font-semibold text-base leading-tight tracking-tight text-white">Fenix Studio</h1>
-                </div>
+    <!-- Header Simples com Logo -->
+    <header class="w-full pt-8 pb-2 px-8 flex justify-between items-center max-w-7xl mx-auto">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 flex items-center justify-center">
+                <img src="https://i.imgur.com/e6skOZ8.png" alt="Logo Fenix Studio" class="w-full h-full object-contain drop-shadow-[0_0_10px_rgba(255,87,34,0.4)]">
             </div>
-            
-            <div class="flex gap-2 flex-shrink-0">
-                <button onclick="switchView('generator')" id="btn-generator" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 hover:bg-zinc-900">
-                    <i class="fa-solid fa-code"></i> <span class="hidden sm:inline">Criar JSON</span>
-                </button>
-                <button onclick="switchView('ranking'); loadRankingStats();" id="btn-ranking" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 hover:bg-zinc-900">
-                    <i class="fa-solid fa-trophy"></i> <span class="hidden sm:inline">Ranking</span>
-                </button>
-                <button onclick="switchView('requests'); reqProcessor.loadFromDB();" id="btn-requests" class="nav-btn hidden px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 hover:bg-zinc-900">
-                    <i class="fa-solid fa-list-check"></i> <span class="hidden md:inline">Pedidos</span>
-                </button>
-                <button onclick="switchView('catalog'); setTimeout(() => cat.filter('all'), 50);" id="btn-catalog" class="nav-btn active px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
-                    <i class="fa-solid fa-layer-group"></i> <span class="hidden sm:inline">Catálogo</span>
-                </button>
-                <button onclick="switchView('storage'); loadStorageStats();" id="btn-storage" class="nav-btn hidden px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 hover:bg-zinc-900">
-                    <i class="fa-solid fa-database"></i> <span class="hidden sm:inline">Armazenamento</span>
-                </button>
-                <button onclick="switchView('reports'); loadReportsList();" id="btn-reports" class="nav-btn hidden px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 hover:bg-zinc-900">
-                    <i class="fa-solid fa-triangle-exclamation"></i> <span class="hidden sm:inline">Denúncias</span>
-                </button>
-                <a href="https://fenixflix-ur9u.onrender.com/" target="_blank" class="px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white shrink-0">
-                    <i class="fa-solid fa-puzzle-piece"></i> <span class="hidden sm:inline">Addon</span>
-                </a>
-                <a id="discordLoginBtn" href="/api/auth/discord" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 hover:bg-indigo-600 hover:text-white border-indigo-600/30 text-indigo-400 shrink-0">
-                    <i class="fa-brands fa-discord text-sm"></i> <span class="hidden sm:inline">Login Discord</span>
-                </a>
-                <div id="discordUserAvatar" class="hidden items-center gap-2 px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900 shrink-0">
-                    <img id="discordAvatarImg" class="w-6 h-6 rounded-full object-cover" src="" alt="">
-                    <span id="discordUserName" class="text-xs text-zinc-300 font-medium hidden sm:inline"></span>
-                    <button id="discordLogoutBtn" onclick="discordLogout()" class="text-zinc-500 hover:text-red-400 ml-1" title="Sair"><i class="fa-solid fa-right-from-bracket"></i></button>
-                </div>
-                <button onclick="toggleAdminLogin()" id="btn-login-admin" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 hover:bg-zinc-900 shrink-0">
-                    <i class="fa-solid fa-user-shield"></i> <span class="hidden sm:inline">Login Admin</span>
-                </button>
+            <div>
+                <h1 class="font-bold text-xl leading-tight tracking-tight text-white font-display">Fenix Studio</h1>
+                <span class="text-[10px] uppercase tracking-widest text-zinc-500 font-semibold">Workspace</span>
             </div>
         </div>
+        <div class="flex gap-3 items-center">
+            <button onclick="switchView('ranking'); loadRankingStats();" id="btn-ranking" class="nav-btn px-4 py-2 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0" title="Ranking">
+                <i class="fa-solid fa-trophy text-yellow-500"></i> <span class="hidden md:inline text-zinc-300">Ranking</span>
+            </button>
+            <a href="https://fenixflix-ur9u.onrender.com/" target="_blank" class="px-4 py-2 rounded-full text-xs font-medium transition-colors flex items-center gap-2 bg-white hover:bg-zinc-200 text-obsidian-950 shrink-0 shadow-lg">
+                <i class="fa-solid fa-puzzle-piece"></i> <span class="hidden sm:inline">Extensão</span>
+            </a>
+            <a id="discordLoginBtn" href="/api/auth/discord" class="px-4 py-2 rounded-full text-xs font-medium transition-colors flex items-center gap-2 bg-indigo-600/10 hover:bg-indigo-600 border border-indigo-500/20 text-indigo-400 hover:text-white shrink-0">
+                <i class="fa-brands fa-discord"></i> <span class="hidden sm:inline">Discord</span>
+            </a>
+            <div id="discordUserAvatar" class="hidden items-center gap-1.5 px-2 py-1.5 rounded-full border border-obsidian-800 bg-obsidian-900 shrink-0">
+                <img id="discordAvatarImg" class="w-6 h-6 rounded-full object-cover" src="" alt="Avatar">
+                <!-- Nome Ocultado para poupar espaço -->
+                <span id="discordUserName" class="hidden"></span>
+                <button id="discordLogoutBtn" onclick="discordLogout()" class="text-zinc-500 hover:text-red-400 p-1 rounded-full transition-colors" title="Sair"><i class="fa-solid fa-right-from-bracket text-[10px]"></i></button>
+            </div>
+            <button onclick="toggleAdminLogin()" id="btn-login-admin" class="w-8 h-8 flex items-center justify-center rounded-full border border-obsidian-800 bg-obsidian-900 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all">
+                <i class="fa-solid fa-user-shield text-xs"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Ilha de Navegação Flutuante -->
+    <nav class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-obsidian-900/60 backdrop-blur-xl border border-white/10 rounded-full shadow-2xl p-1.5 flex gap-1 items-center overflow-x-auto scrollbar-hide max-w-[90vw]">
+        <button onclick="switchView('generator')" id="btn-generator" class="nav-btn px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
+            <i class="fa-solid fa-cloud-arrow-up text-sm"></i> <span class="hidden sm:inline">Enviar</span>
+        </button>
+        <button onclick="switchView('requests'); reqProcessor.loadFromDB();" id="btn-requests" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
+            <i class="fa-solid fa-list-check text-sm"></i> <span class="hidden md:inline">Pedidos</span>
+        </button>
+        <button onclick="switchView('catalog'); setTimeout(() => cat.filter('all'), 50);" id="btn-catalog" class="nav-btn active px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
+            <i class="fa-solid fa-layer-group text-sm"></i> <span class="hidden sm:inline">Catálogo</span>
+        </button>
+        <button onclick="switchView('storage'); loadStorageStats();" id="btn-storage" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
+            <i class="fa-solid fa-database text-sm"></i> <span class="hidden sm:inline">Storage</span>
+        </button>
+        <button onclick="switchView('reports'); loadReportsList();" id="btn-reports" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
+            <i class="fa-solid fa-triangle-exclamation text-sm"></i> <span class="hidden sm:inline">Denúncias</span>
+        </button>
     </nav>
 
-    <main class="flex-grow p-4 md:p-8 max-w-7xl mx-auto w-full">
+    <main class="flex-grow p-4 md:p-8 max-w-7xl mx-auto w-full pb-32">
 
         <!-- ABA 1: GERADOR -->
         <div id="view-generator" class="tab-content">
             <!-- Seletor de visualização exclusivo para mobile -->
             <div class="flex lg:hidden bg-zinc-950 p-1 rounded-xl border border-zinc-800 mb-6 w-full gap-1">
-                <button onclick="toggleGeneratorSubView('editor')" id="btn-sub-editor" class="flex-grow py-2 text-xs font-semibold rounded-lg text-white bg-zinc-900 border border-zinc-800/80 transition-all text-center">
+                <button onclick="toggleGeneratorSubView('editor')" id="btn-sub-editor" class="flex-grow py-2 text-xs font-semibold rounded-lg text-white bg-obsidian-900 border border-white/5 transition-all text-center">
                     <i class="fa-solid fa-pen-to-square mr-1.5"></i>Formulário
                 </button>
                 <button onclick="toggleGeneratorSubView('preview')" id="btn-sub-preview" class="flex-grow py-2 text-xs font-semibold rounded-lg text-zinc-400 hover:text-white transition-all text-center">
@@ -144,62 +183,72 @@
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div id="generator-main-column" class="lg:col-span-2 space-y-6 block">
-                    <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 md:p-8">
+                    <div class="bg-obsidian-900/40 backdrop-blur-xl rounded-3xl border border-white/5 p-6 md:p-8 shadow-2xl relative overflow-hidden">
+                        <!-- Glow Effect -->
+                        <div class="absolute top-0 right-0 w-64 h-64 bg-ember-500/10 rounded-full blur-[80px] -z-10 pointer-events-none"></div>
+                        
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-                            <h2 class="text-lg font-semibold text-white">Detalhes do Conteúdo</h2>
+                            <h2 class="text-xl font-semibold text-white font-display tracking-wide">Detalhes do Conteúdo</h2>
                             <div class="flex gap-2 w-full sm:w-auto">
-                                <label class="cursor-pointer bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-lg text-xs font-medium transition flex-1 sm:flex-none text-center">
+                                <label class="cursor-pointer bg-white/5 hover:bg-white/10 text-zinc-300 px-4 py-2 rounded-xl text-xs font-medium transition-colors border border-white/5 flex-1 sm:flex-none text-center">
                                     Importar JSON
                                     <input type="file" accept=".json" class="hidden" onchange="gen.loadExistingJson(this)">
                                 </label>
-                                <button onclick="gen.reset()" class="text-xs font-medium bg-zinc-950 hover:bg-zinc-800 text-zinc-400 border border-zinc-800 px-4 py-2 rounded-lg transition flex-1 sm:flex-none">
+                                <button onclick="gen.reset()" class="text-xs font-medium bg-transparent hover:bg-red-500/10 text-zinc-400 hover:text-red-400 border border-white/5 hover:border-red-500/20 px-4 py-2 rounded-xl transition-colors flex-1 sm:flex-none">
                                     Limpar
                                 </button>
                             </div>
                         </div>
 
                         <!-- Tipo de Conteúdo -->
-                        <div class="flex gap-6 mb-8 border-b border-zinc-800 pb-6">
-                            <label class="flex items-center gap-2 cursor-pointer group">
-                                <input type="radio" name="contentType" value="series" checked="" onchange="gen.toggleInputs()" class="w-4 h-4 text-indigo-500 bg-zinc-950 border-zinc-800 focus:ring-indigo-500">
+                        <div class="flex gap-6 mb-8 border-b border-white/5 pb-6">
+                            <label class="flex items-center gap-3 cursor-pointer group">
+                                <div class="relative flex items-center justify-center">
+                                    <input type="radio" name="contentType" value="series" checked="" onchange="gen.toggleInputs()" class="peer appearance-none w-5 h-5 border-2 border-zinc-600 rounded-full checked:border-ember-500 focus:outline-none transition-colors">
+                                    <div class="absolute w-2.5 h-2.5 rounded-full bg-ember-500 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
+                                </div>
                                 <span class="font-medium text-sm text-zinc-400 group-hover:text-zinc-200 transition">Série / Anime</span>
                             </label>
-                            <label class="flex items-center gap-2 cursor-pointer group">
-                                <input type="radio" name="contentType" value="movie" onchange="gen.toggleInputs()" class="w-4 h-4 text-indigo-500 bg-zinc-950 border-zinc-800 focus:ring-indigo-500">
+                            <label class="flex items-center gap-3 cursor-pointer group">
+                                <div class="relative flex items-center justify-center">
+                                    <input type="radio" name="contentType" value="movie" onchange="gen.toggleInputs()" class="peer appearance-none w-5 h-5 border-2 border-zinc-600 rounded-full checked:border-ember-500 focus:outline-none transition-colors">
+                                    <div class="absolute w-2.5 h-2.5 rounded-full bg-ember-500 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
+                                </div>
                                 <span class="font-medium text-sm text-zinc-400 group-hover:text-zinc-200 transition">Filme</span>
                             </label>
                         </div>
 
                         <!-- Campos Principais (Buscador e Temporada) -->
-                        <div class="bg-zinc-950/50 p-5 rounded-xl border border-zinc-800/50 mb-6">
+                        <div class="bg-black/20 p-5 rounded-2xl border border-white/5 mb-6 shadow-inner">
                             <input type="hidden" id="seriesName">
                             <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                                 <!-- ID IMDb ou Pesquisar por Nome -->
                                 <div class="md:col-span-8 relative">
-                                    <label class="block text-xs font-medium text-zinc-500 mb-2">Buscar (Nome ou ID IMDb) <span class="text-red-400">*</span></label>
+                                    <label class="block text-xs font-medium text-zinc-500 mb-2 uppercase tracking-wider">Buscar (Nome ou ID IMDb) <span class="text-ember-400">*</span></label>
                                     <div class="flex gap-2">
-                                        <input type="text" id="contentId" class="input-unified flex-grow p-3 rounded-lg text-sm" placeholder="Ex: tt0903747 ou Breaking Bad" onkeydown="if(event.key === 'Enter') gen.smartSearch()">
-                                        <button type="button" onclick="gen.smartSearch()" id="btnSmartSearch" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-3 rounded-lg text-sm font-medium transition flex items-center justify-center shrink-0" title="Buscar">
+                                        <input type="text" id="contentId" class="input-unified flex-grow p-3.5 rounded-xl text-sm" placeholder="Ex: tt0903747 ou Breaking Bad" onkeydown="if(event.key === 'Enter') gen.smartSearch()">
+                                        <button type="button" onclick="gen.smartSearch()" id="btnSmartSearch" class="bg-gradient-to-r from-ember-500 to-ember-600 hover:from-ember-400 hover:to-ember-500 text-white px-5 py-3.5 rounded-xl text-sm font-medium transition-all shadow-lg shadow-ember-500/20 flex items-center justify-center shrink-0" title="Buscar">
                                             <i id="btnSmartSearchIcon" class="fa-solid fa-magnifying-glass"></i>
                                         </button>
                                     </div>
-                                    <div id="tmdbSearchResults" class="hidden absolute left-0 right-0 z-50 mt-2 max-h-72 overflow-y-auto bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl p-2 flex flex-col gap-1 custom-scrollbar"></div>
+                                    <div id="tmdbSearchResults" class="hidden absolute left-0 right-0 z-50 mt-2 max-h-72 overflow-y-auto bg-obsidian-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.5)] p-2 flex flex-col gap-1 custom-scrollbar"></div>
                                 </div>
 
                                 <!-- Temporada -->
                                 <div class="md:col-span-2" id="seasonNumCol">
-                                    <label class="block text-xs font-medium text-zinc-500 mb-2">Temp.</label>
-                                    <input type="number" id="seasonNum" value="1" class="input-unified w-full p-3 rounded-lg text-center text-sm">
+                                    <label class="block text-xs font-medium text-zinc-500 mb-2 uppercase tracking-wider text-center">Temp.</label>
+                                    <input type="number" id="seasonNum" value="1" class="input-unified w-full p-3.5 rounded-xl text-center text-sm font-display font-medium text-ember-400">
                                 </div>
 
                                 <!-- Ep. Inicial -->
                                 <div class="md:col-span-2" id="startEpCol">
-                                    <label class="block text-xs font-medium text-zinc-500 mb-2">Ep. Inicial</label>
-                                    <input type="number" id="startEp" value="1" class="input-unified w-full p-3 rounded-lg text-center text-sm">
+                                    <label class="block text-xs font-medium text-zinc-500 mb-2 uppercase tracking-wider text-center">Ep. Inic.</label>
+                                    <input type="number" id="startEp" value="1" class="input-unified w-full p-3.5 rounded-xl text-center text-sm font-display font-medium text-ember-400">
                                 </div>
                             </div>
-                            <div id="smartDetectHint" class="text-[11px] text-zinc-500 mt-3 flex items-center gap-1">
-                                <span class="text-zinc-300 font-medium">Smart Detect:</span> Cole "T01EP01", "S01E01" ou "1x01" na lista de links para preenchimento inteligente.
+                            <div id="smartDetectHint" class="text-[11px] text-zinc-500 mt-4 flex items-center gap-2 bg-white/5 p-2.5 rounded-lg border border-white/5">
+                                <i class="fa-solid fa-wand-magic-sparkles text-ember-400"></i>
+                                <span><span class="text-zinc-300 font-medium">Smart Detect:</span> O envio do telegram ajusta automaticamente os episódios.</span>
                             </div>
                         </div>
 
@@ -254,7 +303,7 @@
                         </div>
 
                         <!-- Links -->
-                        <div>
+                        <div class="hidden">
                             <div class="flex justify-between items-end mb-3">
                                 <label class="block text-xs font-medium text-zinc-500">Links de Transmissão</label>
                                 <div class="flex gap-2">
@@ -336,14 +385,14 @@
                                 </div>
 
                                 <!-- Upload pelo Navegador -->
-                                <div id="tgBrowserSection" class="flex gap-2">
+                                <div id="tgBrowserSection" class="flex flex-col sm:flex-row gap-2">
                                     <input type="file" id="tgFile" class="hidden" multiple accept="video/*,.mkv,.mp4,.avi,.webm,.ts,.mov,.flv,.3gp,.mpeg,.m4v" onchange="tg.handleFileChange(this)">
-                                    <label for="tgFile" class="input-unified flex-grow p-2.5 rounded-lg text-xs cursor-pointer flex items-center gap-2 hover:bg-zinc-900 truncate">
-                                        <i class="fa-solid fa-file-video text-zinc-500"></i>
-                                        <span id="tgFileName" class="text-zinc-500">Selecionar vídeo...</span>
+                                    <label for="tgFile" class="input-unified flex-grow p-3 rounded-lg text-xs cursor-pointer flex items-center justify-center sm:justify-start gap-2 hover:bg-zinc-800 transition-colors border-dashed border-zinc-700 hover:border-sky-500 group">
+                                        <i class="fa-solid fa-cloud-arrow-up text-zinc-500 group-hover:text-sky-400 transition-colors"></i>
+                                        <span id="tgFileName" class="text-zinc-400 font-medium group-hover:text-zinc-200 transition-colors">Selecionar Vídeos...</span>
                                     </label>
-                                    <button onclick="tg.sendBrowser()" id="btnTgBrowserSend" class="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2.5 rounded-lg text-xs font-medium transition flex items-center gap-1 shrink-0">
-                                        <i class="fa-solid fa-paper-plane"></i> Enviar
+                                    <button onclick="tg.sendBrowser()" id="btnTgBrowserSend" class="bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-lg text-xs font-medium transition-all shadow-lg shadow-sky-500/20 flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
+                                        Fazer Upload
                                     </button>
                                 </div>
 
@@ -379,13 +428,20 @@
                                 </div>
 
                                 <!-- Progresso e Status -->
-                                <div id="tgProgressBox" class="hidden space-y-1.5">
-                                    <div class="flex justify-between text-[10px] text-zinc-500">
-                                        <span id="tgProgressState">Enviando arquivo...</span>
-                                        <span id="tgPercent">0%</span>
+                                <div id="tgProgressBox" class="hidden space-y-3 mt-4">
+                                    <div class="space-y-1.5">
+                                        <div class="flex justify-between text-[10px] font-medium text-zinc-400">
+                                            <span id="tgProgressState">Enviando arquivos...</span>
+                                            <span id="tgPercent" class="text-sky-400">0%</span>
+                                        </div>
+                                        <div class="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden border border-zinc-800/80">
+                                            <div id="tgProgressBar" class="bg-sky-500 h-full w-0 transition-all duration-300"></div>
+                                        </div>
                                     </div>
-                                    <div class="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden border border-zinc-800">
-                                        <div id="tgProgressBar" class="bg-sky-500 h-full w-0 transition-all duration-300"></div>
+                                    
+                                    <!-- Fila de Arquivos (Novo Design) -->
+                                    <div id="tgFileQueue" class="flex flex-col gap-1.5 mt-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                        <!-- Arquivos aparecerão aqui -->
                                     </div>
                                 </div>
 
@@ -396,7 +452,7 @@
                             </div>
                         </div>
 
-                        <button onclick="gen.process()" class="mt-6 w-full bg-white hover:bg-zinc-200 text-zinc-950 font-medium py-3.5 rounded-xl transition flex justify-center items-center gap-2">
+                        <button onclick="gen.process()" class="mt-6 w-full bg-gradient-to-r from-ember-500 to-ember-600 hover:from-ember-400 hover:to-ember-500 text-white font-display font-medium py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(255,87,34,0.3)] hover:shadow-[0_0_30px_rgba(255,87,34,0.5)] flex justify-center items-center gap-2 tracking-wide uppercase text-sm">
                             Processar Conteúdo
                         </button>
                     </div>
@@ -404,23 +460,23 @@
 
                 <!-- Painel de Preview -->
                 <div id="generator-preview-column" class="lg:col-span-1 lg:block hidden">
-                    <div class="bg-zinc-900 rounded-2xl border border-zinc-800 flex flex-col h-full">
-                        <div class="p-5 border-b border-zinc-800 flex justify-between items-center">
+                    <div class="bg-obsidian-900/40 backdrop-blur-xl rounded-3xl border border-white/5 flex flex-col h-full shadow-2xl relative overflow-hidden">
+                        <div class="p-5 border-b border-white/5 flex justify-between items-center bg-black/20">
                             <h3 class="font-medium text-white text-sm">Preview JSON</h3>
                             <span id="jsonStats" class="text-[10px] font-mono text-zinc-500">Vazio</span>
                         </div>
                         
-                        <div class="flex-grow relative bg-zinc-950 p-5 overflow-hidden">
-                            <textarea id="jsonOutput" class="w-full text-xs text-zinc-400 bg-transparent font-mono h-full min-h-[400px] focus:outline-none resize-none custom-scrollbar" spellcheck="false" oninput="gen.syncManualEdit()" placeholder="// O resultado aparecerá aqui..."></textarea>
+                        <div class="flex-grow relative bg-transparent p-5 overflow-hidden">
+                            <textarea id="jsonOutput" class="w-full text-[11px] leading-relaxed text-ember-400/80 bg-transparent font-mono h-full min-h-[400px] focus:outline-none resize-none custom-scrollbar" spellcheck="false" oninput="gen.syncManualEdit()" placeholder="// O resultado aparecerá aqui..."></textarea>
                             
                             <div id="resultActions" class="absolute bottom-5 right-5 flex gap-2 hidden">
-                                <button onclick="gen.openVisualEditor()" class="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg border border-zinc-700 text-xs font-medium flex items-center gap-2 transition" title="Gerir Links Visualmente">
+                                <button onclick="gen.openVisualEditor()" class="bg-obsidian-800/80 backdrop-blur-sm hover:bg-obsidian-800 text-white px-4 py-2 rounded-xl border border-white/10 text-xs font-medium flex items-center gap-2 transition-all shadow-lg" title="Gerir Links Visualmente">
                                     Gerir Links
                                 </button>
-                                <button onclick="gen.copy()" class="bg-zinc-800 hover:bg-zinc-700 text-white p-2 rounded-lg border border-zinc-700 transition" title="Copiar JSON">
+                                <button onclick="gen.copy()" class="bg-obsidian-800/80 backdrop-blur-sm hover:bg-obsidian-800 text-white p-2.5 rounded-xl border border-white/10 transition-all shadow-lg hover:text-ember-400" title="Copiar JSON">
                                     <i class="fa-regular fa-copy"></i>
                                 </button>
-                                <button onclick="gen.download()" class="bg-white hover:bg-zinc-200 text-zinc-950 p-2 rounded-lg transition" title="Baixar Arquivo .json">
+                                <button onclick="gen.download()" class="bg-gradient-to-br from-ember-500 to-ember-600 hover:from-ember-400 hover:to-ember-500 text-white p-2.5 rounded-xl transition-all shadow-[0_4px_15px_rgba(255,87,34,0.3)]" title="Baixar Arquivo .json">
                                     <i class="fa-solid fa-download"></i>
                                 </button>
                                 <button onclick="gen.uploadParaBanco()" class="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-lg transition shadow-lg shadow-indigo-500/20" title="Salvar JSON no Banco">
@@ -441,21 +497,21 @@
             
             <!-- Cards de Status -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <div class="bg-zinc-900 p-5 rounded-2xl border border-zinc-800 flex flex-col justify-center">
-                    <p class="text-zinc-500 text-[10px] font-semibold uppercase tracking-wider mb-1">Filmes</p>
-                    <p id="countMovies" class="text-2xl font-medium text-white">0</p>
+                <div class="bg-obsidian-900/60 backdrop-blur-md p-5 rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-ember-500/5 transition-all">
+                    <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Filmes</p>
+                    <p id="countMovies" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
-                <div class="bg-zinc-900 p-5 rounded-2xl border border-zinc-800 flex flex-col justify-center">
-                    <p class="text-zinc-500 text-[10px] font-semibold uppercase tracking-wider mb-1">Séries</p>
-                    <p id="countSeries" class="text-2xl font-medium text-white">0</p>
+                <div class="bg-obsidian-900/60 backdrop-blur-md p-5 rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-ember-500/5 transition-all">
+                    <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Séries</p>
+                    <p id="countSeries" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
-                <div class="bg-zinc-900 p-5 rounded-2xl border border-zinc-800 flex flex-col justify-center">
-                    <p class="text-zinc-500 text-[10px] font-semibold uppercase tracking-wider mb-1">Episódios Totais</p>
-                    <p id="countTotalEps" class="text-2xl font-medium text-white">0</p>
+                <div class="bg-obsidian-900/60 backdrop-blur-md p-5 rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-ember-500/5 transition-all">
+                    <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Episódios Totais</p>
+                    <p id="countTotalEps" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
-                <div class="bg-zinc-900 p-5 rounded-2xl border border-zinc-800 flex flex-col justify-center">
-                    <p class="text-zinc-500 text-[10px] font-semibold uppercase tracking-wider mb-1">Incompletos</p>
-                    <p id="countMissing" class="text-2xl font-medium text-white">0</p>
+                <div class="bg-obsidian-900/60 backdrop-blur-md p-5 rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-red-500/5 transition-all">
+                    <p class="text-red-400/80 text-[10px] font-bold uppercase tracking-widest mb-1">Incompletos</p>
+                    <p id="countMissing" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
             </div>
 
@@ -464,11 +520,11 @@
                 <div class="flex flex-col sm:flex-row w-full lg:w-auto gap-3">
                     <div class="relative w-full sm:w-72">
                         <i class="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs"></i>
-                        <input type="text" oninput="cat.search(this.value)" placeholder="Buscar catálogo..." class="w-full bg-zinc-900 text-zinc-200 text-sm rounded-xl pl-10 pr-4 py-2.5 border border-zinc-800 focus:border-zinc-600 focus:outline-none transition-colors">
+                        <input type="text" oninput="cat.search(this.value)" placeholder="Buscar catálogo..." class="w-full bg-obsidian-900/60 backdrop-blur-md text-zinc-200 text-sm rounded-2xl pl-10 pr-4 py-3 border border-white/5 focus:border-ember-500 focus:outline-none transition-colors shadow-inner">
                     </div>
                     
                     <div class="relative w-full sm:w-48">
-                        <select onchange="cat.sort(this.value)" class="w-full bg-zinc-900 text-zinc-200 text-sm rounded-xl px-4 py-2.5 border border-zinc-800 focus:border-zinc-600 focus:outline-none appearance-none cursor-pointer">
+                        <select onchange="cat.sort(this.value)" class="w-full bg-obsidian-900/60 backdrop-blur-md text-zinc-200 text-sm rounded-2xl px-4 py-3 border border-white/5 focus:border-ember-500 focus:outline-none appearance-none cursor-pointer shadow-inner">
                             <option value="newest">Mais Recentes</option>
                             <option value="oldest">Mais Antigos</option>
                             <option value="year">Ano de Lançamento</option>
@@ -478,8 +534,9 @@
                     </div>
 
                     <div class="relative w-full sm:w-44">
-                        <select id="cat-filter-type" onchange="cat.filter(this.value)" class="w-full bg-zinc-900 text-zinc-200 text-sm rounded-xl px-4 py-2.5 border border-zinc-800 focus:border-zinc-600 focus:outline-none appearance-none cursor-pointer">
+                        <select id="cat-filter-type" onchange="cat.filter(this.value)" class="w-full bg-obsidian-900/60 backdrop-blur-md text-zinc-200 text-sm rounded-2xl px-4 py-3 border border-white/5 focus:border-ember-500 focus:outline-none appearance-none cursor-pointer shadow-inner">
                             <option value="all">Todos</option>
+                            <option value="my_uploads">Meus Envios</option>
                             <option value="series">Séries</option>
                             <option value="movie">Filmes</option>
                             <option value="missing_all">Incompletos</option>
@@ -489,12 +546,12 @@
                 </div>
                 
                 <div class="flex gap-2 w-full lg:w-auto overflow-x-auto pb-2 lg:pb-0 scrollbar-hide items-center">
-                    <button onclick="cat.init()" class="bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-white px-4 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-2 mr-2">
+                    <button onclick="cat.init()" class="bg-obsidian-900/60 text-zinc-400 border border-white/5 hover:text-white hover:bg-obsidian-800 px-4 py-3 rounded-2xl text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-2 mr-2 shadow-lg backdrop-blur-md">
                         <i class="fa-solid fa-rotate"></i> Atualizar
                     </button>
 
                     <!-- Botão de Upload em Lote -->
-                    <label class="cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-2 mr-2 shadow-sm" title="Enviar vários ficheiros .json para o banco">
+                    <label class="cursor-pointer bg-gradient-to-r from-ember-500 to-ember-600 hover:from-ember-400 hover:to-ember-500 text-white px-5 py-3 rounded-2xl text-xs font-medium whitespace-nowrap transition-all flex items-center gap-2 mr-2 shadow-lg shadow-ember-500/20" title="Enviar vários ficheiros .json para o banco">
                         <i class="fa-solid fa-cloud-arrow-up"></i> Upload Lote
                         <input type="file" accept=".json" multiple class="hidden" onchange="cat.uploadEmMassa(this)">
                     </label>
@@ -1574,6 +1631,24 @@
                 let completedCount = 0;
                 let successCount = 0;
 
+                const queueContainer = document.getElementById('tgFileQueue');
+                if (queueContainer) {
+                    queueContainer.innerHTML = '';
+                    files.forEach((file, index) => {
+                        const item = document.createElement('div');
+                        item.className = 'flex items-center justify-between bg-zinc-950 border border-zinc-800 p-2.5 rounded-lg';
+                        item.id = `tg-queue-item-${index}`;
+                        item.innerHTML = `
+                            <div class="flex items-center gap-2 truncate">
+                                <i class="fa-solid fa-spinner fa-spin text-sky-500" id="tg-queue-icon-${index}"></i>
+                                <span class="text-xs text-zinc-300 truncate" title="${file.name}">${file.name}</span>
+                            </div>
+                            <span class="text-[10px] text-zinc-500 font-mono" id="tg-queue-status-${index}">Aguardando...</span>
+                        `;
+                        queueContainer.appendChild(item);
+                    });
+                }
+
                 const updateGlobalProgress = () => {
                     const averageProgress = progressValues.reduce((sum, val) => sum + val, 0) / files.length;
                     const percent = Math.round(averageProgress * 100);
@@ -1616,6 +1691,11 @@
                                 // 0% a 95% para o envio HTTP, os últimos 5% são para a resposta do bot
                                 progressValues[index] = (e.loaded / e.total) * 0.95;
                                 updateGlobalProgress();
+                                const statusEl = document.getElementById(`tg-queue-status-${index}`);
+                                if (statusEl) {
+                                    statusEl.innerText = Math.round((e.loaded / e.total) * 100) + '%';
+                                    statusEl.classList.add('text-sky-400');
+                                }
                             }
                         };
 
@@ -1632,6 +1712,10 @@
 
                                         progressValues[index] = 1.0;
                                         successCount++;
+                                        const iconEl = document.getElementById(`tg-queue-icon-${index}`);
+                                        const statusEl = document.getElementById(`tg-queue-status-${index}`);
+                                        if (iconEl) iconEl.className = 'fa-solid fa-circle-check text-emerald-500';
+                                        if (statusEl) { statusEl.innerText = 'Concluído'; statusEl.className = 'text-[10px] text-emerald-500 font-medium'; }
                                     } else {
                                         // Substitui o placeholder por mensagem de erro
                                         const currentLines = textarea.value.split('\n');
@@ -1639,9 +1723,17 @@
                                         textarea.value = currentLines.join('\n');
                                         textarea.dispatchEvent(new Event('input'));
                                         showToast(`Erro no arquivo ${file.name}: ${res.erro || "Desconhecido"}`, "error");
+                                        const iconEl = document.getElementById(`tg-queue-icon-${index}`);
+                                        const statusEl = document.getElementById(`tg-queue-status-${index}`);
+                                        if (iconEl) iconEl.className = 'fa-solid fa-circle-xmark text-red-500';
+                                        if (statusEl) { statusEl.innerText = 'Falha'; statusEl.className = 'text-[10px] text-red-500 font-medium'; }
                                     }
                                 } catch (err) {
                                     showToast(`Falha ao ler resposta do servidor para ${file.name}`, "error");
+                                    const iconEl = document.getElementById(`tg-queue-icon-${index}`);
+                                    const statusEl = document.getElementById(`tg-queue-status-${index}`);
+                                    if (iconEl) iconEl.className = 'fa-solid fa-circle-xmark text-red-500';
+                                    if (statusEl) { statusEl.innerText = 'Erro'; statusEl.className = 'text-[10px] text-red-500 font-medium'; }
                                 }
                             } else {
                                 const currentLines = textarea.value.split('\n');
@@ -1654,6 +1746,10 @@
                                 } catch (e) {
                                     showToast(`Erro no arquivo ${file.name} (Status: ${xhr.status})`, "error");
                                 }
+                                const iconEl = document.getElementById(`tg-queue-icon-${index}`);
+                                const statusEl = document.getElementById(`tg-queue-status-${index}`);
+                                if (iconEl) iconEl.className = 'fa-solid fa-circle-xmark text-red-500';
+                                if (statusEl) { statusEl.innerText = 'Erro'; statusEl.className = 'text-[10px] text-red-500 font-medium'; }
                             }
                             completedCount++;
                             updateGlobalProgress();
@@ -1667,6 +1763,10 @@
                             textarea.dispatchEvent(new Event('input'));
 
                             showToast(`Erro de rede no upload de ${file.name}`, "error");
+                            const iconEl = document.getElementById(`tg-queue-icon-${index}`);
+                            const statusEl = document.getElementById(`tg-queue-status-${index}`);
+                            if (iconEl) iconEl.className = 'fa-solid fa-circle-xmark text-red-500';
+                            if (statusEl) { statusEl.innerText = 'Falha Rede'; statusEl.className = 'text-[10px] text-red-500 font-medium'; }
                             completedCount++;
                             updateGlobalProgress();
                             resolve();
@@ -3249,6 +3349,9 @@
 
                 if (type === 'all') {
                     cat.filteredItems = [...cat.allItems]; 
+                } else if (type === 'my_uploads') {
+                    const currentUser = localStorage.getItem('discord_username') || localStorage.getItem('discord_global_name');
+                    cat.filteredItems = cat.allItems.filter(i => i.colaborador === currentUser);
                 } else if (type === 'missing_all') {
                     cat.filteredItems = cat.allItems.filter(i => {
                         if (i.type === 'movie') return !i.streams || i.streams.length === 0;
@@ -4619,6 +4722,12 @@
 
         async function loadRankingStats(period = 'todos') {
             const tcContainer = document.getElementById('ranking-top-collaborators');
+            
+            if (!localStorage.getItem('discord_token')) {
+                tcContainer.innerHTML = `<div class="text-center py-16 text-zinc-500"><div class="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/5 shadow-inner"><i class="fa-solid fa-lock text-2xl text-zinc-600"></i></div><h3 class="font-display font-medium text-white mb-2">Acesso Restrito</h3><p class="text-xs">Você precisa estar logado com o Discord para visualizar o ranking exclusivo de colaboradores.</p></div>`;
+                return;
+            }
+
             tcContainer.innerHTML = `<div class="text-center py-12 text-zinc-500"><i class="fa-solid fa-spinner animate-spin text-xl mb-2"></i><p class="text-xs">Carregando colaboradores...</p></div>`;
 
             try {
@@ -4646,22 +4755,35 @@
                             titlesStr += ` e mais ${uniqueTitles.length - maxToShow}`;
                         }
 
+                        let countMovies = 0;
+                        let countSeries = 0;
+                        details.forEach(d => {
+                            if (d.type === 'movie') countMovies++;
+                            else if (d.type === 'series') countSeries++;
+                        });
+
                         const safeNome = escapeHTML(col.nome);
                         const safeTitlesStr = escapeHTML(titlesStr);
                         const safeUniqueTitles = escapeHTML(uniqueTitles.join(', '));
                         tcHtml += `
-                            <div class="flex items-center gap-3 bg-zinc-950/50 p-3.5 rounded-xl border border-zinc-800/40 hover:border-zinc-800 transition">
+                            <div class="flex items-center gap-3 bg-obsidian-900/60 p-3.5 rounded-2xl border border-white/5 hover:border-white/10 hover:shadow-lg transition-all">
                                 <div class="w-8 text-center shrink-0">${medal}</div>
-                                <div class="w-9 h-9 bg-indigo-950/40 border border-indigo-900/30 flex items-center justify-center rounded-xl shrink-0">
-                                    <i class="fa-solid fa-user text-indigo-400 text-sm"></i>
+                                <div class="w-9 h-9 bg-obsidian-800 border border-white/5 flex items-center justify-center rounded-xl shrink-0 shadow-inner">
+                                    <i class="fa-solid fa-user text-zinc-400 text-sm"></i>
                                 </div>
                                 <div class="flex-grow min-w-0">
-                                    <h4 class="text-white text-xs font-semibold truncate">${safeNome}</h4>
+                                    <h4 class="text-white text-xs font-bold font-display tracking-wide truncate">${safeNome}</h4>
                                     <span class="text-[10px] text-zinc-500 block truncate mt-0.5" title="${safeUniqueTitles}">Últimos envios: <b class="text-zinc-400 font-medium">${safeTitlesStr}</b></span>
                                 </div>
-                                <div class="text-right shrink-0">
-                                    <span class="text-zinc-200 font-semibold text-xs font-mono">${col.count}</span>
-                                    <span class="text-[9px] text-zinc-500 block uppercase">links</span>
+                                <div class="text-right shrink-0 flex flex-col items-end gap-1">
+                                    <div class="flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded-md border border-white/5" title="Filmes enviados">
+                                        <i class="fa-solid fa-film text-ember-500 text-[9px]"></i>
+                                        <span class="text-[10px] text-zinc-300 font-mono font-medium">${countMovies}</span>
+                                    </div>
+                                    <div class="flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded-md border border-white/5" title="Séries/Episódios enviados">
+                                        <i class="fa-solid fa-tv text-sky-400 text-[9px]"></i>
+                                        <span class="text-[10px] text-zinc-300 font-mono font-medium">${countSeries}</span>
+                                    </div>
                                 </div>
                             </div>
                         `;

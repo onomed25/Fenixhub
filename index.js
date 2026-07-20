@@ -9,6 +9,7 @@ const multer = require('multer');
 const { Pool } = require('pg');
 const fs = require('fs');
 const crypto = require('crypto');
+const { searchAllProviders, initProviders, ensureAllCatalogsSequentially } = require('./hfa');
 
 // Configuração JWT para Discord
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
@@ -79,8 +80,8 @@ function logProcessProgress(key, name, progress) {
 
 
 
-// Otimização: Limita o tamanho do JSON para 2MB para não estourar a RAM no plano gratuito
-app.use(express.json({ limit: '2mb' })); 
+// Limita o tamanho do JSON recebido via POST (ajustado para 10MB conforme solicitado)
+app.use(express.json({ limit: '10mb' })); 
 app.use(cors());
 
 // Configuração do banco de dados (Pool pequeno para economizar memória)
@@ -183,14 +184,20 @@ const RPDB_BASE_URL = "https://api.ratingposterdb.com/t0-free-rpdb";
 
 async function getTMDBInfo(id) {
     try {
-        const url = `https://api.themoviedb.org/3/find/${id}?external_source=imdb_id&language=pt-BR`;
-        const res = await fetch(url, {
-            headers: {
-                "User-Agent": "Mozilla/5.0",
-                "Accept": "application/json",
-                "Authorization": `Bearer ${TMDB_API_KEY}`
-            }
-        });
+        const isBearer = TMDB_API_KEY && TMDB_API_KEY.startsWith('eyJ');
+        let url = `https://api.themoviedb.org/3/find/${id}?external_source=imdb_id&language=pt-BR`;
+        const headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json"
+        };
+        
+        if (isBearer) {
+            headers["Authorization"] = `Bearer ${TMDB_API_KEY}`;
+        } else {
+            url += `&api_key=${TMDB_API_KEY}`;
+        }
+
+        const res = await fetch(url, { headers });
         if (!res.ok) {
             console.warn(`⚠️ TMDB recusou o pedido para o ID ${id}. Status: ${res.status}`);
             return null;
@@ -238,6 +245,28 @@ async function getCinemetaInfo(id, type) {
 }
 
 // Função para mesclar os streams existentes com as novas fontes de forma inteligente
+
+function injectDateIntoStreams(conteudo) {
+    const now = new Date().toISOString();
+    if (conteudo.type === 'movie' && Array.isArray(conteudo.streams)) {
+        conteudo.streams.forEach(s => {
+            if (!s.criado_em) s.criado_em = now;
+        });
+    } else if (conteudo.type === 'series' && conteudo.streams && typeof conteudo.streams === 'object') {
+        Object.keys(conteudo.streams).forEach(seasonNum => {
+            const season = conteudo.streams[seasonNum] || {};
+            Object.keys(season).forEach(epNum => {
+                const epStreams = season[epNum] || [];
+                if (Array.isArray(epStreams)) {
+                    epStreams.forEach(s => {
+                        if (!s.criado_em) s.criado_em = now;
+                    });
+                }
+            });
+        });
+    }
+}
+
 function mergeMediaContents(existing, incoming) {
     if (!existing) return incoming;
     if (existing.type !== incoming.type) {
@@ -510,6 +539,7 @@ app.post('/upload', upload.none(), async (req, res) => {
     // ==========================================
 
     let finalConteudo = parsedConteudo;
+    injectDateIntoStreams(finalConteudo);
 
     try {
         if (!isAdmin) {
@@ -907,11 +937,11 @@ app.get('/api/colaboradores', async (req, res) => {
     let dateFilter = '';
     
     if (periodo === 'semana') {
-        dateFilter = "AND criado_em >= NOW() - INTERVAL '7 days'";
+        dateFilter = "AND COALESCE((stream->>'criado_em')::timestamp, criado_em) >= NOW() - INTERVAL '7 days'";
     } else if (periodo === 'mes') {
-        dateFilter = "AND criado_em >= NOW() - INTERVAL '30 days'";
+        dateFilter = "AND COALESCE((stream->>'criado_em')::timestamp, criado_em) >= NOW() - INTERVAL '30 days'";
     } else if (periodo === 'ano') {
-        dateFilter = "AND criado_em >= NOW() - INTERVAL '365 days'";
+        dateFilter = "AND COALESCE((stream->>'criado_em')::timestamp, criado_em) >= NOW() - INTERVAL '365 days'";
     }
 
     try {
@@ -982,6 +1012,50 @@ app.get('/api/colaboradores', async (req, res) => {
 });
 
 // ==========================================
+
+// ==========================================
+// ROTA 10: Busca HFA direta (/{senha_admin}/{id_imdb})
+// ==========================================
+app.get('/:senha/:id', async (req, res) => {
+    const { senha, id } = req.params;
+    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+    
+    if (senha !== adminPassword) {
+        return res.status(401).json({ erro: 'Senha incorreta.' });
+    }
+
+    try {
+        const tmdbData = await getTMDBInfo(id);
+        if (!tmdbData) {
+            return res.status(404).json({ erro: 'ID IMDB não encontrado no TMDB.' });
+        }
+
+        // Lê season/episode caso seja série, por query string (ex: ?s=1&e=2)
+        const season = req.query.season || req.query.s || null;
+        const episode = req.query.episode || req.query.ep || req.query.e || null;
+
+        const streams = await searchAllProviders(
+            [tmdbData.title], 
+            tmdbData.type, 
+            season, 
+            episode, 
+            tmdbData.year
+        );
+
+        res.json({
+            sucesso: true,
+            id: id,
+            title: tmdbData.title,
+            type: tmdbData.type,
+            year: tmdbData.year,
+            total_streams: streams.length,
+            streams: streams
+        });
+    } catch (err) {
+        console.error("Erro na rota HFA:", err);
+        res.status(500).json({ erro: 'Erro interno ao consultar o HFA.' });
+    }
+});
 
 // ==========================================
 // TAREFA AGENDADA: Limpeza semanal dos arquivos mais vistos
