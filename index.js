@@ -9,7 +9,6 @@ const multer = require('multer');
 const { Pool } = require('pg');
 const fs = require('fs');
 const crypto = require('crypto');
-const { searchAllProviders, initProviders, ensureAllCatalogsSequentially } = require('./hfa');
 
 // Configuração JWT para Discord
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
@@ -1013,49 +1012,8 @@ app.get('/api/colaboradores', async (req, res) => {
 
 // ==========================================
 
-// ==========================================
-// ROTA 10: Busca HFA direta (/{senha_admin}/{id_imdb})
-// ==========================================
-app.get('/:senha/:id', async (req, res) => {
-    const { senha, id } = req.params;
-    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
-    
-    if (senha !== adminPassword) {
-        return res.status(401).json({ erro: 'Senha incorreta.' });
-    }
+// Rota HFA removida
 
-    try {
-        const tmdbData = await getTMDBInfo(id);
-        if (!tmdbData) {
-            return res.status(404).json({ erro: 'ID IMDB não encontrado no TMDB.' });
-        }
-
-        // Lê season/episode caso seja série, por query string (ex: ?s=1&e=2)
-        const season = req.query.season || req.query.s || null;
-        const episode = req.query.episode || req.query.ep || req.query.e || null;
-
-        const streams = await searchAllProviders(
-            [tmdbData.title], 
-            tmdbData.type, 
-            season, 
-            episode, 
-            tmdbData.year
-        );
-
-        res.json({
-            sucesso: true,
-            id: id,
-            title: tmdbData.title,
-            type: tmdbData.type,
-            year: tmdbData.year,
-            total_streams: streams.length,
-            streams: streams
-        });
-    } catch (err) {
-        console.error("Erro na rota HFA:", err);
-        res.status(500).json({ erro: 'Erro interno ao consultar o HFA.' });
-    }
-});
 
 // ==========================================
 // TAREFA AGENDADA: Limpeza semanal dos arquivos mais vistos
