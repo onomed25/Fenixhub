@@ -285,7 +285,6 @@
                                     <span id="cinemetaInfoType" class="text-[9px] uppercase tracking-wider text-indigo-400 font-semibold border border-indigo-500/30 px-1.5 py-0.5 rounded">SÉRIE</span>
                                     <h4 id="cinemetaInfoTitle" class="font-medium text-white text-sm mt-1.5">-</h4>
                                 </div>
-                                <button type="button" onclick="gen.fillFromCinemeta()" class="text-xs bg-white text-zinc-950 font-medium px-3 py-1.5 rounded-lg hover:bg-zinc-200 transition w-full sm:w-auto text-center">Preencher Campos</button>
                             </div>
                             <div id="cinemetaInfoSeriesDetails" class="grid grid-cols-2 gap-3 mt-1 text-xs">
                                 <div class="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800/40">
@@ -306,9 +305,9 @@
                         </div>
 
                         <!-- Links -->
-                        <div class="hidden">
+                        <div id="admin-link-section" class="mt-5 bg-zinc-950/40 border border-zinc-800/80 rounded-xl p-4 hidden">
                             <div class="flex justify-between items-end mb-3">
-                                <label class="block text-xs font-medium text-zinc-500">Links de Transmissão</label>
+                                <label class="block text-xs font-medium text-zinc-500">Links de Transmissão (Cole aqui para não enviar arquivos)</label>
                                 <div class="flex gap-2">
                                     <button onclick="tg.migrateAllLinks()" class="text-[10px] text-sky-400 hover:text-sky-300 px-2 py-1 rounded transition flex items-center gap-1" title="Converter p/ Telegram">
                                         <i class="fa-brands fa-telegram"></i> <span class="hidden sm:inline">Converter p/ Telegram</span>
@@ -325,7 +324,7 @@
                                     </label>
                                 </div>
                             </div>
-                            <textarea id="manualLinks" rows="6" class="input-unified w-full p-4 rounded-xl text-xs font-mono custom-scrollbar" placeholder="Cole os links de vídeo diretos aqui..."></textarea>
+                            <textarea id="manualLinks" rows="6" class="input-unified w-full p-4 rounded-xl text-xs font-mono custom-scrollbar" placeholder="Cole os links de vídeo diretos aqui (um por linha)..."></textarea>
                         </div>
 
                         <!-- Enviar para Telegram -->
@@ -1191,6 +1190,15 @@
                     btnModalEdit.classList.remove('hidden');
                 } else {
                     btnModalEdit.classList.add('hidden');
+                }
+            }
+            
+            const adminLinkSection = document.getElementById('admin-link-section');
+            if (adminLinkSection) {
+                if (isAdmin) {
+                    adminLinkSection.classList.remove('hidden');
+                } else {
+                    adminLinkSection.classList.add('hidden');
                 }
             }
             
@@ -3164,6 +3172,9 @@
 
                     cat.updateGlobalStats();
                     cat.filter('all');
+                    if (typeof cat.fetchMissingMetadata === 'function') {
+                        cat.fetchMissingMetadata();
+                    }
 
                 } catch (error) {
                     showToast("Erro ao carregar o catálogo", "error");
@@ -3390,6 +3401,28 @@
                 document.getElementById('countTotalEps').innerText = totalEpsPossuidos;
                 const missEl = document.getElementById('countMissing');
                 missEl.innerText = totalFaltantes;
+            },
+
+            fetchMissingMetadata: async () => {
+                const missing = cat.allItems.filter(i => !i.title && i.id.startsWith('tt') && !i._fetchingMeta);
+                for (const item of missing) {
+                    item._fetchingMeta = true;
+                    try {
+                        const res = await fetch(`https://v3-cinemeta.strem.io/meta/${item.type}/${item.id}.json`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (data && data.meta) {
+                                item.title = data.meta.name;
+                                item.poster = data.meta.poster;
+                                item.year = data.meta.year;
+                                if (cat.filteredItems.includes(item)) {
+                                    cat.renderFiltered();
+                                }
+                            }
+                        }
+                    } catch (e) { console.error("Erro cinemeta", item.id); }
+                    await new Promise(r => setTimeout(r, 150));
+                }
             },
 
             setLoading: (isLoading) => {
@@ -3889,11 +3922,16 @@
         // --- MÓDULO 3: PROCESSADOR DE PEDIDOS ---
         const reqProcessor = {
             parsedItems: new Map(),
+            filteredItems: [],
+            visibleCount: 50,
+            isLoadingMore: false,
             totalLinesRead: 0,
             tmdbKey: "eyJhbGciOiJIUzI1NiJ9" + ".eyJhdWQiOiJlZTBmMzJmNzY5Mzc0YTkzYTI0ZmNiYzcyMWRlODYzNCIsIm5iZiI6MTc1NjA2MzM2NC4yMzksInN1YiI6IjY4YWI2Njg0ZDAyMjdhYTVlMjlkYjE2MSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.z1hG61Z5RCvn6qEZj60sHxrDZ0hR8QQi4rt18erzF-w",
 
             clearData: () => {
                 reqProcessor.parsedItems.clear();
+                reqProcessor.filteredItems = [];
+                reqProcessor.visibleCount = 50;
                 reqProcessor.totalLinesRead = 0;
                 
                 reqProcessor.updateUI();
@@ -4125,9 +4163,25 @@
                 }
             },
 
+            loadMore: () => {
+                if (reqProcessor.isLoadingMore) return;
+                if (reqProcessor.visibleCount >= reqProcessor.filteredItems.length) return;
+                
+                reqProcessor.isLoadingMore = true;
+                reqProcessor.visibleCount += 50;
+                reqProcessor.renderFiltered();
+                
+                setTimeout(() => {
+                    reqProcessor.isLoadingMore = false;
+                }, 100);
+            },
+
             renderList: () => {
                 const container = document.getElementById('req-results-container');
-                if (reqProcessor.parsedItems.size === 0) return;
+                if (reqProcessor.parsedItems.size === 0) {
+                    container.innerHTML = '<div class="text-center py-8 text-zinc-600 text-sm">Nenhum resultado.</div>';
+                    return;
+                }
 
                 // Atualiza contadores dinamicamente baseado nos filtros atuais
                 reqProcessor.updateUI();
@@ -4153,8 +4207,23 @@
                 else if (sortMode === 'alpha') items.sort((a,b) => (a.title||a.id).localeCompare(b.title||b.id));
                 else if (sortMode === 'type') items.sort((a,b) => a.type.localeCompare(b.type) || (b.count||0) - (a.count||0));
 
+                reqProcessor.filteredItems = items;
+                reqProcessor.visibleCount = 50;
+                reqProcessor.renderFiltered();
+            },
+
+            renderFiltered: () => {
+                const container = document.getElementById('req-results-container');
+                if (reqProcessor.filteredItems.length === 0) {
+                    container.innerHTML = '<div class="text-center py-8 text-zinc-600 text-sm">Nenhum resultado.</div>';
+                    return;
+                }
+
+                const today = new Date().toISOString().split('T')[0];
                 let html = '';
-                items.forEach(item => {
+                const itemsToRender = reqProcessor.filteredItems.slice(0, reqProcessor.visibleCount);
+                
+                itemsToRender.forEach(item => {
                     const typeName = item.type === 'movie' ? 'Filme' : 'Série';
                     const countBadge = (item.count > 1) ? `<span class="text-zinc-500 text-[10px] font-medium ml-2">${item.count} pedidos</span>` : '';
 
@@ -4199,7 +4268,7 @@
                     `;
                 });
 
-                container.innerHTML = html || '<div class="text-center py-8 text-zinc-600 text-sm">Nenhum resultado.</div>';
+                container.innerHTML = html;
             },
 
             removeItem: async (id) => {
@@ -4914,10 +4983,14 @@
             
             scrollTimeout = setTimeout(() => {
                 scrollTimeout = null;
-                const activeTab = document.querySelector('.tab-content:not(.hidden)');
+                const activeTab = document.querySelector('.tab-content.active') || document.querySelector('.tab-content:not(.hidden)');
                 if (activeTab && activeTab.id === 'view-catalog') {
                     if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 900) {
                         cat.loadMore();
+                    }
+                } else if (activeTab && activeTab.id === 'view-requests') {
+                    if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 900) {
+                        reqProcessor.loadMore();
                     }
                 }
             }, 100); // Limita verificação a cada 100ms
