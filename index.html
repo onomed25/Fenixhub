@@ -3435,6 +3435,14 @@
             processFiles: async (files) => {
                 if (!files || files.length === 0) return;
 
+                const hasAdminSession = sessionStorage.getItem('fenixflix_senha');
+                const discordToken = localStorage.getItem('discord_token');
+
+                if (!hasAdminSession && !discordToken) {
+                    showToast("Você precisa estar logado com o Discord para salvar links.", "error");
+                    return;
+                }
+
                 let sucesso = 0;
                 let erro = 0;
 
@@ -3457,8 +3465,14 @@
                             formData.append("senha", senha);
                         }
 
+                        const headers = {};
+                        if (discordToken) {
+                            headers['Authorization'] = `Bearer ${discordToken}`;
+                        }
+
                         const response = await fetch(API_URL + '/upload', {
                             method: 'POST',
+                            headers: headers,
                             body: formData
                         });
 
