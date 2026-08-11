@@ -882,6 +882,48 @@
                 </div>
                 <button onclick="gen.closeVisualEditor()" class="text-zinc-500 hover:text-white bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 w-9 h-9 rounded-full transition flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
             </div>
+            
+            <!-- Painel de Edição em Massa -->
+            <div id="bulkEditContainer" class="bg-zinc-900/90 border-b border-zinc-800 p-4 space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span class="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-layer-group text-ember-400 animate-pulse"></i> Edição em Massa
+                    </span>
+                    <div class="flex gap-2">
+                        <button onclick="gen.selectAllBulk(true)" class="text-[10px] bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-3 py-1.5 rounded-lg transition font-medium">Selecionar Todos</button>
+                        <button onclick="gen.selectAllBulk(false)" class="text-[10px] bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-3 py-1.5 rounded-lg transition font-medium">Limpar Seleção</button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-zinc-950/40 p-3 rounded-xl border border-white/5">
+                    <div>
+                        <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1.5">Alterar Áudio / Idioma</label>
+                        <select id="bulkAudio" class="input-unified w-full p-2.5 rounded-lg text-xs appearance-none">
+                            <option value="">(Manter original)</option>
+                            <option value="Dublado">Dublado</option>
+                            <option value="Português (PT-BR)">Português (PT-BR)</option>
+                            <option value="English">English</option>
+                            <option value="Legendado">Legendado</option>
+                            <option value="Dual Áudio">Dual Áudio</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1.5">Alterar Qualidade</label>
+                        <select id="bulkQuality" class="input-unified w-full p-2.5 rounded-lg text-xs appearance-none">
+                            <!-- Preenchido via JS -->
+                        </select>
+                    </div>
+                    <div id="bulkSeasonCol">
+                        <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1.5">Mover p/ Temporada</label>
+                        <input type="number" id="bulkSeason" class="input-unified w-full p-2.5 rounded-lg text-xs text-ember-400 bg-zinc-950 border border-zinc-800" placeholder="Ex: 2" min="1">
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="gen.applyBulkEdit()" class="w-full bg-white hover:bg-zinc-200 text-zinc-950 py-2.5 rounded-lg transition text-xs font-bold font-display uppercase tracking-wide">
+                            Aplicar Selecionados
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div id="visualEditorContent" class="p-6 overflow-y-auto space-y-3 bg-zinc-950 flex-grow custom-scrollbar"></div>
             <div class="p-5 bg-zinc-900 border-t border-zinc-800 flex justify-end gap-3">
                 <button onclick="gen.closeVisualEditor()" class="px-5 py-2.5 bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 text-xs font-medium rounded-xl transition">Descartar</button>
@@ -2987,6 +3029,44 @@
                     return showToast("Ainda não há links adicionados.", "warning");
                 }
                 gen.editData = JSON.parse(JSON.stringify(gen.currentData));
+
+                // Preencher qualidades no select bulkQuality
+                const bulkQSelect = document.getElementById('bulkQuality');
+                if (bulkQSelect) {
+                    const saved = localStorage.getItem('fenixflix_qualities');
+                    let qualities = ["Nenhuma", "1080p", "720p", "4K", "SD", "FHD", "HD", "CAM"];
+                    if (saved) {
+                        try { qualities = JSON.parse(saved); } catch(e){}
+                    }
+                    bulkQSelect.innerHTML = '<option value="">(Manter original)</option>';
+                    qualities.forEach(q => {
+                        if (q !== "Nenhuma") {
+                            const opt = document.createElement('option');
+                            opt.value = q;
+                            opt.innerText = q;
+                            bulkQSelect.appendChild(opt);
+                        }
+                    });
+                }
+
+                // Configurar campos dependendo do tipo
+                const bulkSeasonCol = document.getElementById('bulkSeasonCol');
+                if (bulkSeasonCol) {
+                    if (gen.editData.type === 'movie') {
+                        bulkSeasonCol.classList.add('hidden');
+                    } else {
+                        bulkSeasonCol.classList.remove('hidden');
+                    }
+                }
+
+                // Resetar inputs de massa
+                const bulkAudio = document.getElementById('bulkAudio');
+                if (bulkAudio) bulkAudio.value = '';
+                const bulkQuality = document.getElementById('bulkQuality');
+                if (bulkQuality) bulkQuality.value = '';
+                const bulkSeason = document.getElementById('bulkSeason');
+                if (bulkSeason) bulkSeason.value = '';
+
                 gen.renderVisualEditorContent();
                 document.getElementById('visualEditorModal').classList.remove('hidden');
             },
@@ -3001,6 +3081,114 @@
                 gen.updateDisplay(); 
                 gen.closeVisualEditor();
                 showToast("Links atualizados!", "success");
+            },
+
+            selectAllBulk: (select) => {
+                const checkboxes = document.querySelectorAll('.bulk-select-checkbox');
+                checkboxes.forEach(cb => cb.checked = select);
+            },
+
+            applyBulkEdit: () => {
+                const checkboxes = document.querySelectorAll('.bulk-select-checkbox:checked');
+                if (checkboxes.length === 0) {
+                    return showToast("Nenhum episódio/link selecionado.", "warning");
+                }
+
+                const bulkAudio = document.getElementById('bulkAudio').value;
+                const bulkQuality = document.getElementById('bulkQuality').value;
+                const bulkSeasonVal = document.getElementById('bulkSeason').value.trim();
+
+                if (!bulkAudio && !bulkQuality && !bulkSeasonVal) {
+                    return showToast("Defina alguma alteração para aplicar.", "warning");
+                }
+
+                const type = gen.editData.type;
+
+                if (type === 'movie') {
+                    checkboxes.forEach(cb => {
+                        const index = parseInt(cb.getAttribute('data-index'));
+                        const stream = gen.editData.streams[index];
+                        if (stream) {
+                            let parts = stream.name.split('\n');
+                            let audio = parts[0] || '';
+                            let quality = parts[1] || '';
+
+                            if (bulkAudio) audio = bulkAudio;
+                            if (bulkQuality) quality = bulkQuality;
+
+                            stream.name = `${audio}\n${quality}`;
+                        }
+                    });
+                } else {
+                    const itemsToMove = [];
+                    
+                    checkboxes.forEach(cb => {
+                        const season = cb.getAttribute('data-season');
+                        const ep = cb.getAttribute('data-ep');
+                        const index = parseInt(cb.getAttribute('data-index'));
+                        
+                        const stream = gen.editData.streams[season]?.[ep]?.[index];
+                        if (stream) {
+                            let parts = stream.name.split('\n');
+                            let audio = parts[0] || '';
+                            let quality = parts[1] || '';
+
+                            if (bulkAudio) audio = bulkAudio;
+                            if (bulkQuality) quality = bulkQuality;
+
+                            stream.name = `${audio}\n${quality}`;
+
+                            if (bulkSeasonVal && bulkSeasonVal !== season) {
+                                itemsToMove.push({
+                                    fromSeason: season,
+                                    fromEp: ep,
+                                    stream: stream,
+                                    targetSeason: bulkSeasonVal
+                                });
+                            }
+                        }
+                    });
+
+                    if (itemsToMove.length > 0) {
+                        const MOVE_MARKER = '__MOVED__';
+                        itemsToMove.forEach(item => {
+                            item.stream[MOVE_MARKER] = true;
+                        });
+
+                        Object.keys(gen.editData.streams).forEach(s => {
+                            Object.keys(gen.editData.streams[s]).forEach(e => {
+                                gen.editData.streams[s][e] = gen.editData.streams[s][e].filter(stream => {
+                                    if (stream[MOVE_MARKER]) {
+                                        delete stream[MOVE_MARKER];
+                                        return false;
+                                    }
+                                    return true;
+                                });
+                                if (gen.editData.streams[s][e].length === 0) {
+                                    delete gen.editData.streams[s][e];
+                                }
+                            });
+                            if (Object.keys(gen.editData.streams[s]).length === 0) {
+                                delete gen.editData.streams[s];
+                            }
+                        });
+
+                        itemsToMove.forEach(item => {
+                            const tSeason = item.targetSeason;
+                            const ep = item.fromEp;
+                            if (!gen.editData.streams[tSeason]) {
+                                gen.editData.streams[tSeason] = {};
+                            }
+                            if (!gen.editData.streams[tSeason][ep]) {
+                                gen.editData.streams[tSeason][ep] = [];
+                            }
+                            gen.editData.streams[tSeason][ep].push(item.stream);
+                        });
+                    }
+                }
+
+                gen.renderVisualEditorContent();
+                showToast("Modificações em massa aplicadas!", "success");
             },
 
             updateEditData: (type, index, field, element, season, ep) => {
@@ -3038,6 +3226,7 @@
                         gen.editData.streams.forEach((stream, index) => {
                             html += `
                             <div class="bg-zinc-900 p-3.5 rounded-xl border border-zinc-800 flex flex-col md:flex-row gap-3 items-center group">
+                                <input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-800 bg-zinc-950 text-ember-500 focus:ring-ember-500 shrink-0" data-type="movie" data-index="${index}">
                                 <div class="bg-zinc-950 text-zinc-500 w-10 h-10 rounded-lg flex justify-center items-center shrink-0 border border-zinc-800"><i class="fa-solid fa-film text-xs"></i></div>
                                 <div class="flex-grow flex flex-col md:flex-row gap-3 w-full">
                                     <textarea rows="2" class="input-unified p-2.5 text-xs rounded-lg w-full md:w-1/3 custom-scrollbar" placeholder="Nome" onchange="gen.updateEditData('movie', ${index}, 'name', this)">${escapeHTML(stream.name)}</textarea>
@@ -3054,13 +3243,14 @@
                     seasons.forEach(season => {
                         const eps = Object.keys(gen.editData.streams[season]).sort((a,b) => parseInt(a)-parseInt(b));
                         
-                        html += `<div class="mt-6 mb-3 px-1"><span class="text-zinc-400 text-xs font-semibold uppercase tracking-wider">Temporada ${season}</span></div>`;
+                        html += `<div class="mt-6 mb-3 px-1 border-b border-zinc-850 pb-1 flex items-center justify-between"><span class="text-zinc-400 text-xs font-semibold uppercase tracking-wider">Temporada ${season}</span></div>`;
                         
                         eps.forEach(ep => {
                             gen.editData.streams[season][ep].forEach((stream, index) => {
                                 hasItems = true;
                                 html += `
                                 <div class="bg-zinc-900 p-3.5 rounded-xl border border-zinc-800 flex flex-col md:flex-row gap-3 items-center group">
+                                    <input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-800 bg-zinc-950 text-ember-500 focus:ring-ember-500 shrink-0" data-type="series" data-season="${season}" data-ep="${ep}" data-index="${index}">
                                     <div class="bg-zinc-950 text-zinc-400 border border-zinc-800 font-mono font-medium w-10 h-10 rounded-lg flex justify-center items-center text-xs shrink-0">E${ep.padStart(2,'0')}</div>
                                     <div class="flex-grow flex flex-col md:flex-row gap-3 w-full">
                                         <textarea rows="2" class="input-unified p-2.5 text-xs rounded-lg w-full md:w-1/3 custom-scrollbar" placeholder="Nome" onchange="gen.updateEditData('series', ${index}, 'name', this, '${season}', '${ep}')">${escapeHTML(stream.name)}</textarea>
@@ -4864,11 +5054,23 @@
                         const safeNome = escapeHTML(col.nome);
                         const safeTitlesStr = escapeHTML(titlesStr);
                         const safeUniqueTitles = escapeHTML(uniqueTitles.join(', '));
+
+                        let avatarImgHtml = `<i class="fa-solid fa-user text-zinc-400 text-sm"></i>`;
+                        if (col.discord_id && col.avatar) {
+                            const avatarUrl = `https://cdn.discordapp.com/avatars/${col.discord_id}/${col.avatar}.png?size=64`;
+                            avatarImgHtml = `<img src="${avatarUrl}" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
+                        } else if (col.discord_id) {
+                            // Calcula avatar padrão caso não tenha hash de avatar mas tenha ID
+                            const defaultIdx = (parseInt(col.discord_id.slice(-4)) || 0) % 5;
+                            const defaultAvatarUrl = `https://cdn.discordapp.com/embed/avatars/${defaultIdx}.png`;
+                            avatarImgHtml = `<img src="${defaultAvatarUrl}" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
+                        }
+
                         tcHtml += `
                             <div class="flex items-center gap-3 bg-obsidian-900/60 p-3.5 rounded-2xl border border-white/5 hover:border-white/10 hover:shadow-lg transition-all">
                                 <div class="w-8 text-center shrink-0">${medal}</div>
-                                <div class="w-9 h-9 bg-obsidian-800 border border-white/5 flex items-center justify-center rounded-xl shrink-0 shadow-inner">
-                                    <i class="fa-solid fa-user text-zinc-400 text-sm"></i>
+                                <div class="w-9 h-9 bg-obsidian-800 border border-white/5 flex items-center justify-center rounded-xl shrink-0 shadow-inner overflow-hidden">
+                                    ${avatarImgHtml}
                                 </div>
                                 <div class="flex-grow min-w-0">
                                     <h4 class="text-white text-xs font-bold font-display tracking-wide truncate">${safeNome}</h4>

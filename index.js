@@ -141,10 +141,20 @@ const initDB = async () => {
             criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
     `;
+    const queryUsuarios = `
+        CREATE TABLE IF NOT EXISTS usuarios_discord (
+            discord_id VARCHAR(50) PRIMARY KEY,
+            username VARCHAR(100) NOT NULL,
+            global_name VARCHAR(100),
+            avatar VARCHAR(100),
+            atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+    `;
     try {
         await pool.query(query);
         await pool.query(queryPedidos);
         await pool.query(queryDenuncias);
+        await pool.query(queryUsuarios);
         console.log('Tabelas de banco de dados verificadas/criadas com sucesso.');
     } catch (err) {
         console.error('Erro ao criar tabelas:', err);
@@ -414,6 +424,19 @@ app.get('/api/auth/discord/callback', async (req, res) => {
             avatar: userData.avatar
         };
         
+        // Salva/atualiza o perfil do usuário do Discord no banco de dados local
+        try {
+            const queryUpsertUser = `
+                INSERT INTO usuarios_discord (discord_id, username, global_name, avatar, atualizado_em)
+                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+                ON CONFLICT (discord_id)
+                DO UPDATE SET username = EXCLUDED.username, global_name = EXCLUDED.global_name, avatar = EXCLUDED.avatar, atualizado_em = CURRENT_TIMESTAMP;
+            `;
+            await pool.query(queryUpsertUser, [userData.id, userData.username, userData.global_name || userData.username, userData.avatar]);
+        } catch (dbErr) {
+            console.error("Erro ao salvar usuário do Discord no banco de dados:", dbErr.message);
+        }
+        
         const token = generateToken(payload);
         
         // Define redirect target from state if present, otherwise default to relative path '/'
@@ -480,6 +503,8 @@ app.post('/upload', upload.none(), async (req, res) => {
         if (parsedConteudo.type === 'movie' && Array.isArray(parsedConteudo.streams)) {
             parsedConteudo.streams.forEach(s => {
                 s.colaborador = discordName;
+                s.colaborador_id = user.id;
+                s.colaborador_avatar = user.avatar;
             });
         } else if (parsedConteudo.type === 'series' && parsedConteudo.streams && typeof parsedConteudo.streams === 'object') {
             Object.keys(parsedConteudo.streams).forEach(seasonNum => {
@@ -489,6 +514,8 @@ app.post('/upload', upload.none(), async (req, res) => {
                     if (Array.isArray(epStreams)) {
                         epStreams.forEach(s => {
                             s.colaborador = discordName;
+                            s.colaborador_id = user.id;
+                            s.colaborador_avatar = user.avatar;
                         });
                     }
                 });
@@ -987,19 +1014,33 @@ app.get('/api/colaboradores', async (req, res) => {
                          END
                      ) AS ep
                 WHERE conteudo->>'type' = 'series'
+            ),
+            raw_ranking AS (
+                SELECT 
+                    stream->>'colaborador' AS nome,
+                    MAX(stream->>'colaborador_id') AS stream_discord_id,
+                    MAX(stream->>'colaborador_avatar') AS stream_avatar,
+                    COUNT(*)::int AS count,
+                    json_agg(json_build_object(
+                        'title', COALESCE(title, nome_do_json),
+                        'type', type
+                    )) AS envios_detalhes
+                FROM flattened_streams
+                WHERE stream->>'colaborador' IS NOT NULL 
+                  AND stream->>'colaborador' <> ''
+                  ${dateFilter}
+                GROUP BY nome
             )
             SELECT 
-                stream->>'colaborador' AS nome,
-                COUNT(*)::int AS count,
-                json_agg(json_build_object(
-                    'title', COALESCE(title, nome_do_json),
-                    'type', type
-                )) AS envios_detalhes
-            FROM flattened_streams
-            WHERE stream->>'colaborador' IS NOT NULL 
-              AND stream->>'colaborador' <> ''
-              ${dateFilter}
-            GROUP BY nome
+                r.nome,
+                r.count,
+                r.envios_detalhes,
+                COALESCE(u.discord_id, r.stream_discord_id) AS discord_id,
+                COALESCE(u.avatar, r.stream_avatar) AS avatar
+            FROM raw_ranking r
+            LEFT JOIN usuarios_discord u 
+              ON (r.stream_discord_id IS NOT NULL AND u.discord_id = r.stream_discord_id)
+              OR (r.stream_discord_id IS NULL AND (LOWER(u.global_name) = LOWER(r.nome) OR LOWER(u.username) = LOWER(r.nome)))
             ORDER BY count DESC;
         `;
         const result = await pool.query(query);
