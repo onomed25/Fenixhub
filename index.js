@@ -602,8 +602,8 @@ app.post('/upload', upload.none(), async (req, res) => {
 // ==========================================
 // ROTA EXTRA: Limpar Avatares/IDs dos JSONs Antigos (/api/admin/limpar-jsons)
 // ==========================================
-app.post('/api/admin/limpar-jsons', async (req, res) => {
-    const { senha } = req.body;
+app.all('/api/admin/limpar-jsons', async (req, res) => {
+    const senha = req.body.senha || req.query.senha;
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
 
     if (senha !== adminPassword) {
