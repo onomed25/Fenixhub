@@ -499,8 +499,7 @@ app.post('/upload', upload.none(), async (req, res) => {
         if (parsedConteudo.type === 'movie' && Array.isArray(parsedConteudo.streams)) {
             parsedConteudo.streams.forEach(s => {
                 s.colaborador = discordName;
-                // NOTA: Os dados s.colaborador_id e s.colaborador_avatar foram removidos daqui para manter o JSON limpo.
-                // O banco de dados já possui a tabela usuarios_discord vinculada pelo nome para o ranking.
+                // NOTA: Dados de avatar/ID removidos daqui.
             });
         } else if (parsedConteudo.type === 'series' && parsedConteudo.streams && typeof parsedConteudo.streams === 'object') {
             Object.keys(parsedConteudo.streams).forEach(seasonNum => {
@@ -510,7 +509,7 @@ app.post('/upload', upload.none(), async (req, res) => {
                     if (Array.isArray(epStreams)) {
                         epStreams.forEach(s => {
                             s.colaborador = discordName;
-                            // NOTA: IDs e avatares removidos
+                            // NOTA: Dados de avatar/ID removidos daqui.
                         });
                     }
                 });
@@ -601,9 +600,11 @@ app.post('/upload', upload.none(), async (req, res) => {
 
 // ==========================================
 // ROTA EXTRA: Limpar Avatares/IDs dos JSONs Antigos (/api/admin/limpar-jsons)
+// Aceita GET (via navegador/URL) ou POST
 // ==========================================
 app.all('/api/admin/limpar-jsons', async (req, res) => {
-    const senha = req.body.senha || req.query.senha;
+    // Permite pegar a senha via Body (POST) ou URL Query (GET) de forma segura contra travamentos
+    const senha = (req.body && req.body.senha) ? req.body.senha : (req.query && req.query.senha);
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
 
     if (senha !== adminPassword) {
@@ -617,40 +618,58 @@ app.all('/api/admin/limpar-jsons', async (req, res) => {
         let updatedCount = 0;
 
         for (const row of result.rows) {
-            let conteudo = row.conteudo;
-            let hasChanges = false;
+            try {
+                let conteudo = row.conteudo;
+                
+                // Tratamento de segurança: se o JSON estiver salvo como texto, converte para objeto
+                if (typeof conteudo === 'string') {
+                    try { conteudo = JSON.parse(conteudo); } catch(e) { continue; }
+                }
+                
+                // Pula se for nulo, vazio, ou arquivo corrompido
+                if (!conteudo || typeof conteudo !== 'object') continue;
 
-            if (conteudo.type === 'movie' && Array.isArray(conteudo.streams)) {
-                conteudo.streams.forEach(s => {
-                    if (s.colaborador_id !== undefined || s.colaborador_avatar !== undefined) {
-                        delete s.colaborador_id;
-                        delete s.colaborador_avatar;
-                        hasChanges = true;
-                    }
-                });
-            } else if (conteudo.type === 'series' && conteudo.streams && typeof conteudo.streams === 'object') {
-                Object.keys(conteudo.streams).forEach(seasonNum => {
-                    const season = conteudo.streams[seasonNum] || {};
-                    Object.keys(season).forEach(epNum => {
-                        const epStreams = season[epNum] || [];
-                        if (Array.isArray(epStreams)) {
-                            epStreams.forEach(s => {
-                                if (s.colaborador_id !== undefined || s.colaborador_avatar !== undefined) {
-                                    delete s.colaborador_id;
-                                    delete s.colaborador_avatar;
-                                    hasChanges = true;
+                let hasChanges = false;
+
+                // Varredura para Filmes
+                if (conteudo.type === 'movie' && Array.isArray(conteudo.streams)) {
+                    conteudo.streams.forEach(s => {
+                        if (s && (s.colaborador_id !== undefined || s.colaborador_avatar !== undefined)) {
+                            delete s.colaborador_id;
+                            delete s.colaborador_avatar;
+                            hasChanges = true;
+                        }
+                    });
+                } 
+                // Varredura para Séries
+                else if (conteudo.type === 'series' && conteudo.streams && typeof conteudo.streams === 'object' && !Array.isArray(conteudo.streams)) {
+                    Object.keys(conteudo.streams).forEach(seasonNum => {
+                        const season = conteudo.streams[seasonNum];
+                        if (season && typeof season === 'object' && !Array.isArray(season)) {
+                            Object.keys(season).forEach(epNum => {
+                                const epStreams = season[epNum];
+                                if (Array.isArray(epStreams)) {
+                                    epStreams.forEach(s => {
+                                        if (s && (s.colaborador_id !== undefined || s.colaborador_avatar !== undefined)) {
+                                            delete s.colaborador_id;
+                                            delete s.colaborador_avatar;
+                                            hasChanges = true;
+                                        }
+                                    });
                                 }
                             });
                         }
                     });
-                });
-            }
+                }
 
-            // Se encontrou sujeira de avatar/id, atualiza o arquivo no banco
-            if (hasChanges) {
-                const queryUpdate = 'UPDATE arquivos_json SET conteudo = $1 WHERE id = $2;';
-                await pool.query(queryUpdate, [JSON.stringify(conteudo), row.id]);
-                updatedCount++;
+                // Se encontrou sujeira de avatar/id, atualiza o arquivo no banco
+                if (hasChanges) {
+                    const queryUpdate = 'UPDATE arquivos_json SET conteudo = $1 WHERE id = $2;';
+                    await pool.query(queryUpdate, [JSON.stringify(conteudo), row.id]);
+                    updatedCount++;
+                }
+            } catch (rowErr) {
+                console.error(`[Aviso] Ignorando arquivo com formato problemático (ID: ${row.id}):`, rowErr.message);
             }
         }
 
