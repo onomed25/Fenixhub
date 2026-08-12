@@ -2518,7 +2518,7 @@
                     let totalEps = 0;
                     if (meta.videos && Array.isArray(meta.videos)) {
                         meta.videos.forEach(v => {
-                            if (v.season > 0) {
+                            if (v.season !== undefined && v.season !== null && v.season >= 0) {
                                 if (!seasonMap[v.season]) {
                                     seasonMap[v.season] = [];
                                 }
@@ -2538,7 +2538,11 @@
                     seasonsList.forEach(s => {
                         const epsInSeason = seasonMap[s];
                         const maxEpInSeason = epsInSeason.length > 0 ? Math.max(...epsInSeason) : 0;
-                        htmlList += `<span class="bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-md px-2 py-1 text-[10px] font-mono">T${s}: 1-${maxEpInSeason} (${epsInSeason.length} eps)</span>`;
+                        if (s === 0) {
+                            htmlList += `<span class="bg-purple-950/40 border border-purple-500/30 text-purple-300 rounded-md px-2 py-1 text-[10px] font-mono flex items-center gap-1.5"><i class="fa-solid fa-star text-purple-400"></i> Especiais (T0): 1-${maxEpInSeason} (${epsInSeason.length} eps)</span>`;
+                        } else {
+                            htmlList += `<span class="bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-md px-2 py-1 text-[10px] font-mono">T${s}: 1-${maxEpInSeason} (${epsInSeason.length} eps)</span>`;
+                        }
                     });
                     
                     epsList.innerHTML = htmlList || '<span class="text-zinc-600 italic">Sem episódios</span>';
@@ -3017,7 +3021,17 @@
                             localStorage.removeItem('fenixflix_draft');
                         }
                     } else {
-                        showToast("Erro: " + result.erro, "error");
+                        if (response.status === 401) {
+                            showToast("Sessão do Discord expirou! Faça login novamente para enviar.", "error");
+                            localStorage.removeItem('discord_token');
+                            localStorage.removeItem('discord_username');
+                            localStorage.removeItem('discord_global_name');
+                            localStorage.removeItem('discord_avatar');
+                            localStorage.removeItem('discord_id');
+                            if (typeof updateDiscordUI === 'function') updateDiscordUI();
+                        } else {
+                            showToast("Erro: " + result.erro, "error");
+                        }
                     }
                 } catch (error) {
                     showToast("Erro ao conectar com o servidor", "error");
@@ -3698,6 +3712,7 @@
 
                 let sucesso = 0;
                 let erro = 0;
+                let discordExpired = false;
 
                 showToast(`A processar ${files.length} ficheiros... aguarde.`, 'info');
 
@@ -3732,6 +3747,7 @@
                         if (response.ok) {
                             sucesso++;
                         } else {
+                            if (response.status === 401) discordExpired = true;
                             erro++;
                         }
                     } catch (error) {
@@ -3740,7 +3756,17 @@
                     }
                 }
 
-                showToast(`Upload concluído! Sucesso: ${sucesso} | Erros: ${erro}`, erro > 0 ? 'warning' : 'success');
+                if (discordExpired) {
+                    showToast("Sessão do Discord expirou! Faça login novamente para enviar.", "error");
+                    localStorage.removeItem('discord_token');
+                    localStorage.removeItem('discord_username');
+                    localStorage.removeItem('discord_global_name');
+                    localStorage.removeItem('discord_avatar');
+                    localStorage.removeItem('discord_id');
+                    if (typeof updateDiscordUI === 'function') updateDiscordUI();
+                } else {
+                    showToast(`Upload concluído! Sucesso: ${sucesso} | Erros: ${erro}`, erro > 0 ? 'warning' : 'success');
+                }
                 cat.init();
             },
 
