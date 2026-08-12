@@ -77,8 +77,6 @@ function logProcessProgress(key, name, progress) {
     }
 }
 
-
-
 // Limita o tamanho do JSON recebido via POST (ajustado para 10MB conforme solicitado)
 app.use(express.json({ limit: '10mb' })); 
 app.use(cors());
@@ -254,7 +252,6 @@ async function getCinemetaInfo(id, type) {
 }
 
 // Função para mesclar os streams existentes com as novas fontes de forma inteligente
-
 function injectDateIntoStreams(conteudo) {
     const now = new Date().toISOString();
     if (conteudo.type === 'movie' && Array.isArray(conteudo.streams)) {
@@ -463,7 +460,6 @@ app.get('/api/auth/discord/callback', async (req, res) => {
     }
 });
 
-
 // ==========================================
 // ROTA 1: Enviar JSON (Pública - Sem senha)
 // ==========================================
@@ -503,8 +499,8 @@ app.post('/upload', upload.none(), async (req, res) => {
         if (parsedConteudo.type === 'movie' && Array.isArray(parsedConteudo.streams)) {
             parsedConteudo.streams.forEach(s => {
                 s.colaborador = discordName;
-                s.colaborador_id = user.id;
-                s.colaborador_avatar = user.avatar;
+                // NOTA: Os dados s.colaborador_id e s.colaborador_avatar foram removidos daqui para manter o JSON limpo.
+                // O banco de dados já possui a tabela usuarios_discord vinculada pelo nome para o ranking.
             });
         } else if (parsedConteudo.type === 'series' && parsedConteudo.streams && typeof parsedConteudo.streams === 'object') {
             Object.keys(parsedConteudo.streams).forEach(seasonNum => {
@@ -514,8 +510,7 @@ app.post('/upload', upload.none(), async (req, res) => {
                     if (Array.isArray(epStreams)) {
                         epStreams.forEach(s => {
                             s.colaborador = discordName;
-                            s.colaborador_id = user.id;
-                            s.colaborador_avatar = user.avatar;
+                            // NOTA: IDs e avatares removidos
                         });
                     }
                 });
@@ -605,6 +600,69 @@ app.post('/upload', upload.none(), async (req, res) => {
 });
 
 // ==========================================
+// ROTA EXTRA: Limpar Avatares/IDs dos JSONs Antigos (/api/admin/limpar-jsons)
+// ==========================================
+app.post('/api/admin/limpar-jsons', async (req, res) => {
+    const { senha } = req.body;
+    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+
+    if (senha !== adminPassword) {
+        return res.status(401).json({ erro: 'Senha incorreta.' });
+    }
+
+    try {
+        console.log("[Admin] Iniciando varredura para limpeza de avatares antigos nos JSONs...");
+        const querySelect = 'SELECT id, nome_do_json, conteudo FROM arquivos_json;';
+        const result = await pool.query(querySelect);
+        let updatedCount = 0;
+
+        for (const row of result.rows) {
+            let conteudo = row.conteudo;
+            let hasChanges = false;
+
+            if (conteudo.type === 'movie' && Array.isArray(conteudo.streams)) {
+                conteudo.streams.forEach(s => {
+                    if (s.colaborador_id !== undefined || s.colaborador_avatar !== undefined) {
+                        delete s.colaborador_id;
+                        delete s.colaborador_avatar;
+                        hasChanges = true;
+                    }
+                });
+            } else if (conteudo.type === 'series' && conteudo.streams && typeof conteudo.streams === 'object') {
+                Object.keys(conteudo.streams).forEach(seasonNum => {
+                    const season = conteudo.streams[seasonNum] || {};
+                    Object.keys(season).forEach(epNum => {
+                        const epStreams = season[epNum] || [];
+                        if (Array.isArray(epStreams)) {
+                            epStreams.forEach(s => {
+                                if (s.colaborador_id !== undefined || s.colaborador_avatar !== undefined) {
+                                    delete s.colaborador_id;
+                                    delete s.colaborador_avatar;
+                                    hasChanges = true;
+                                }
+                            });
+                        }
+                    });
+                });
+            }
+
+            // Se encontrou sujeira de avatar/id, atualiza o arquivo no banco
+            if (hasChanges) {
+                const queryUpdate = 'UPDATE arquivos_json SET conteudo = $1 WHERE id = $2;';
+                await pool.query(queryUpdate, [JSON.stringify(conteudo), row.id]);
+                updatedCount++;
+            }
+        }
+
+        console.log(`[Admin] Varredura concluída. ${updatedCount} JSONs foram corrigidos.`);
+        res.json({ sucesso: true, mensagem: `Limpeza concluída! ${updatedCount} JSONs antigos foram corrigidos e limpos.` });
+    } catch (err) {
+        console.error('Erro ao limpar JSONs antigos:', err);
+        res.status(500).json({ erro: 'Erro interno ao tentar limpar o banco de dados.' });
+    }
+});
+
+// ==========================================
 // ROTA 2: Listar todos os JSONs (/api/all)
 // ==========================================
 app.get('/api/all', async (req, res) => {
@@ -674,7 +732,6 @@ app.get('/count', async (req, res) => {
         res.status(500).json({ erro: 'Erro ao contar os arquivos.' });
     }
 });
-
 
 // ==========================================
 // ROTA 4: Visualizar JSON específico (/:nome)
@@ -1050,11 +1107,6 @@ app.get('/api/colaboradores', async (req, res) => {
         res.status(500).json({ erro: 'Erro ao buscar ranking de colaboradores.' });
     }
 });
-
-// ==========================================
-
-// Rota HFA removida
-
 
 // ==========================================
 // TAREFA AGENDADA: Limpeza semanal dos arquivos mais vistos
