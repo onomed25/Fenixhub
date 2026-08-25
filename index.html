@@ -16,6 +16,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
+    
     <script>
         tailwind.config = {
             theme: {
@@ -25,55 +26,79 @@
                         display: ['Clash Display', 'sans-serif']
                     },
                     colors: {
-                        obsidian: { 800: '#161619', 900: '#0f0f11', 950: '#0a0a0c' },
-                        ember: { 400: '#ff8a50', 500: '#ff5722', 600: '#e64a19' },
-                        zinc: { 850: '#111113', 900: '#18181b', 950: '#09090b' }
-                    },
-                    backgroundImage: {
-                        'glass-gradient': 'linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%)',
+                        bg: '#05070D',
+                        surface: '#111827',
+                        text: '#FFF8F0',
+                        'text-soft': '#D7DEE9',
+                        primary: '#FF6A00',
+                        'primary-hover': '#FF8126',
+                        highlight: '#FFB020',
+                        danger: '#E83D1C',
+                        'on-accent': '#111827',
+                        // Mapeando as cores antigas para a nova paleta para manter a compatibilidade
+                        obsidian: { 800: '#111827', 900: '#111827', 950: '#05070D' },
+                        ember: { 400: '#FFB020', 500: '#FF6A00', 600: '#FF8126' },
+                        zinc: { 850: '#111827', 900: '#111827', 950: '#05070D' }
                     }
                 }
             }
         }
     </script>
 
+
+    
     <style>
+        :root {
+            --bg: #05070D;
+            --surface: #111827;
+            --surface-translucent: rgba(17, 24, 39, 0.6);
+            --text: #FFF8F0;
+            --text-soft: #D7DEE9;
+            --primary: #FF6A00;
+            --primary-hover: #FF8126;
+            --highlight: #FFB020;
+            --danger: #E83D1C;
+            --on-accent: #111827;
+        }
+
         body { 
-            background-color: #0a0a0c; 
-            color: #e4e4e7; 
-            background-image: radial-gradient(circle at top right, rgba(255,87,34,0.03), transparent 40%),
-                              radial-gradient(circle at bottom left, rgba(255,138,80,0.02), transparent 40%);
+            background-color: var(--bg); 
+            color: var(--text); 
+            background-image: radial-gradient(circle at top right, rgba(255,106,0,0.05), transparent 40%),
+                              radial-gradient(circle at bottom left, rgba(255,176,32,0.03), transparent 40%);
             background-attachment: fixed;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
         }
         
-        h1, h2, h3, h4, h5, h6 { font-family: 'Clash Display', sans-serif; letter-spacing: 0.02em; }
+        h1, h2, h3, h4, h5, h6 { font-family: 'Clash Display', sans-serif; letter-spacing: -0.01em; }
 
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(255,87,34,0.5); }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 6px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,106,0,0.5); }
 
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* Inputs Glassmorphism */
+        /* Apple Design: Glassmorphism Inputs */
         .input-unified {
-            background-color: rgba(15,15,17,0.6);
-            border: 1px solid rgba(255,255,255,0.05);
-            color: #f4f4f5;
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            transition: all 0.3s ease;
+            background-color: var(--surface-translucent);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: var(--text);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .input-unified:focus {
-            border-color: #ff5722;
-            box-shadow: 0 0 15px rgba(255,87,34,0.15);
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(255,106,0,0.15);
             outline: none;
         }
 
         .loader {
-            border: 2px solid #27272a;
-            border-top: 2px solid #a1a1aa;
+            border: 2px solid var(--surface);
+            border-top: 2px solid var(--text-soft);
             border-radius: 50%;
             width: 16px;
             height: 16px;
@@ -81,45 +106,57 @@
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        .tab-content { display: none; animation: fadeSlide 0.25s ease-out forwards; }
+        .tab-content { display: none; animation: fadeSlide 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .tab-content.active { display: block; }
-        @keyframes fadeSlide { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeSlide { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Botões da Ilha Flutuante */
-        .nav-btn.active { 
-            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05)); 
-            color: #fff; 
-            border-color: rgba(255,255,255,0.2);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
-        }
+        /* Apple Design: Dynamic Island Nav */
         .nav-btn { 
             background-color: transparent; 
-            color: #a1a1aa; 
-            border: 1px solid transparent;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            color: var(--text-soft); 
+            border: none;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+        
+        .nav-btn.active { 
+            background: rgba(255,255,255,0.1); 
+            color: var(--text); 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         }
         .nav-btn:hover:not(.active) {
-            color: #fff;
-            background: rgba(255,255,255,0.03);
-            border-color: rgba(255,255,255,0.05);
+            color: var(--text);
+            background: rgba(255,255,255,0.05);
+        }
+
+        /* Apple Design: Spring Buttons */
+        
+
+        /* Apple Design: Modals and Panels */
+        .glass-panel {
+            background: var(--surface-translucent);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 24px;
         }
 
         @keyframes slideIn {
             from { transform: translateY(100%) scale(0.95); opacity: 0; }
             to { transform: translateY(0) scale(1); opacity: 1; }
         }
-        .toast { animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .toast { animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
         
-        .progress-fill { transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+        .progress-fill { transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
     </style>
+
 </head>
 <body class="min-h-screen flex flex-col selection:bg-indigo-500/30">
 
     <!-- Header Simples com Logo -->
-    <header class="w-full pt-8 pb-2 px-8 flex justify-between items-center max-w-7xl mx-auto">
+    <header class="w-full pt-6 md:pt-8 pb-2 px-4 md:px-8 flex justify-between items-center max-w-7xl mx-auto">
         <div class="flex items-center gap-3">
             <div class="w-10 h-10 flex items-center justify-center">
-                <img src="https://i.imgur.com/e6skOZ8.png" alt="Logo Fenix Studio" class="w-full h-full object-contain drop-shadow-[0_0_10px_rgba(255,87,34,0.4)]">
+                <img src="cdn/logo_new.png" alt="Logo Fenix Studio" class="w-full h-full object-contain drop-shadow-[0_4px_12px_rgba(255,106,0,0.3)]">
             </div>
             <div>
                 <h1 class="font-bold text-xl leading-tight tracking-tight text-white font-display">Fenix Studio</h1>
@@ -152,7 +189,7 @@
     </header>
 
     <!-- Ilha de Navegação Flutuante -->
-    <nav class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-obsidian-900/60 backdrop-blur-xl border border-white/10 rounded-full shadow-2xl p-1.5 flex gap-1 items-center overflow-x-auto scrollbar-hide max-w-[90vw]">
+    <nav class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-[var(--surface-translucent)] backdrop-blur-[24px] border border-white/10 rounded-full shadow-[0_20px_40px_rgba(0,0,0,0.5)] p-1.5 flex gap-1 items-center overflow-x-auto scrollbar-hide max-w-[95vw] sm:max-w-[90vw]">
         <button onclick="switchView('generator')" id="btn-generator" class="nav-btn px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
             <i class="fa-solid fa-cloud-arrow-up text-sm"></i> <span class="hidden sm:inline">Enviar</span>
         </button>
@@ -186,9 +223,9 @@
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div id="generator-main-column" class="lg:col-span-2 space-y-6 block">
-                    <div class="bg-obsidian-900/40 backdrop-blur-xl rounded-3xl border border-white/5 p-6 md:p-8 shadow-2xl relative overflow-hidden">
+                    <div class="glass-panel rounded-3xl border border-white/5 p-4 sm:p-6 md:p-8 shadow-2xl relative overflow-hidden">
                         <!-- Glow Effect -->
-                        <div class="absolute top-0 right-0 w-64 h-64 bg-ember-500/10 rounded-full blur-[80px] -z-10 pointer-events-none"></div>
+                        <div class="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-[80px] -z-10 pointer-events-none"></div>
                         
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
                             <h2 class="text-xl font-semibold text-white font-display tracking-wide">Detalhes do Conteúdo</h2>
@@ -207,15 +244,15 @@
                         <div class="flex gap-6 mb-8 border-b border-white/5 pb-6">
                             <label class="flex items-center gap-3 cursor-pointer group">
                                 <div class="relative flex items-center justify-center">
-                                    <input type="radio" name="contentType" value="series" checked="" onchange="gen.toggleInputs()" class="peer appearance-none w-5 h-5 border-2 border-zinc-600 rounded-full checked:border-ember-500 focus:outline-none transition-colors">
-                                    <div class="absolute w-2.5 h-2.5 rounded-full bg-ember-500 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
+                                    <input type="radio" name="contentType" value="series" checked="" onchange="gen.toggleInputs()" class="peer appearance-none w-5 h-5 border-2 border-zinc-600 rounded-full checked:border-primary focus:outline-none transition-colors">
+                                    <div class="absolute w-2.5 h-2.5 rounded-full bg-primary opacity-0 peer-checked:opacity-100 transition-opacity"></div>
                                 </div>
                                 <span class="font-medium text-sm text-zinc-400 group-hover:text-zinc-200 transition">Série / Anime</span>
                             </label>
                             <label class="flex items-center gap-3 cursor-pointer group">
                                 <div class="relative flex items-center justify-center">
-                                    <input type="radio" name="contentType" value="movie" onchange="gen.toggleInputs()" class="peer appearance-none w-5 h-5 border-2 border-zinc-600 rounded-full checked:border-ember-500 focus:outline-none transition-colors">
-                                    <div class="absolute w-2.5 h-2.5 rounded-full bg-ember-500 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
+                                    <input type="radio" name="contentType" value="movie" onchange="gen.toggleInputs()" class="peer appearance-none w-5 h-5 border-2 border-zinc-600 rounded-full checked:border-primary focus:outline-none transition-colors">
+                                    <div class="absolute w-2.5 h-2.5 rounded-full bg-primary opacity-0 peer-checked:opacity-100 transition-opacity"></div>
                                 </div>
                                 <span class="font-medium text-sm text-zinc-400 group-hover:text-zinc-200 transition">Filme</span>
                             </label>
@@ -224,13 +261,13 @@
                         <!-- Campos Principais (Buscador e Temporada) -->
                         <div class="bg-black/20 p-5 rounded-2xl border border-white/5 mb-6 shadow-inner">
                             <input type="hidden" id="seriesName">
-                            <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                            <div class="grid grid-cols-2 md:grid-cols-12 gap-3 md:gap-4 items-end">
                                 <!-- ID IMDb ou Pesquisar por Nome -->
-                                <div class="md:col-span-8 relative">
+                                <div class="col-span-2 md:col-span-8 relative">
                                     <label class="block text-xs font-medium text-zinc-500 mb-2 uppercase tracking-wider">Buscar (Nome ou ID IMDb) <span class="text-ember-400">*</span></label>
                                     <div class="flex gap-2">
                                         <input type="text" id="contentId" class="input-unified flex-grow p-3.5 rounded-xl text-sm" placeholder="Ex: tt0903747 ou Breaking Bad" onkeydown="if(event.key === 'Enter') gen.smartSearch()">
-                                        <button type="button" onclick="gen.smartSearch()" id="btnSmartSearch" class="bg-gradient-to-r from-ember-500 to-ember-600 hover:from-ember-400 hover:to-ember-500 text-white px-5 py-3.5 rounded-xl text-sm font-medium transition-all shadow-lg shadow-ember-500/20 flex items-center justify-center shrink-0" title="Buscar">
+                                        <button type="button" onclick="gen.smartSearch()" id="btnSmartSearch" class="bg-primary hover:bg-primary-hover text-white px-5 py-3.5 rounded-xl text-sm font-medium transition-all shadow-md flex items-center justify-center shrink-0" title="Buscar">
                                             <i id="btnSmartSearchIcon" class="fa-solid fa-magnifying-glass"></i>
                                         </button>
                                     </div>
@@ -238,13 +275,13 @@
                                 </div>
 
                                 <!-- Temporada -->
-                                <div class="md:col-span-2" id="seasonNumCol">
+                                <div class="col-span-1 md:col-span-2" id="seasonNumCol">
                                     <label class="block text-xs font-medium text-zinc-500 mb-2 uppercase tracking-wider text-center">Temp.</label>
                                     <input type="number" id="seasonNum" value="1" class="input-unified w-full p-3.5 rounded-xl text-center text-sm font-display font-medium text-ember-400">
                                 </div>
 
                                 <!-- Ep. Inicial -->
-                                <div class="md:col-span-2" id="startEpCol">
+                                <div class="col-span-1 md:col-span-2" id="startEpCol">
                                     <label class="block text-xs font-medium text-zinc-500 mb-2 uppercase tracking-wider text-center">Ep. Inic.</label>
                                     <input type="number" id="startEp" value="1" class="input-unified w-full p-3.5 rounded-xl text-center text-sm font-display font-medium text-ember-400">
                                 </div>
@@ -256,7 +293,7 @@
                         </div>
 
                         <!-- Configurações de Transmissão -->
-                        <div class="grid grid-cols-2 gap-4 mb-6">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 mb-4 md:mb-6">
                             <div>
                                 <label class="block text-xs font-medium text-zinc-500 mb-2">Idioma / Áudio</label>
                                 <select id="audioLanguage" class="input-unified w-full p-3 rounded-lg text-sm appearance-none">
@@ -370,7 +407,7 @@
                             <div class="space-y-3">
                                 <!-- Opção de Envio: Navegador vs Local -->
                                 <div class="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/60 pb-2 text-[11px]">
-                                    <div class="flex gap-4">
+                                    <div class="flex gap-4 hidden">
                                         <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
                                             <input type="radio" name="tgMode" value="browser" checked onchange="tg.switchMode('browser')" class="text-sky-500 bg-zinc-900 border-zinc-800 focus:ring-sky-500 w-3 h-3">
                                             <span>Pelo Navegador</span>
@@ -393,7 +430,7 @@
                                         <i class="fa-solid fa-cloud-arrow-up text-zinc-500 group-hover:text-sky-400 transition-colors"></i>
                                         <span id="tgFileName" class="text-zinc-400 font-medium group-hover:text-zinc-200 transition-colors">Selecionar Vídeos...</span>
                                     </label>
-                                    <button onclick="tg.sendBrowser()" id="btnTgBrowserSend" class="bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-lg text-xs font-medium transition-all shadow-lg shadow-sky-500/20 flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <button onclick="tg.sendBrowser()" id="btnTgBrowserSend" class="bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-lg text-xs font-medium transition-all shadow-sm flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
                                         Fazer Upload
                                     </button>
                                 </div>
@@ -454,7 +491,7 @@
                             </div>
                         </div>
 
-                        <button onclick="gen.process()" class="mt-6 w-full bg-gradient-to-r from-ember-500 to-ember-600 hover:from-ember-400 hover:to-ember-500 text-white font-display font-medium py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(255,87,34,0.3)] hover:shadow-[0_0_30px_rgba(255,87,34,0.5)] flex justify-center items-center gap-2 tracking-wide uppercase text-sm">
+                        <button onclick="gen.process()" class="mt-6 w-full bg-primary hover:bg-primary-hover text-white font-display font-medium py-4 rounded-xl transition-all shadow-md flex justify-center items-center gap-2 tracking-wide uppercase text-sm">
                             Processar Conteúdo
                         </button>
                     </div>
@@ -462,7 +499,7 @@
 
                 <!-- Painel de Preview -->
                 <div id="generator-preview-column" class="lg:col-span-1 lg:block hidden">
-                    <div class="bg-obsidian-900/40 backdrop-blur-xl rounded-3xl border border-white/5 flex flex-col h-full shadow-2xl relative overflow-hidden">
+                    <div class="glass-panel rounded-3xl border border-white/5 flex flex-col h-full shadow-2xl relative overflow-hidden">
                         <div class="p-5 border-b border-white/5 flex justify-between items-center bg-black/20">
                             <h3 class="font-medium text-white text-sm">Preview JSON</h3>
                             <span id="jsonStats" class="text-[10px] font-mono text-zinc-500">Vazio</span>
@@ -478,10 +515,10 @@
                                 <button onclick="gen.copy()" class="bg-obsidian-800/80 backdrop-blur-sm hover:bg-obsidian-800 text-white p-2.5 rounded-xl border border-white/10 transition-all shadow-lg hover:text-ember-400" title="Copiar JSON">
                                     <i class="fa-regular fa-copy"></i>
                                 </button>
-                                <button onclick="gen.download()" class="bg-gradient-to-br from-ember-500 to-ember-600 hover:from-ember-400 hover:to-ember-500 text-white p-2.5 rounded-xl transition-all shadow-[0_4px_15px_rgba(255,87,34,0.3)]" title="Baixar Arquivo .json">
+                                <button onclick="gen.download()" class="bg-primary hover:bg-primary-hover text-white p-2.5 rounded-xl transition-all shadow-sm" title="Baixar Arquivo .json">
                                     <i class="fa-solid fa-download"></i>
                                 </button>
-                                <button onclick="gen.uploadParaBanco()" class="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-lg transition shadow-lg shadow-indigo-500/20" title="Salvar JSON no Banco">
+                                <button onclick="gen.uploadParaBanco()" class="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-lg transition shadow-sm" title="Salvar JSON no Banco">
                                     <i class="fa-solid fa-cloud-arrow-up"></i>
                                 </button>
                             </div>
@@ -499,19 +536,19 @@
             
             <!-- Cards de Status -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <div class="bg-obsidian-900/60 backdrop-blur-md p-5 rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-ember-500/5 transition-all">
+                <div class="glass-panel p-4 md:p-5 rounded-2xl md:rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-sm transition-all">
                     <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Filmes</p>
                     <p id="countMovies" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
-                <div class="bg-obsidian-900/60 backdrop-blur-md p-5 rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-ember-500/5 transition-all">
+                <div class="glass-panel p-4 md:p-5 rounded-2xl md:rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-sm transition-all">
                     <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Séries</p>
                     <p id="countSeries" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
-                <div class="bg-obsidian-900/60 backdrop-blur-md p-5 rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-ember-500/5 transition-all">
+                <div class="glass-panel p-4 md:p-5 rounded-2xl md:rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-sm transition-all">
                     <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Episódios Totais</p>
                     <p id="countTotalEps" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
-                <div class="bg-obsidian-900/60 backdrop-blur-md p-5 rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-red-500/5 transition-all">
+                <div class="glass-panel p-4 md:p-5 rounded-2xl md:rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-red-500/5 transition-all">
                     <p class="text-red-400/80 text-[10px] font-bold uppercase tracking-widest mb-1">Incompletos</p>
                     <p id="countMissing" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
@@ -522,11 +559,11 @@
                 <div class="flex flex-col sm:flex-row w-full lg:w-auto gap-3">
                     <div class="relative w-full sm:w-72">
                         <i class="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs"></i>
-                        <input type="text" oninput="cat.search(this.value)" placeholder="Buscar catálogo..." class="w-full bg-obsidian-900/60 backdrop-blur-md text-zinc-200 text-sm rounded-2xl pl-10 pr-4 py-3 border border-white/5 focus:border-ember-500 focus:outline-none transition-colors shadow-inner">
+                        <input type="text" oninput="cat.search(this.value)" placeholder="Buscar catálogo..." class="w-full glass-panel text-zinc-200 text-sm rounded-2xl pl-10 pr-4 py-3 border border-white/5 focus:border-primary focus:outline-none transition-colors shadow-inner">
                     </div>
                     
                     <div class="relative w-full sm:w-48">
-                        <select onchange="cat.sort(this.value)" class="w-full bg-obsidian-900/60 backdrop-blur-md text-zinc-200 text-sm rounded-2xl px-4 py-3 border border-white/5 focus:border-ember-500 focus:outline-none appearance-none cursor-pointer shadow-inner">
+                        <select onchange="cat.sort(this.value)" class="w-full glass-panel text-zinc-200 text-sm rounded-2xl px-4 py-3 border border-white/5 focus:border-primary focus:outline-none appearance-none cursor-pointer shadow-inner">
                             <option value="newest">Mais Recentes</option>
                             <option value="oldest">Mais Antigos</option>
                             <option value="year">Ano de Lançamento</option>
@@ -536,7 +573,7 @@
                     </div>
 
                     <div class="relative w-full sm:w-44">
-                        <select id="cat-filter-type" onchange="cat.filter(this.value)" class="w-full bg-obsidian-900/60 backdrop-blur-md text-zinc-200 text-sm rounded-2xl px-4 py-3 border border-white/5 focus:border-ember-500 focus:outline-none appearance-none cursor-pointer shadow-inner">
+                        <select id="cat-filter-type" onchange="cat.filter(this.value)" class="w-full glass-panel text-zinc-200 text-sm rounded-2xl px-4 py-3 border border-white/5 focus:border-primary focus:outline-none appearance-none cursor-pointer shadow-inner">
                             <option value="all">Todos</option>
                             <option value="my_uploads">Meus Envios</option>
                             <option value="series">Séries</option>
@@ -553,7 +590,7 @@
                     </button>
 
                     <!-- Botão de Upload em Lote -->
-                    <label class="cursor-pointer bg-gradient-to-r from-ember-500 to-ember-600 hover:from-ember-400 hover:to-ember-500 text-white px-5 py-3 rounded-2xl text-xs font-medium whitespace-nowrap transition-all flex items-center gap-2 mr-2 shadow-lg shadow-ember-500/20" title="Enviar vários ficheiros .json para o banco">
+                    <label class="cursor-pointer bg-primary hover:bg-primary-hover text-white px-5 py-3 rounded-2xl text-xs font-medium whitespace-nowrap transition-all flex items-center gap-2 mr-2 shadow-md" title="Enviar vários ficheiros .json para o banco">
                         <i class="fa-solid fa-cloud-arrow-up"></i> Upload Lote
                         <input type="file" accept=".json" multiple class="hidden" onchange="cat.uploadEmMassa(this)">
                     </label>
@@ -575,7 +612,7 @@
 
         <!-- ABA 3: PEDIDOS / TXT -->
         <div id="view-requests" class="tab-content">
-            <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 md:p-8">
+            <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6 md:p-8">
                 
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-b border-zinc-800 pb-8">
                     <div>
@@ -662,7 +699,7 @@
         <div id="view-ranking" class="tab-content">
             <div class="max-w-2xl mx-auto">
                 <!-- Coluna: Top Colaboradores -->
-                <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 md:p-8">
+                <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6 md:p-8">
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-zinc-800 pb-4 gap-3">
                         <div>
                             <h2 class="text-lg font-semibold text-white flex items-center gap-2">
@@ -690,7 +727,7 @@
         <!-- ABA 4: ARMAZENAMENTO -->
         <div id="view-storage" class="tab-content">
             <div class="max-w-3xl mx-auto space-y-6">
-                <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 md:p-8">
+                <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6 md:p-8">
                     <div class="flex justify-between items-center mb-6">
                         <div>
                             <h2 class="text-lg font-semibold text-white">Limite do Banco de Dados</h2>
@@ -809,7 +846,7 @@
 
         <!-- ABA 5: DENÚNCIAS (Admin-only) -->
         <div id="view-reports" class="tab-content">
-            <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 md:p-8">
+            <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6 md:p-8">
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-b border-zinc-800 pb-8">
                     <div>
                         <h2 class="text-lg font-semibold text-white flex items-center gap-2">
@@ -968,7 +1005,7 @@
                 
                 <div class="flex gap-3 pt-2">
                     <button type="button" onclick="closeReportModal()" class="flex-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-400 border border-zinc-800 py-2.5 rounded-xl text-xs font-semibold transition-all">Cancelar</button>
-                    <button type="submit" class="flex-1 bg-red-650 hover:bg-red-600 text-white py-2.5 rounded-xl text-xs font-semibold transition-all shadow-lg shadow-red-600/10">Enviar</button>
+                    <button type="submit" class="flex-1 bg-red-650 hover:bg-red-600 text-white py-2.5 rounded-xl text-xs font-semibold transition-all shadow-sm">Enviar</button>
                 </div>
             </form>
         </div>
@@ -983,7 +1020,7 @@
         <div id="login-modal-backdrop" class="absolute inset-0 bg-black/75 backdrop-blur-md transition-opacity duration-300 opacity-0"></div>
         
         <!-- Conteúdo do Modal com animação de escala e opacidade -->
-        <div id="login-modal-content" class="relative bg-zinc-900/90 border border-zinc-800/80 rounded-2xl w-full max-w-md p-6 md:p-8 shadow-2xl shadow-indigo-500/5 transition-all duration-300 transform scale-95 opacity-0">
+        <div id="login-modal-content" class="relative bg-zinc-900/90 border border-zinc-800/80 rounded-2xl w-full max-w-md p-4 sm:p-6 md:p-8 shadow-2xl shadow-indigo-500/5 transition-all duration-300 transform scale-95 opacity-0">
             
             <!-- Efeito de Brilho de Fundo -->
             <div class="absolute -top-10 -left-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -1015,7 +1052,7 @@
                     <button type="button" id="login-modal-cancel" class="flex-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-400 border border-zinc-800 hover:border-zinc-700 py-3 rounded-xl text-xs font-semibold transition-all">
                         Cancelar
                     </button>
-                    <button type="submit" id="login-modal-submit" class="flex-1 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white py-3 rounded-xl text-xs font-semibold transition-all shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2">
+                    <button type="submit" id="login-modal-submit" class="flex-1 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white py-3 rounded-xl text-xs font-semibold transition-all shadow-sm flex items-center justify-center gap-2">
                         <span>Confirmar</span>
                         <i class="fa-solid fa-chevron-right text-[10px]"></i>
                     </button>
@@ -3292,7 +3329,7 @@
                             <div class="bg-zinc-900 p-3 rounded-xl border border-zinc-800 flex flex-col md:flex-row gap-3 md:items-center animate-fade-in">
                                 <div class="flex items-center justify-between w-full md:w-auto md:shrink-0 gap-2 border-b border-zinc-850 pb-2 md:border-b-0 md:pb-0">
                                     <div class="flex items-center gap-3">
-                                        <input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-800 bg-zinc-950 text-ember-500 focus:ring-ember-500 shrink-0" data-type="movie" data-index="${index}">
+                                        <input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-800 bg-zinc-950 text-primary focus:ring-ember-500 shrink-0" data-type="movie" data-index="${index}">
                                         <div class="bg-zinc-950 text-zinc-500 border border-zinc-800 px-2.5 py-1 md:w-10 md:h-10 rounded-lg flex justify-center items-center text-xs shrink-0"><i class="fa-solid fa-film text-xs"></i></div>
                                     </div>
                                     <button onclick="gen.removeEditData('movie', ${index})" class="md:hidden bg-zinc-950 border border-zinc-800 hover:border-red-900 hover:bg-red-950 text-zinc-500 hover:text-red-400 w-8 h-8 rounded-lg transition flex items-center justify-center shrink-0"><i class="fa-solid fa-trash text-xs"></i></button>
@@ -3321,7 +3358,7 @@
                                 <div class="bg-zinc-900 p-3 rounded-xl border border-zinc-800 flex flex-col md:flex-row gap-3 md:items-center animate-fade-in">
                                     <div class="flex items-center justify-between w-full md:w-auto md:shrink-0 gap-2 border-b border-zinc-850 pb-2 md:border-b-0 md:pb-0">
                                         <div class="flex items-center gap-3">
-                                            <input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-800 bg-zinc-950 text-ember-500 focus:ring-ember-500 shrink-0" data-type="series" data-season="${season}" data-ep="${ep}" data-index="${index}">
+                                            <input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-800 bg-zinc-950 text-primary focus:ring-ember-500 shrink-0" data-type="series" data-season="${season}" data-ep="${ep}" data-index="${index}">
                                             <div class="bg-zinc-950 text-zinc-400 border border-zinc-800 rounded-lg flex items-center justify-center shrink-0 p-1 md:w-16 md:h-10 text-xs font-semibold">
                                                 <span class="text-[9px] uppercase text-zinc-500 font-bold hidden md:inline mr-0.5">Ep</span>
                                                 <input type="number" class="w-8 bg-transparent text-white border-0 focus:ring-0 text-center font-mono p-0 font-semibold" value="${ep}" min="1" onchange="gen.changeEpNum('${season}', '${ep}', ${index}, this)">
@@ -5173,7 +5210,7 @@
                                     </div>
                                     <div class="flex items-center gap-2.5 text-[10px]">
                                         <div class="flex items-center text-zinc-400" title="Filmes enviados">
-                                            <i class="fa-solid fa-film text-ember-500 mr-1"></i>${countMovies} <span class="hidden sm:inline ml-0.5">Filmes</span>
+                                            <i class="fa-solid fa-film text-primary mr-1"></i>${countMovies} <span class="hidden sm:inline ml-0.5">Filmes</span>
                                         </div>
                                         <div class="flex items-center text-zinc-400" title="Episódios de Séries enviados">
                                             <i class="fa-solid fa-tv text-sky-400 mr-1"></i>${countSeries} <span class="hidden sm:inline ml-0.5">Eps</span>
