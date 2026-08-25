@@ -120,6 +120,7 @@ const initDB = async () => {
             nome_do_json VARCHAR(255) UNIQUE NOT NULL,
             conteudo JSONB NOT NULL,
             is_oculto BOOLEAN DEFAULT FALSE,
+            is_pendente BOOLEAN DEFAULT FALSE,
             criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
     `;
@@ -164,6 +165,7 @@ const initDB = async () => {
             await pool.query('ALTER TABLE usuarios_discord ADD COLUMN IF NOT EXISTS is_ajudante BOOLEAN DEFAULT FALSE;');
             await pool.query('ALTER TABLE usuarios_discord ADD COLUMN IF NOT EXISTS cargos JSONB DEFAULT \'[]\'::jsonb;');
             await pool.query('ALTER TABLE arquivos_json ADD COLUMN IF NOT EXISTS is_oculto BOOLEAN DEFAULT FALSE;');
+            await pool.query('ALTER TABLE arquivos_json ADD COLUMN IF NOT EXISTS is_pendente BOOLEAN DEFAULT FALSE;');
         } catch (e) {
             console.error('Erro ao adicionar novas colunas:', e.message);
         }
@@ -244,7 +246,7 @@ async function getTMDBInfo(id) {
             };
         }
     } catch (err) {
-        console.error("❌ Erro ao buscar dados no TMDB para o ID " + id + ":", err.message);
+        console.error("❌ Erro ao buscar dados no TMDB para o ID", id, ":", err.message);
     }
     return null;
 }
@@ -261,7 +263,7 @@ async function getCinemetaInfo(id, type) {
         const data = await res.json();
         return data.meta || null;
     } catch (err) {
-        console.error(`❌ Erro ao buscar no Cinemeta para o ID ${id}:`, err.message);
+        console.error("❌ Erro ao buscar no Cinemeta para o ID", id, ":", err.message);
     }
     return null;
 }
@@ -490,27 +492,17 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         
         const token = generateToken(payload);
         
-        // Define redirect target from state if present, otherwise default to relative path '/'
         let baseRedirect = '/';
         const stateStr = String(state || '').trim();
         
         if (stateStr) {
             try {
-                // Proteção contra open redirect: se for caminho relativo, aceitamos (mas não // para evitar url bypass)
-                if (stateStr.startsWith('/') && !stateStr.startsWith('//')) {
-                    baseRedirect = stateStr;
-                } else if (stateStr.startsWith('http://') || stateStr.startsWith('https://')) {
-                    const parsedUrl = new URL(stateStr);
-                    const currentHost = String(req.get('host') || '').split(':')[0];
-                    const allowedHosts = ['localhost', '127.0.0.1', currentHost];
-                    
-                    // Validação estrita: aceita apenas hosts permitidos ou subdomínios confiáveis
-                    if (allowedHosts.includes(parsedUrl.hostname) || parsedUrl.hostname.endsWith('.fenixstudio.com') || parsedUrl.hostname === 'fenixstudio.com') {
-                        baseRedirect = parsedUrl.href; // Reconstrói a URL para sanitizar
-                    }
-                }
+                // Previne completamente Open Redirect forçando apenas o path e search
+                const parsed = new URL(stateStr, 'http://localhost');
+                baseRedirect = parsed.pathname + parsed.search;
             } catch (e) {
                 console.error("Erro ao validar state redirect URI:", e.message);
+                baseRedirect = '/';
             }
         }
         
@@ -652,25 +644,28 @@ app.post('/upload', upload.none(), async (req, res) => {
     let finalConteudo = parsedConteudo;
     injectDateIntoStreams(finalConteudo);
 
+    const isPendente = !isAdmin && !isAjudante;
+    const isGenerator = req.query.generator === 'true';
+
     if (isEdit) {
-        if (!canOverwrite) {
+        if (!isAdmin && !isGenerator) {
             finalConteudo = mergeMediaContents(existingContent, parsedConteudo);
             console.log(`[Upload] Mesclando conteúdo existente para '${nome}'`);
         } else {
-            console.log(`[Upload Admin/Ajudante] Sobrescrevendo conteúdo para '${nome}' (sem mesclar)`);
+            console.log(`[Upload] Sobrescrevendo conteúdo para '${nome}' (isAdmin=${isAdmin}, isGenerator=${isGenerator})`);
         }
     }
 
     try {
         // Usa ON CONFLICT para atualizar o JSON se o nome já existir (comportamento de UPSERT)
         const query = `
-            INSERT INTO arquivos_json (nome_do_json, conteudo) 
-            VALUES ($1, $2)
+            INSERT INTO arquivos_json (nome_do_json, conteudo, is_pendente) 
+            VALUES ($1, $2, $3)
             ON CONFLICT (nome_do_json) 
-            DO UPDATE SET conteudo = EXCLUDED.conteudo, criado_em = CURRENT_TIMESTAMP
+            DO UPDATE SET conteudo = EXCLUDED.conteudo, is_pendente = EXCLUDED.is_pendente, criado_em = CURRENT_TIMESTAMP
             RETURNING *;
         `;
-        const values = [nome, JSON.stringify(finalConteudo)];
+        const values = [nome, JSON.stringify(finalConteudo), isPendente];
         
         await pool.query(query, values);
         res.status(201).json({ mensagem: `JSON '${nome}' salvo com sucesso!` });
@@ -692,7 +687,7 @@ app.get('/api/all', async (req, res) => {
     const canSeeHidden = (senha === adminPassword) || (user && user.isAjudante);
 
     try {
-        const query = `SELECT conteudo FROM arquivos_json ${canSeeHidden ? '' : 'WHERE is_oculto = FALSE'} ORDER BY criado_em DESC;`;
+        const query = `SELECT conteudo FROM arquivos_json ${canSeeHidden ? '' : 'WHERE is_oculto = FALSE AND is_pendente = FALSE'} ORDER BY criado_em DESC;`;
         const result = await pool.query(query);
         res.json(result.rows.map(r => r.conteudo));
     } catch (err) {
@@ -713,7 +708,7 @@ app.get('/api/catalog', async (req, res) => {
     const canSeeHidden = (senha === adminPassword) || (user && user.isAjudante);
 
     try {
-        const query = `SELECT conteudo FROM arquivos_json ${canSeeHidden ? '' : 'WHERE is_oculto = FALSE'} ORDER BY criado_em DESC;`;
+        const query = `SELECT conteudo FROM arquivos_json ${canSeeHidden ? '' : 'WHERE is_oculto = FALSE AND is_pendente = FALSE'} ORDER BY criado_em DESC;`;
         const result = await pool.query(query);
         res.json(result.rows.map(r => r.conteudo));
     } catch (err) {
@@ -794,7 +789,7 @@ app.get('/:nome', async (req, res) => {
                 to_jsonb(COALESCE((conteudo->>'views')::int, 0) + 1)
             ) 
             WHERE nome_do_json = $1 
-            ${canSeeHidden ? '' : 'AND is_oculto = FALSE'}
+            ${canSeeHidden ? '' : 'AND is_oculto = FALSE AND is_pendente = FALSE'}
             RETURNING conteudo;
         `;
         const result = await pool.query(query, [req.params.nome]);
@@ -1045,6 +1040,76 @@ app.post('/api/denunciar', async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ erro: 'Erro ao salvar denúncia no banco de dados.' });
+    }
+});
+
+// ==========================================
+// ROTAS DE APROVAÇÃO (Moderation Queue)
+// ==========================================
+app.get('/api/arquivos/pendentes', async (req, res) => {
+    const { senha } = req.query;
+    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    const user = verifyToken(token);
+
+    if (senha !== adminPassword && (!user || !user.isAjudante)) {
+        return res.status(401).json({ erro: 'Não autorizado.' });
+    }
+
+    try {
+        const query = 'SELECT nome_do_json, conteudo, criado_em FROM arquivos_json WHERE is_pendente = TRUE ORDER BY criado_em ASC;';
+        const result = await pool.query(query);
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: 'Erro ao buscar arquivos pendentes.' });
+    }
+});
+
+app.post('/api/arquivos/aprovar', async (req, res) => {
+    const { nome, senha } = req.body;
+    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    const user = verifyToken(token);
+
+    if (senha !== adminPassword && (!user || !user.isAjudante)) {
+        return res.status(401).json({ erro: 'Não autorizado.' });
+    }
+
+    try {
+        const query = 'UPDATE arquivos_json SET is_pendente = FALSE WHERE nome_do_json = $1 RETURNING *;';
+        const result = await pool.query(query, [nome]);
+        
+        if (result.rowCount === 0) return res.status(404).json({ erro: 'Arquivo pendente não encontrado.' });
+        res.json({ sucesso: true, mensagem: 'Arquivo aprovado!' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: 'Erro ao aprovar.' });
+    }
+});
+
+app.post('/api/arquivos/rejeitar', async (req, res) => {
+    const { nome, senha } = req.body;
+    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    const user = verifyToken(token);
+
+    if (senha !== adminPassword && (!user || !user.isAjudante)) {
+        return res.status(401).json({ erro: 'Não autorizado.' });
+    }
+
+    try {
+        const query = 'DELETE FROM arquivos_json WHERE nome_do_json = $1 RETURNING *;';
+        const result = await pool.query(query, [nome]);
+        
+        if (result.rowCount === 0) return res.status(404).json({ erro: 'Arquivo pendente não encontrado.' });
+        res.json({ sucesso: true, mensagem: 'Edição/Envio rejeitado com sucesso.' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: 'Erro ao rejeitar.' });
     }
 });
 

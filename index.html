@@ -129,9 +129,14 @@
         }
 
         /* Apple Design: Spring Buttons */
+        button, .nav-btn, .glass-panel {
+            transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background-color 200ms ease, opacity 200ms ease, border-color 200ms ease;
+        }
+        button:active:not(:disabled) {
+            transform: scale(0.97);
+        }
         
-
-        /* Apple Design: Modals and Panels */
+        /* Modal Backdrop */
         .glass-panel {
             background: var(--surface-translucent);
             backdrop-filter: blur(24px);
@@ -204,6 +209,9 @@
         </button>
         <button onclick="switchView('reports'); loadReportsList();" id="btn-reports" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
             <i class="fa-solid fa-triangle-exclamation text-sm"></i> <span class="hidden sm:inline">Denúncias</span>
+        </button>
+        <button onclick="switchView('approvals'); loadApprovalsList();" id="btn-approvals" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
+            <i class="fa-solid fa-clipboard-check text-sm"></i> <span class="hidden sm:inline">Aprovar Envios</span>
         </button>
     </nav>
 
@@ -885,6 +893,49 @@
             </div>
         </div>
 
+        <!-- =======================
+             VIEW: APROVAÇÕES
+             ======================= -->
+        <div id="view-approvals" class="tab-content hidden">
+            <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6 md:p-8">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-b border-zinc-800 pb-8">
+                    <div>
+                        <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-clipboard-check text-indigo-500"></i> Fila de Aprovação
+                        </h2>
+                        <p class="text-sm text-zinc-500 mt-1">Arquivos editados ou enviados por membros normais ficam aqui aguardando avaliação.</p>
+                    </div>
+                    <div>
+                        <button onclick="loadApprovalsList()" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-xl text-xs font-medium transition flex items-center gap-2">
+                            <i class="fa-solid fa-rotate-right"></i> Atualizar Lista
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse min-w-[700px]">
+                        <thead>
+                            <tr class="border-b border-zinc-800/60 text-xs text-zinc-500 font-medium">
+                                <th class="pb-4 pr-4 font-normal w-1/3">Arquivo JSON</th>
+                                <th class="pb-4 px-4 font-normal text-center">Data do Envio</th>
+                                <th class="pb-4 px-4 font-normal text-center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="approvals-table-body" class="text-sm divide-y divide-zinc-800/40">
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div id="approvals-empty-state" class="hidden text-center py-16 text-zinc-500 border border-dashed border-zinc-800 rounded-xl mt-6">
+                    <div class="w-16 h-16 bg-zinc-800/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fa-solid fa-box-open text-2xl text-zinc-600"></i>
+                    </div>
+                    <h3 class="font-medium text-zinc-400 mb-1">Nenhum arquivo pendente</h3>
+                    <p class="text-xs">Todos os envios foram verificados.</p>
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <!-- Modal do Catálogo (Ver Links) -->
@@ -1222,6 +1273,8 @@
 
         function updateAdminUI() {
             const isLogged = sessionStorage.getItem('fenixflix_senha') !== null;
+            const isAjudante = localStorage.getItem('is_ajudante') === 'true';
+            const hasAccess = isLogged || isAjudante;
             isAdmin = isLogged;
             
             // 1. Ocultar/Exibir botões de navegação
@@ -1229,6 +1282,7 @@
             const btnStorage = document.getElementById('btn-storage');
             const btnRequests = document.getElementById('btn-requests');
             const btnReports = document.getElementById('btn-reports');
+            const btnApprovals = document.getElementById('btn-approvals');
             
             if (btnGenerator) {
                 // O Gerador é público para que qualquer um possa usar o buscador e upload do Telegram
@@ -1242,23 +1296,50 @@
                 }
             }
             if (btnRequests) {
-                if (isLogged) {
+                if (hasAccess) {
                     btnRequests.classList.remove('hidden');
                 } else {
                     btnRequests.classList.add('hidden');
                 }
             }
             if (btnReports) {
-                if (isLogged) {
+                if (hasAccess) {
                     btnReports.classList.remove('hidden');
                 } else {
                     btnReports.classList.add('hidden');
                 }
             }
+            if (btnApprovals) {
+                if (hasAccess) {
+                    btnApprovals.classList.remove('hidden');
+                } else {
+                    btnApprovals.classList.add('hidden');
+                }
+            }
+
+            // Ocultar Visualizar JSON (Raw) para Ajudantes (apenas Admin pode ver as URLs cruas)
+            const btnSubPreview = document.getElementById('btn-sub-preview');
+            const previewColumn = document.getElementById('generator-preview-column');
+            const mainCol = document.getElementById('generator-main-column');
+            if (btnSubPreview && previewColumn && mainCol) {
+                if (isAdmin) {
+                    btnSubPreview.style.display = '';
+                    previewColumn.classList.add('lg:block'); 
+                    mainCol.classList.remove('lg:col-span-3');
+                    mainCol.classList.add('lg:col-span-2');
+                } else {
+                    btnSubPreview.style.display = 'none';
+                    previewColumn.classList.remove('lg:block'); 
+                    mainCol.classList.remove('lg:col-span-2');
+                    mainCol.classList.add('lg:col-span-3');
+                    // Força a visualização do editor visual
+                    if (typeof toggleGeneratorSubView === 'function') toggleGeneratorSubView('editor');
+                }
+            }
             
             // Se não estiver logado e estiver na aba de pedidos, armazenamento ou denúncias, volta para o catálogo (o gerador agora é público)
             const activeTab = document.querySelector('.tab-content.active');
-            if (!isLogged && activeTab && (activeTab.id === 'view-requests' || activeTab.id === 'view-storage' || activeTab.id === 'view-reports')) {
+            if (!hasAccess && activeTab && (activeTab.id === 'view-requests' || activeTab.id === 'view-storage' || activeTab.id === 'view-reports' || activeTab.id === 'view-approvals')) {
                 switchView('catalog');
                 setTimeout(() => cat.filter('all'), 50);
             }
@@ -3035,7 +3116,7 @@
                         headers['Authorization'] = `Bearer ${discordToken}`;
                     }
 
-                    const response = await fetch(API_URL + '/upload', {
+                    const response = await fetch(API_URL + '/upload?generator=true', {
                         method: 'POST',
                         headers: headers,
                         body: formData
@@ -3321,27 +3402,93 @@
                 const container = document.getElementById('visualEditorContent');
                 let html = '';
 
+                // Função auxiliar para parsear nome (ex: "FenixFlix\nDublado 1080p")
+                const parseName = (name) => {
+                    if (!name) return { server: 'FenixFlix', lang: 'Dublado', qual: '1080p' };
+                    const parts = name.split('\n');
+                    const server = parts[0] || 'FenixFlix';
+                    const rest = parts[1] || '';
+                    let lang = 'Dublado';
+                    let qual = '1080p';
+                    
+                    if (rest.toLowerCase().includes('legendado')) lang = 'Legendado';
+                    if (rest.toLowerCase().includes('nacional')) lang = 'Nacional';
+                    
+                    if (rest.toLowerCase().includes('4k')) qual = '4K';
+                    else if (rest.toLowerCase().includes('720p')) qual = '720p';
+                    else if (rest.toLowerCase().includes('cam')) qual = 'CAM';
+                    else if (rest.toLowerCase().includes('sd')) qual = 'SD';
+                    
+                    return { server, lang, qual };
+                };
+
+                const renderStreamCard = (stream, index, type, season, ep) => {
+                    const { server, lang, qual } = parseName(stream.name);
+                    const isSeries = type === 'series';
+                    const onNameChange = isSeries ? 
+                        `gen.updateStreamParsed(this, 'series', ${index}, '${season}', '${ep}')` : 
+                        `gen.updateStreamParsed(this, 'movie', ${index})`;
+                    const onUrlChange = isSeries ? 
+                        `gen.updateEditData('series', ${index}, 'url', this, '${season}', '${ep}')` : 
+                        `gen.updateEditData('movie', ${index}, 'url', this)`;
+                    const onRemove = isSeries ? 
+                        `gen.removeEditData('series', ${index}, '${season}', '${ep}')` : 
+                        `gen.removeEditData('movie', ${index})`;
+
+                    const urlField = isAdmin ? 
+                        `<input type="text" class="input-unified p-2 text-xs rounded-lg font-mono w-full mt-2" placeholder="URL do Arquivo" value="${escapeHTML(stream.url)}" onchange="${onUrlChange}">` : 
+                        `<div class="mt-2 text-[10px] text-zinc-500 font-mono bg-zinc-950/50 p-2 rounded-lg flex items-center gap-2 border border-white/5"><i class="fa-solid fa-lock text-zinc-600"></i> URL Oculta por Segurança</div>`;
+
+                    const checkbox = isSeries ? 
+                        `<input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-white/10 bg-zinc-950/50 text-indigo-500 focus:ring-indigo-500 shrink-0" data-type="series" data-season="${season}" data-ep="${ep}" data-index="${index}">` : 
+                        `<input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-white/10 bg-zinc-950/50 text-indigo-500 focus:ring-indigo-500 shrink-0" data-type="movie" data-index="${index}">`;
+
+                    return `
+                    <div class="bg-[var(--surface-translucent)] backdrop-blur-md p-3.5 rounded-2xl border border-white/5 flex flex-col hover:border-white/10 transition-colors animate-fade-in group">
+                        <div class="flex items-center justify-between border-b border-white/5 pb-2.5 mb-2.5">
+                            <div class="flex items-center gap-3">
+                                ${checkbox}
+                                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-white/5 flex items-center justify-center shrink-0">
+                                    <i class="fa-solid fa-play text-[10px] text-indigo-400"></i>
+                                </div>
+                                <div class="flex flex-col">
+                                    <span class="text-xs font-semibold text-white">Stream ${index + 1}</span>
+                                    ${isSeries ? `<span class="text-[9px] font-medium text-zinc-400">S${season} E${ep}</span>` : `<span class="text-[9px] font-medium text-zinc-400">Filme</span>`}
+                                </div>
+                            </div>
+                            <button onclick="${onRemove}" class="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500/10 hover:bg-red-500/20 text-red-400 w-7 h-7 rounded-full flex items-center justify-center shrink-0" title="Remover"><i class="fa-solid fa-xmark text-xs"></i></button>
+                        </div>
+                        
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <input type="text" data-field="server" class="bg-zinc-950/50 text-white text-xs border border-white/5 rounded-lg px-2.5 py-1.5 focus:border-indigo-500 outline-none w-[100px]" placeholder="Servidor" value="${escapeHTML(server)}" onchange="${onNameChange}">
+                            
+                            <select data-field="lang" class="bg-zinc-950/50 text-zinc-300 text-xs border border-white/5 rounded-lg px-2.5 py-1.5 focus:border-indigo-500 outline-none appearance-none cursor-pointer" onchange="${onNameChange}">
+                                <option value="Dublado" ${lang === 'Dublado' ? 'selected' : ''}>Dublado</option>
+                                <option value="Legendado" ${lang === 'Legendado' ? 'selected' : ''}>Legendado</option>
+                                <option value="Nacional" ${lang === 'Nacional' ? 'selected' : ''}>Nacional</option>
+                            </select>
+
+                            <select data-field="qual" class="bg-zinc-950/50 text-zinc-300 text-xs border border-white/5 rounded-lg px-2.5 py-1.5 focus:border-indigo-500 outline-none appearance-none cursor-pointer" onchange="${onNameChange}">
+                                <option value="4K" ${qual === '4K' ? 'selected' : ''}>4K</option>
+                                <option value="1080p" ${qual === '1080p' ? 'selected' : ''}>1080p</option>
+                                <option value="720p" ${qual === '720p' ? 'selected' : ''}>720p</option>
+                                <option value="SD" ${qual === 'SD' ? 'selected' : ''}>SD</option>
+                                <option value="CAM" ${qual === 'CAM' ? 'selected' : ''}>CAM</option>
+                            </select>
+                        </div>
+                        ${urlField}
+                    </div>`;
+                };
+
                 if (gen.editData.type === 'movie') {
                     if (!gen.editData.streams || gen.editData.streams.length === 0) {
-                        html = '<p class="text-zinc-600 text-center text-sm py-6">Nenhum link encontrado.</p>';
+                        html = '<div class="text-zinc-500 text-center text-sm py-12 bg-white/[0.02] rounded-2xl border border-white/5"><i class="fa-solid fa-wind mb-2 text-xl block opacity-50"></i>Nenhum link encontrado.</div>';
                     } else {
+                        html = '<div class="grid grid-cols-1 md:grid-cols-2 gap-3">';
                         gen.editData.streams.forEach((stream, index) => {
-                            html += `
-                            <div class="bg-zinc-900 p-3 rounded-xl border border-zinc-800 flex flex-col md:flex-row gap-3 md:items-center animate-fade-in">
-                                <div class="flex items-center justify-between w-full md:w-auto md:shrink-0 gap-2 border-b border-zinc-850 pb-2 md:border-b-0 md:pb-0">
-                                    <div class="flex items-center gap-3">
-                                        <input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-800 bg-zinc-950 text-primary focus:ring-ember-500 shrink-0" data-type="movie" data-index="${index}">
-                                        <div class="bg-zinc-950 text-zinc-500 border border-zinc-800 px-2.5 py-1 md:w-10 md:h-10 rounded-lg flex justify-center items-center text-xs shrink-0"><i class="fa-solid fa-film text-xs"></i></div>
-                                    </div>
-                                    <button onclick="gen.removeEditData('movie', ${index})" class="md:hidden bg-zinc-950 border border-zinc-800 hover:border-red-900 hover:bg-red-950 text-zinc-500 hover:text-red-400 w-8 h-8 rounded-lg transition flex items-center justify-center shrink-0"><i class="fa-solid fa-trash text-xs"></i></button>
-                                </div>
-                                <div class="flex-grow flex flex-col md:flex-row gap-2.5 w-full">
-                                    <textarea rows="1" class="input-unified p-2.5 text-xs rounded-lg w-full md:w-1/3 custom-scrollbar" placeholder="Nome" onchange="gen.updateEditData('movie', ${index}, 'name', this)">${escapeHTML(stream.name)}</textarea>
-                                    <input type="text" class="input-unified p-2.5 text-xs rounded-lg font-mono w-full md:w-2/3" placeholder="URL" value="${escapeHTML(stream.url)}" onchange="gen.updateEditData('movie', ${index}, 'url', this)">
-                                </div>
-                                <button onclick="gen.removeEditData('movie', ${index})" class="hidden md:flex bg-zinc-950 border border-zinc-800 hover:border-red-900 hover:bg-red-950 text-zinc-500 hover:text-red-400 w-10 h-10 rounded-lg transition items-center justify-center shrink-0"><i class="fa-solid fa-trash text-xs"></i></button>
-                            </div>`;
+                            html += renderStreamCard(stream, index, 'movie');
                         });
+                        html += '</div>';
                     }
                 } else {
                     let hasItems = false;
@@ -3349,40 +3496,41 @@
                     
                     seasons.forEach(season => {
                         const eps = Object.keys(gen.editData.streams[season]).sort((a,b) => parseInt(a)-parseInt(b));
-                        
-                        html += `<div class="mt-6 mb-3 px-1 border-b border-zinc-850 pb-1 flex items-center justify-between"><span class="text-zinc-400 text-xs font-semibold uppercase tracking-wider">Temporada ${season}</span></div>`;
+                        html += `
+                        <div class="mb-6">
+                            <div class="sticky top-0 z-10 bg-zinc-950/80 backdrop-blur-md py-2 border-b border-white/10 mb-3 flex items-center justify-between">
+                                <span class="text-white text-sm font-bold tracking-tight">Temporada ${season}</span>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        `;
                         
                         eps.forEach(ep => {
                             gen.editData.streams[season][ep].forEach((stream, index) => {
                                 hasItems = true;
-                                html += `
-                                <div class="bg-zinc-900 p-3 rounded-xl border border-zinc-800 flex flex-col md:flex-row gap-3 md:items-center animate-fade-in">
-                                    <div class="flex items-center justify-between w-full md:w-auto md:shrink-0 gap-2 border-b border-zinc-850 pb-2 md:border-b-0 md:pb-0">
-                                        <div class="flex items-center gap-3">
-                                            <input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-800 bg-zinc-950 text-primary focus:ring-ember-500 shrink-0" data-type="series" data-season="${season}" data-ep="${ep}" data-index="${index}">
-                                            <div class="bg-zinc-950 text-zinc-400 border border-zinc-800 rounded-lg flex items-center justify-center shrink-0 p-1 md:w-16 md:h-10 text-xs font-semibold">
-                                                <span class="text-[9px] uppercase text-zinc-500 font-bold hidden md:inline mr-0.5">Ep</span>
-                                                <input type="number" class="w-8 bg-transparent text-white border-0 focus:ring-0 text-center font-mono p-0 font-semibold" value="${ep}" min="1" onchange="gen.changeEpNum('${season}', '${ep}', ${index}, this)">
-                                            </div>
-                                        </div>
-                                        <button onclick="gen.removeEditData('series', ${index}, '${season}', '${ep}')" class="md:hidden bg-zinc-950 border border-zinc-800 hover:border-red-900 hover:bg-red-950 text-zinc-500 hover:text-red-400 w-8 h-8 rounded-lg transition flex items-center justify-center shrink-0"><i class="fa-solid fa-trash text-xs"></i></button>
-                                    </div>
-                                    <div class="flex-grow flex flex-col md:flex-row gap-2.5 w-full">
-                                        <textarea rows="1" class="input-unified p-2.5 text-xs rounded-lg w-full md:w-1/3 custom-scrollbar" placeholder="Nome" onchange="gen.updateEditData('series', ${index}, 'name', this, '${season}', '${ep}')">${escapeHTML(stream.name)}</textarea>
-                                        <input type="text" class="input-unified p-2.5 text-xs rounded-lg font-mono w-full md:w-2/3" placeholder="URL" value="${escapeHTML(stream.url)}" onchange="gen.updateEditData('series', ${index}, 'url', this, '${season}', '${ep}')">
-                                    </div>
-                                    <button onclick="gen.removeEditData('series', ${index}, '${season}', '${ep}')" class="hidden md:flex bg-zinc-950 border border-zinc-800 hover:border-red-900 hover:bg-red-950 text-zinc-500 hover:text-red-400 w-10 h-10 rounded-lg transition items-center justify-center shrink-0"><i class="fa-solid fa-trash text-xs"></i></button>
-                                </div>`;
+                                html += renderStreamCard(stream, index, 'series', season, ep);
                             });
                         });
+                        html += `</div></div>`;
                     });
 
                     if (!hasItems) {
-                        html = '<p class="text-zinc-600 text-center text-sm py-6">Nenhum episódio encontrado.</p>';
+                        html = '<div class="text-zinc-500 text-center text-sm py-12 bg-white/[0.02] rounded-2xl border border-white/5"><i class="fa-solid fa-wind mb-2 text-xl block opacity-50"></i>Nenhum episódio encontrado.</div>';
                     }
                 }
 
                 container.innerHTML = html;
+            },
+            
+            updateStreamParsed: (element, type, index, season, ep) => {
+                const card = element.closest('.group');
+                const server = card.querySelector('[data-field="server"]').value;
+                const lang = card.querySelector('[data-field="lang"]').value;
+                const qual = card.querySelector('[data-field="qual"]').value;
+                const newName = `${server}\n${lang} ${qual}`;
+                
+                // Mocar um input element para passar pro updateEditData
+                const dummyInput = { value: newName };
+                gen.updateEditData(type, index, 'name', dummyInput, season, ep);
             }
         };
         gen.init();
@@ -4981,7 +5129,9 @@
                         saveBtn.setAttribute('title', 'Salvar JSON no Banco (Admin)');
                     }
                 }
+                }
             }
+            if (typeof updateAdminUI === 'function') updateAdminUI();
         }
 
         function discordLogout() {
@@ -5251,7 +5401,118 @@
                 tcContainer.innerHTML = '<p class="text-red-500 text-center py-6 text-xs">Falha ao carregar ranking de colaboradores.</p>';
             }
         }
+        // ==========================
+        // MODERATION QUEUE (Approvals)
+        // ==========================
+        async function loadApprovalsList() {
+            const tableBody = document.getElementById('approvals-table-body');
+            const emptyState = document.getElementById('approvals-empty-state');
+            tableBody.innerHTML = `<tr><td colspan="3" class="py-12 text-center text-zinc-500"><i class="fa-solid fa-spinner animate-spin mr-1.5"></i> Carregando pendentes...</td></tr>`;
+            emptyState.classList.add('hidden');
 
+            const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
+            const discordToken = localStorage.getItem('discord_token');
+            const isAjudante = localStorage.getItem('is_ajudante') === 'true';
+            
+            if (!adminSenha && !isAjudante) {
+                tableBody.innerHTML = `<tr><td colspan="3" class="py-12 text-center text-red-400">Acesso negado. Faça login como admin ou ajudante.</td></tr>`;
+                return;
+            }
+
+            try {
+                const headers = {};
+                if (discordToken) headers['Authorization'] = `Bearer ${discordToken}`;
+                
+                const res = await fetch(API_URL + `/api/arquivos/pendentes?senha=${encodeURIComponent(adminSenha)}`, { headers });
+                if (!res.ok) throw new Error("Falha ao carregar pendentes");
+                
+                const pendentes = await res.json();
+
+                if (pendentes.length === 0) {
+                    tableBody.innerHTML = '';
+                    emptyState.classList.remove('hidden');
+                    return;
+                }
+
+                let html = '';
+                pendentes.forEach(p => {
+                    const dataStr = new Date(p.criado_em).toLocaleString('pt-BR');
+                    const jsNome = JSON.stringify(p.nome_do_json).replace(/"/g, '&quot;');
+                    
+                    let title = p.nome_do_json;
+                    if (p.conteudo && p.conteudo.id) title = p.conteudo.title || p.conteudo.id;
+
+                    html += `
+                        <tr class="border-b border-zinc-800/40 hover:bg-zinc-900/20 transition-colors">
+                            <td class="py-3.5 pr-4 font-semibold text-white">
+                                <span class="text-indigo-400">${escapeHTML(title)}</span>
+                                <span class="block text-[10px] text-zinc-500 font-mono font-normal mt-0.5">${escapeHTML(p.nome_do_json)}</span>
+                            </td>
+                            <td class="py-3.5 px-4 text-center text-[10px] text-zinc-500 font-mono">
+                                ${dataStr}
+                            </td>
+                            <td class="py-3.5 pl-4 text-center">
+                                <div class="flex items-center justify-center gap-2">
+                                    <button onclick="approveFile(${jsNome})" class="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30 transition-colors" title="Aprovar">
+                                        <i class="fa-solid fa-check text-[10px]"></i>
+                                    </button>
+                                    <button onclick="rejectFile(${jsNome})" class="w-8 h-8 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/30 transition-colors" title="Rejeitar">
+                                        <i class="fa-solid fa-xmark text-[10px]"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+                tableBody.innerHTML = html;
+            } catch (e) {
+                console.error(e);
+                tableBody.innerHTML = `<tr><td colspan="3" class="py-12 text-center text-red-500">Erro ao carregar arquivos pendentes.</td></tr>`;
+            }
+        }
+
+        async function actionPendingFile(nome, action) {
+            const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
+            const discordToken = localStorage.getItem('discord_token');
+            const isAjudante = localStorage.getItem('is_ajudante') === 'true';
+
+            if (!adminSenha && !isAjudante) return showToast("Acesso negado. Necessário Admin ou Ajudante.", "error");
+
+            try {
+                const headers = { 'Content-Type': 'application/json' };
+                if (discordToken) headers['Authorization'] = `Bearer ${discordToken}`;
+
+                const endpoint = action === 'approve' ? '/api/arquivos/aprovar' : '/api/arquivos/rejeitar';
+                const res = await fetch(API_URL + endpoint, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ nome, senha: adminSenha })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    showToast(data.mensagem, "success");
+                    loadApprovalsList();
+                } else {
+                    showToast(data.erro, "error");
+                }
+            } catch (e) {
+                console.error(e);
+                showToast(`Erro ao ${action === 'approve' ? 'aprovar' : 'rejeitar'} arquivo.`, "error");
+            }
+        }
+
+        async function approveFile(nome) {
+            if (confirm(`Deseja aprovar o arquivo ${nome} para aparecer no catálogo público?`)) {
+                actionPendingFile(nome, 'approve');
+            }
+        }
+
+        async function rejectFile(nome) {
+            if (confirm(`Deseja REJEITAR (deletar) a edição/envio do arquivo ${nome}?`)) {
+                actionPendingFile(nome, 'reject');
+            }
+        }
         async function loadReportsList() {
             const tableBody = document.getElementById('reports-table-body');
             const emptyState = document.getElementById('reports-empty-state');
