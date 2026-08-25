@@ -3509,8 +3509,13 @@
             },
 
             editInGenerator: async (id) => {
-                const senha = await getValidPassword("Digite a senha do sistema para editar este item:");
-                if (!senha) return;
+                const isAjudante = localStorage.getItem('is_ajudante') === 'true';
+                let senha = sessionStorage.getItem('fenixflix_senha') || '';
+                
+                if (!isAjudante && !senha) {
+                    senha = await getValidPassword("Digite a senha do sistema para editar este item:");
+                    if (!senha) return;
+                }
 
                 const item = cat.allItems.find(i => i.id === id);
                 if (!item) return;
@@ -3550,6 +3555,12 @@
             },
 
             downloadJson: (id) => {
+                const isLogged = localStorage.getItem('discord_token') || sessionStorage.getItem('fenixflix_senha');
+                if (!isLogged) {
+                    showToast("Você precisa logar com o Discord primeiro para baixar arquivos!", "error");
+                    return;
+                }
+
                 const item = cat.allItems.find(i => i.id === id);
                 if (!item) return;
 
@@ -3639,7 +3650,9 @@
                     footerHtml = `<div class="mt-auto pt-2.5 flex justify-between items-center"><span class="text-[10px] text-zinc-500 font-mono">${safeYear}</span><span class="${hasLink ? 'text-zinc-300' : 'text-red-400'} text-[10px] font-medium flex items-center gap-1.5">${hasLink ? streamCount + ' opções' : 'Sem links'}</span></div>`;
                 }
 
-                const isLogged = sessionStorage.getItem('fenixflix_senha') !== null;
+                const isAdminLogged = sessionStorage.getItem('fenixflix_senha') !== null;
+                const isAjudante = localStorage.getItem('is_ajudante') === 'true';
+                const isLogged = isAdminLogged || isAjudante;
                 const adminButtons = isLogged ? `
                     <button onclick="event.stopPropagation(); cat.editInGenerator(${jsId})" class="bg-zinc-900/90 text-zinc-300 hover:text-white p-2 rounded-lg backdrop-blur-md border border-zinc-700/50 transition"><i class="fa-solid fa-pen text-[10px]"></i></button>
                     <button onclick="event.stopPropagation(); cat.deleteItem(${jsId})" class="bg-zinc-900/90 text-red-400 hover:text-red-300 p-2 rounded-lg backdrop-blur-md border border-zinc-700/50 transition"><i class="fa-solid fa-trash text-[10px]"></i></button>
@@ -4183,6 +4196,12 @@
             },
             
             playStream: (index, btnElement) => {
+                const isLogged = localStorage.getItem('discord_token') || sessionStorage.getItem('fenixflix_senha');
+                if (!isLogged) {
+                    showToast("Você precisa logar com o Discord primeiro para assistir!", "error");
+                    return;
+                }
+
                 if (!cat.currentOpenItem || !cat.currentOpenItem.streams) return;
                 const stream = cat.currentOpenItem.streams[index];
                 if (!stream) return;
@@ -5234,14 +5253,20 @@
             tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-zinc-500"><i class="fa-solid fa-spinner animate-spin mr-1.5"></i> Carregando denúncias...</td></tr>`;
             emptyState.classList.add('hidden');
 
-            const adminSenha = sessionStorage.getItem('fenixflix_senha');
-            if (!adminSenha) {
-                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">Acesso negado. Faça login como admin.</td></tr>`;
+            const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
+            const discordToken = localStorage.getItem('discord_token');
+            const isAjudante = localStorage.getItem('is_ajudante') === 'true';
+            
+            if (!adminSenha && !isAjudante) {
+                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">Acesso negado. Faça login como admin ou ajudante.</td></tr>`;
                 return;
             }
 
             try {
-                const res = await fetch(API_URL + `/api/denuncias?senha=${encodeURIComponent(adminSenha)}`);
+                const headers = {};
+                if (discordToken) headers['Authorization'] = `Bearer ${discordToken}`;
+                
+                const res = await fetch(API_URL + `/api/denuncias?senha=${encodeURIComponent(adminSenha)}`, { headers });
                 if (!res.ok) {
                     if (res.status === 401) {
                         return tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">Senha expirada ou incorreta.</td></tr>`;
@@ -5295,13 +5320,19 @@
         async function deleteReport(id) {
             if (!confirm("Deseja realmente marcar essa denúncia como resolvida? Ela será removida da lista.")) return;
 
-            const adminSenha = sessionStorage.getItem('fenixflix_senha');
-            if (!adminSenha) return showToast("Senha de Admin necessária.", "error");
+            const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
+            const discordToken = localStorage.getItem('discord_token');
+            const isAjudante = localStorage.getItem('is_ajudante') === 'true';
+
+            if (!adminSenha && !isAjudante) return showToast("Acesso negado. Necessário Admin ou Ajudante.", "error");
 
             try {
+                const headers = { 'Content-Type': 'application/json' };
+                if (discordToken) headers['Authorization'] = `Bearer ${discordToken}`;
+
                 const res = await fetch(API_URL + '/api/denuncias/delete', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers,
                     body: JSON.stringify({ id, senha: adminSenha })
                 });
 
