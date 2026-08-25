@@ -244,7 +244,7 @@ async function getTMDBInfo(id) {
             };
         }
     } catch (err) {
-        console.error(`❌ Erro ao buscar dados no TMDB para o ID ${id}:`, err.message);
+        console.error("❌ Erro ao buscar dados no TMDB para o ID " + id + ":", err.message);
     }
     return null;
 }

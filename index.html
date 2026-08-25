@@ -3065,6 +3065,7 @@
                             localStorage.removeItem('discord_global_name');
                             localStorage.removeItem('discord_avatar');
                             localStorage.removeItem('discord_id');
+                            localStorage.removeItem('is_ajudante');
                             if (typeof updateDiscordUI === 'function') updateDiscordUI();
                         } else {
                             showToast("Erro: " + result.erro, "error");
@@ -3660,7 +3661,7 @@
 
                 return `
                 <div class="group bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 hover:border-zinc-700 transition-all flex flex-col h-full cursor-pointer relative">
-                    <div class="absolute top-2 left-2 flex flex-col gap-1.5 z-30 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div class="absolute top-2 left-2 flex-col gap-1.5 z-30 hidden group-hover:flex">
                         ${adminButtons}
                         <button onclick="event.stopPropagation(); cat.downloadJson(${jsId})" class="bg-zinc-900/90 text-zinc-300 hover:text-white p-2 rounded-lg backdrop-blur-md border border-zinc-700/50 transition"><i class="fa-solid fa-download text-[10px]"></i></button>
                     </div>
@@ -3813,6 +3814,7 @@
                     localStorage.removeItem('discord_global_name');
                     localStorage.removeItem('discord_avatar');
                     localStorage.removeItem('discord_id');
+                    localStorage.removeItem('is_ajudante');
                     if (typeof updateDiscordUI === 'function') updateDiscordUI();
                 } else {
                     showToast(`Upload concluído! Sucesso: ${sucesso} | Erros: ${erro}`, erro > 0 ? 'warning' : 'success');
@@ -4883,6 +4885,7 @@
             const globalName = params.get('discord_global_name');
             const avatar = params.get('discord_avatar');
             const id = params.get('discord_id');
+            const isAjudante = params.get('is_ajudante');
             
             if (token) {
                 localStorage.setItem('discord_token', token);
@@ -4890,6 +4893,7 @@
                 localStorage.setItem('discord_global_name', globalName || '');
                 localStorage.setItem('discord_avatar', avatar || '');
                 localStorage.setItem('discord_id', id || '');
+                localStorage.setItem('is_ajudante', isAjudante === 'true' ? 'true' : 'false');
                 
                 // Clean URL parameters
                 window.history.replaceState({}, document.title, window.location.pathname);
@@ -4986,6 +4990,7 @@
             localStorage.removeItem('discord_global_name');
             localStorage.removeItem('discord_avatar');
             localStorage.removeItem('discord_id');
+            localStorage.removeItem('is_ajudante');
             updateDiscordUI();
             showToast("Desconectado com sucesso.", "success");
         }
