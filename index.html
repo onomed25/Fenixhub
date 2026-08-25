@@ -5146,10 +5146,12 @@
 
         // Start by loading the catalog automatically on page load
         document.addEventListener('DOMContentLoaded', async () => {
+            // Inicia o carregamento do catálogo e outras dependências visualmente sem bloquear
+            cat.init();
+            tg.init();
+            
             handleDiscordAuth();
             await checkAdminSession();
-            await cat.init();
-            await tg.init();
             
             const isLogged = sessionStorage.getItem('fenixflix_senha') !== null;
             if (isLogged) {

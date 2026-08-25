@@ -657,18 +657,27 @@ app.post('/upload', upload.none(), async (req, res) => {
     }
 
     try {
-        // Usa ON CONFLICT para atualizar o JSON se o nome já existir (comportamento de UPSERT)
-        const query = `
-            INSERT INTO arquivos_json (nome_do_json, conteudo, is_pendente) 
-            VALUES ($1, $2, $3)
-            ON CONFLICT (nome_do_json) 
-            DO UPDATE SET conteudo = EXCLUDED.conteudo, is_pendente = EXCLUDED.is_pendente, criado_em = CURRENT_TIMESTAMP
-            RETURNING *;
-        `;
-        const values = [nome, JSON.stringify(finalConteudo), isPendente];
-        
-        await pool.query(query, values);
-        res.status(201).json({ mensagem: `JSON '${nome}' salvo com sucesso!` });
+        if (isPendente) {
+            // Em vez de alterar o JSON principal para pendente (tirando a série toda do ar), salvamos numa fila separada
+            const query = `
+                INSERT INTO envios_pendentes (nome_do_json, conteudo) 
+                VALUES ($1, $2)
+                RETURNING *;
+            `;
+            await pool.query(query, [nome, JSON.stringify(finalConteudo)]);
+            res.status(201).json({ mensagem: `Seu envio para '${nome}' foi recebido e aguarda aprovação da moderação.` });
+        } else {
+            // Se for admin/ajudante, salva e publica imediatamente (ou atualiza)
+            const query = `
+                INSERT INTO arquivos_json (nome_do_json, conteudo, is_pendente) 
+                VALUES ($1, $2, FALSE)
+                ON CONFLICT (nome_do_json) 
+                DO UPDATE SET conteudo = EXCLUDED.conteudo, is_pendente = FALSE, criado_em = CURRENT_TIMESTAMP
+                RETURNING *;
+            `;
+            await pool.query(query, [nome, JSON.stringify(finalConteudo)]);
+            res.status(201).json({ mensagem: `JSON '${nome}' publicado com sucesso!` });
+        }
     } catch (err) {
         console.error(err);
         res.status(500).json({ erro: 'Erro interno ao salvar no banco de dados.' });
