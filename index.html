@@ -16,6 +16,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
+    
     <script>
         tailwind.config = {
             theme: {
@@ -25,55 +26,79 @@
                         display: ['Clash Display', 'sans-serif']
                     },
                     colors: {
-                        obsidian: { 800: '#161619', 900: '#0f0f11', 950: '#0a0a0c' },
-                        ember: { 400: '#ff8a50', 500: '#ff5722', 600: '#e64a19' },
-                        zinc: { 850: '#111113', 900: '#18181b', 950: '#09090b' }
-                    },
-                    backgroundImage: {
-                        'glass-gradient': 'linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%)',
+                        bg: '#05070D',
+                        surface: '#111827',
+                        text: '#FFF8F0',
+                        'text-soft': '#D7DEE9',
+                        primary: '#FF6A00',
+                        'primary-hover': '#FF8126',
+                        highlight: '#FFB020',
+                        danger: '#E83D1C',
+                        'on-accent': '#111827',
+                        // Mapeando as cores antigas para a nova paleta para manter a compatibilidade
+                        obsidian: { 800: '#111827', 900: '#111827', 950: '#05070D' },
+                        ember: { 400: '#FFB020', 500: '#FF6A00', 600: '#FF8126' },
+                        zinc: { 850: '#111827', 900: '#111827', 950: '#05070D' }
                     }
                 }
             }
         }
     </script>
 
+
+    
     <style>
+        :root {
+            --bg: #05070D;
+            --surface: #111827;
+            --surface-translucent: rgba(17, 24, 39, 0.6);
+            --text: #FFF8F0;
+            --text-soft: #D7DEE9;
+            --primary: #FF6A00;
+            --primary-hover: #FF8126;
+            --highlight: #FFB020;
+            --danger: #E83D1C;
+            --on-accent: #111827;
+        }
+
         body { 
-            background-color: #0a0a0c; 
-            color: #e4e4e7; 
-            background-image: radial-gradient(circle at top right, rgba(255,87,34,0.03), transparent 40%),
-                              radial-gradient(circle at bottom left, rgba(255,138,80,0.02), transparent 40%);
+            background-color: var(--bg); 
+            color: var(--text); 
+            background-image: radial-gradient(circle at top right, rgba(255,106,0,0.05), transparent 40%),
+                              radial-gradient(circle at bottom left, rgba(255,176,32,0.03), transparent 40%);
             background-attachment: fixed;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
         }
         
-        h1, h2, h3, h4, h5, h6 { font-family: 'Clash Display', sans-serif; letter-spacing: 0.02em; }
+        h1, h2, h3, h4, h5, h6 { font-family: 'Clash Display', sans-serif; letter-spacing: -0.01em; }
 
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(255,87,34,0.5); }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 6px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,106,0,0.5); }
 
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* Inputs Glassmorphism */
+        /* Apple Design: Glassmorphism Inputs */
         .input-unified {
-            background-color: rgba(15,15,17,0.6);
-            border: 1px solid rgba(255,255,255,0.05);
-            color: #f4f4f5;
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            transition: all 0.3s ease;
+            background-color: var(--surface-translucent);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: var(--text);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .input-unified:focus {
-            border-color: #ff5722;
-            box-shadow: 0 0 15px rgba(255,87,34,0.15);
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(255,106,0,0.15);
             outline: none;
         }
 
         .loader {
-            border: 2px solid #27272a;
-            border-top: 2px solid #a1a1aa;
+            border: 2px solid var(--surface);
+            border-top: 2px solid var(--text-soft);
             border-radius: 50%;
             width: 16px;
             height: 16px;
@@ -81,45 +106,57 @@
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        .tab-content { display: none; animation: fadeSlide 0.25s ease-out forwards; }
+        .tab-content { display: none; animation: fadeSlide 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .tab-content.active { display: block; }
-        @keyframes fadeSlide { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeSlide { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Botões da Ilha Flutuante */
-        .nav-btn.active { 
-            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05)); 
-            color: #fff; 
-            border-color: rgba(255,255,255,0.2);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
-        }
+        /* Apple Design: Dynamic Island Nav */
         .nav-btn { 
             background-color: transparent; 
-            color: #a1a1aa; 
-            border: 1px solid transparent;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            color: var(--text-soft); 
+            border: none;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+        
+        .nav-btn.active { 
+            background: rgba(255,255,255,0.1); 
+            color: var(--text); 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         }
         .nav-btn:hover:not(.active) {
-            color: #fff;
-            background: rgba(255,255,255,0.03);
-            border-color: rgba(255,255,255,0.05);
+            color: var(--text);
+            background: rgba(255,255,255,0.05);
+        }
+
+        /* Apple Design: Spring Buttons */
+        
+
+        /* Apple Design: Modals and Panels */
+        .glass-panel {
+            background: var(--surface-translucent);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 24px;
         }
 
         @keyframes slideIn {
             from { transform: translateY(100%) scale(0.95); opacity: 0; }
             to { transform: translateY(0) scale(1); opacity: 1; }
         }
-        .toast { animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .toast { animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
         
-        .progress-fill { transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+        .progress-fill { transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
     </style>
+
 </head>
 <body class="min-h-screen flex flex-col selection:bg-indigo-500/30">
 
     <!-- Header Simples com Logo -->
-    <header class="w-full pt-8 pb-2 px-8 flex justify-between items-center max-w-7xl mx-auto">
+    <header class="w-full pt-6 md:pt-8 pb-2 px-4 md:px-8 flex justify-between items-center max-w-7xl mx-auto">
         <div class="flex items-center gap-3">
             <div class="w-10 h-10 flex items-center justify-center">
-                <img src="https://i.imgur.com/e6skOZ8.png" alt="Logo Fenix Studio" class="w-full h-full object-contain drop-shadow-[0_0_10px_rgba(255,87,34,0.4)]">
+                <img src="cdn/logo_new.png" alt="Logo Fenix Studio" class="w-full h-full object-contain drop-shadow-[0_4px_12px_rgba(255,106,0,0.3)]">
             </div>
             <div>
                 <h1 class="font-bold text-xl leading-tight tracking-tight text-white font-display">Fenix Studio</h1>
@@ -152,7 +189,7 @@
     </header>
 
     <!-- Ilha de Navegação Flutuante -->
-    <nav class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-obsidian-900/60 backdrop-blur-xl border border-white/10 rounded-full shadow-2xl p-1.5 flex gap-1 items-center overflow-x-auto scrollbar-hide max-w-[90vw]">
+    <nav class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-[var(--surface-translucent)] backdrop-blur-[24px] border border-white/10 rounded-full shadow-[0_20px_40px_rgba(0,0,0,0.5)] p-1.5 flex gap-1 items-center overflow-x-auto scrollbar-hide max-w-[95vw] sm:max-w-[90vw]">
         <button onclick="switchView('generator')" id="btn-generator" class="nav-btn px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
             <i class="fa-solid fa-cloud-arrow-up text-sm"></i> <span class="hidden sm:inline">Enviar</span>
         </button>
@@ -186,9 +223,9 @@
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div id="generator-main-column" class="lg:col-span-2 space-y-6 block">
-                    <div class="bg-obsidian-900/40 backdrop-blur-xl rounded-3xl border border-white/5 p-6 md:p-8 shadow-2xl relative overflow-hidden">
+                    <div class="glass-panel rounded-3xl border border-white/5 p-4 sm:p-6 md:p-8 shadow-2xl relative overflow-hidden">
                         <!-- Glow Effect -->
-                        <div class="absolute top-0 right-0 w-64 h-64 bg-ember-500/10 rounded-full blur-[80px] -z-10 pointer-events-none"></div>
+                        <div class="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-[80px] -z-10 pointer-events-none"></div>
                         
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
                             <h2 class="text-xl font-semibold text-white font-display tracking-wide">Detalhes do Conteúdo</h2>
@@ -207,15 +244,15 @@
                         <div class="flex gap-6 mb-8 border-b border-white/5 pb-6">
                             <label class="flex items-center gap-3 cursor-pointer group">
                                 <div class="relative flex items-center justify-center">
-                                    <input type="radio" name="contentType" value="series" checked="" onchange="gen.toggleInputs()" class="peer appearance-none w-5 h-5 border-2 border-zinc-600 rounded-full checked:border-ember-500 focus:outline-none transition-colors">
-                                    <div class="absolute w-2.5 h-2.5 rounded-full bg-ember-500 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
+                                    <input type="radio" name="contentType" value="series" checked="" onchange="gen.toggleInputs()" class="peer appearance-none w-5 h-5 border-2 border-zinc-600 rounded-full checked:border-primary focus:outline-none transition-colors">
+                                    <div class="absolute w-2.5 h-2.5 rounded-full bg-primary opacity-0 peer-checked:opacity-100 transition-opacity"></div>
                                 </div>
                                 <span class="font-medium text-sm text-zinc-400 group-hover:text-zinc-200 transition">Série / Anime</span>
                             </label>
                             <label class="flex items-center gap-3 cursor-pointer group">
                                 <div class="relative flex items-center justify-center">
-                                    <input type="radio" name="contentType" value="movie" onchange="gen.toggleInputs()" class="peer appearance-none w-5 h-5 border-2 border-zinc-600 rounded-full checked:border-ember-500 focus:outline-none transition-colors">
-                                    <div class="absolute w-2.5 h-2.5 rounded-full bg-ember-500 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
+                                    <input type="radio" name="contentType" value="movie" onchange="gen.toggleInputs()" class="peer appearance-none w-5 h-5 border-2 border-zinc-600 rounded-full checked:border-primary focus:outline-none transition-colors">
+                                    <div class="absolute w-2.5 h-2.5 rounded-full bg-primary opacity-0 peer-checked:opacity-100 transition-opacity"></div>
                                 </div>
                                 <span class="font-medium text-sm text-zinc-400 group-hover:text-zinc-200 transition">Filme</span>
                             </label>
@@ -224,13 +261,13 @@
                         <!-- Campos Principais (Buscador e Temporada) -->
                         <div class="bg-black/20 p-5 rounded-2xl border border-white/5 mb-6 shadow-inner">
                             <input type="hidden" id="seriesName">
-                            <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                            <div class="grid grid-cols-2 md:grid-cols-12 gap-3 md:gap-4 items-end">
                                 <!-- ID IMDb ou Pesquisar por Nome -->
-                                <div class="md:col-span-8 relative">
+                                <div class="col-span-2 md:col-span-8 relative">
                                     <label class="block text-xs font-medium text-zinc-500 mb-2 uppercase tracking-wider">Buscar (Nome ou ID IMDb) <span class="text-ember-400">*</span></label>
                                     <div class="flex gap-2">
                                         <input type="text" id="contentId" class="input-unified flex-grow p-3.5 rounded-xl text-sm" placeholder="Ex: tt0903747 ou Breaking Bad" onkeydown="if(event.key === 'Enter') gen.smartSearch()">
-                                        <button type="button" onclick="gen.smartSearch()" id="btnSmartSearch" class="bg-gradient-to-r from-ember-500 to-ember-600 hover:from-ember-400 hover:to-ember-500 text-white px-5 py-3.5 rounded-xl text-sm font-medium transition-all shadow-lg shadow-ember-500/20 flex items-center justify-center shrink-0" title="Buscar">
+                                        <button type="button" onclick="gen.smartSearch()" id="btnSmartSearch" class="bg-primary hover:bg-primary-hover text-white px-5 py-3.5 rounded-xl text-sm font-medium transition-all shadow-md flex items-center justify-center shrink-0" title="Buscar">
                                             <i id="btnSmartSearchIcon" class="fa-solid fa-magnifying-glass"></i>
                                         </button>
                                     </div>
@@ -238,13 +275,13 @@
                                 </div>
 
                                 <!-- Temporada -->
-                                <div class="md:col-span-2" id="seasonNumCol">
+                                <div class="col-span-1 md:col-span-2" id="seasonNumCol">
                                     <label class="block text-xs font-medium text-zinc-500 mb-2 uppercase tracking-wider text-center">Temp.</label>
                                     <input type="number" id="seasonNum" value="1" class="input-unified w-full p-3.5 rounded-xl text-center text-sm font-display font-medium text-ember-400">
                                 </div>
 
                                 <!-- Ep. Inicial -->
-                                <div class="md:col-span-2" id="startEpCol">
+                                <div class="col-span-1 md:col-span-2" id="startEpCol">
                                     <label class="block text-xs font-medium text-zinc-500 mb-2 uppercase tracking-wider text-center">Ep. Inic.</label>
                                     <input type="number" id="startEp" value="1" class="input-unified w-full p-3.5 rounded-xl text-center text-sm font-display font-medium text-ember-400">
                                 </div>
@@ -256,7 +293,7 @@
                         </div>
 
                         <!-- Configurações de Transmissão -->
-                        <div class="grid grid-cols-2 gap-4 mb-6">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 mb-4 md:mb-6">
                             <div>
                                 <label class="block text-xs font-medium text-zinc-500 mb-2">Idioma / Áudio</label>
                                 <select id="audioLanguage" class="input-unified w-full p-3 rounded-lg text-sm appearance-none">
@@ -285,7 +322,6 @@
                                     <span id="cinemetaInfoType" class="text-[9px] uppercase tracking-wider text-indigo-400 font-semibold border border-indigo-500/30 px-1.5 py-0.5 rounded">SÉRIE</span>
                                     <h4 id="cinemetaInfoTitle" class="font-medium text-white text-sm mt-1.5">-</h4>
                                 </div>
-                                <button type="button" onclick="gen.fillFromCinemeta()" class="text-xs bg-white text-zinc-950 font-medium px-3 py-1.5 rounded-lg hover:bg-zinc-200 transition w-full sm:w-auto text-center">Preencher Campos</button>
                             </div>
                             <div id="cinemetaInfoSeriesDetails" class="grid grid-cols-2 gap-3 mt-1 text-xs">
                                 <div class="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800/40">
@@ -306,9 +342,9 @@
                         </div>
 
                         <!-- Links -->
-                        <div class="hidden">
+                        <div id="admin-link-section" class="mt-5 bg-zinc-950/40 border border-zinc-800/80 rounded-xl p-4 hidden">
                             <div class="flex justify-between items-end mb-3">
-                                <label class="block text-xs font-medium text-zinc-500">Links de Transmissão</label>
+                                <label class="block text-xs font-medium text-zinc-500">Links de Transmissão (Cole aqui para não enviar arquivos)</label>
                                 <div class="flex gap-2">
                                     <button onclick="tg.migrateAllLinks()" class="text-[10px] text-sky-400 hover:text-sky-300 px-2 py-1 rounded transition flex items-center gap-1" title="Converter p/ Telegram">
                                         <i class="fa-brands fa-telegram"></i> <span class="hidden sm:inline">Converter p/ Telegram</span>
@@ -325,7 +361,7 @@
                                     </label>
                                 </div>
                             </div>
-                            <textarea id="manualLinks" rows="6" class="input-unified w-full p-4 rounded-xl text-xs font-mono custom-scrollbar" placeholder="Cole os links de vídeo diretos aqui..."></textarea>
+                            <textarea id="manualLinks" rows="6" class="input-unified w-full p-4 rounded-xl text-xs font-mono custom-scrollbar" placeholder="Cole os links de vídeo diretos aqui (um por linha)..."></textarea>
                         </div>
 
                         <!-- Enviar para Telegram -->
@@ -371,7 +407,7 @@
                             <div class="space-y-3">
                                 <!-- Opção de Envio: Navegador vs Local -->
                                 <div class="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/60 pb-2 text-[11px]">
-                                    <div class="flex gap-4">
+                                    <div class="flex gap-4 hidden">
                                         <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
                                             <input type="radio" name="tgMode" value="browser" checked onchange="tg.switchMode('browser')" class="text-sky-500 bg-zinc-900 border-zinc-800 focus:ring-sky-500 w-3 h-3">
                                             <span>Pelo Navegador</span>
@@ -394,7 +430,7 @@
                                         <i class="fa-solid fa-cloud-arrow-up text-zinc-500 group-hover:text-sky-400 transition-colors"></i>
                                         <span id="tgFileName" class="text-zinc-400 font-medium group-hover:text-zinc-200 transition-colors">Selecionar Vídeos...</span>
                                     </label>
-                                    <button onclick="tg.sendBrowser()" id="btnTgBrowserSend" class="bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-lg text-xs font-medium transition-all shadow-lg shadow-sky-500/20 flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <button onclick="tg.sendBrowser()" id="btnTgBrowserSend" class="bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-lg text-xs font-medium transition-all shadow-sm flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
                                         Fazer Upload
                                     </button>
                                 </div>
@@ -455,7 +491,7 @@
                             </div>
                         </div>
 
-                        <button onclick="gen.process()" class="mt-6 w-full bg-gradient-to-r from-ember-500 to-ember-600 hover:from-ember-400 hover:to-ember-500 text-white font-display font-medium py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(255,87,34,0.3)] hover:shadow-[0_0_30px_rgba(255,87,34,0.5)] flex justify-center items-center gap-2 tracking-wide uppercase text-sm">
+                        <button onclick="gen.process()" class="mt-6 w-full bg-primary hover:bg-primary-hover text-white font-display font-medium py-4 rounded-xl transition-all shadow-md flex justify-center items-center gap-2 tracking-wide uppercase text-sm">
                             Processar Conteúdo
                         </button>
                     </div>
@@ -463,7 +499,7 @@
 
                 <!-- Painel de Preview -->
                 <div id="generator-preview-column" class="lg:col-span-1 lg:block hidden">
-                    <div class="bg-obsidian-900/40 backdrop-blur-xl rounded-3xl border border-white/5 flex flex-col h-full shadow-2xl relative overflow-hidden">
+                    <div class="glass-panel rounded-3xl border border-white/5 flex flex-col h-full shadow-2xl relative overflow-hidden">
                         <div class="p-5 border-b border-white/5 flex justify-between items-center bg-black/20">
                             <h3 class="font-medium text-white text-sm">Preview JSON</h3>
                             <span id="jsonStats" class="text-[10px] font-mono text-zinc-500">Vazio</span>
@@ -479,10 +515,10 @@
                                 <button onclick="gen.copy()" class="bg-obsidian-800/80 backdrop-blur-sm hover:bg-obsidian-800 text-white p-2.5 rounded-xl border border-white/10 transition-all shadow-lg hover:text-ember-400" title="Copiar JSON">
                                     <i class="fa-regular fa-copy"></i>
                                 </button>
-                                <button onclick="gen.download()" class="bg-gradient-to-br from-ember-500 to-ember-600 hover:from-ember-400 hover:to-ember-500 text-white p-2.5 rounded-xl transition-all shadow-[0_4px_15px_rgba(255,87,34,0.3)]" title="Baixar Arquivo .json">
+                                <button onclick="gen.download()" class="bg-primary hover:bg-primary-hover text-white p-2.5 rounded-xl transition-all shadow-sm" title="Baixar Arquivo .json">
                                     <i class="fa-solid fa-download"></i>
                                 </button>
-                                <button onclick="gen.uploadParaBanco()" class="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-lg transition shadow-lg shadow-indigo-500/20" title="Salvar JSON no Banco">
+                                <button onclick="gen.uploadParaBanco()" class="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-lg transition shadow-sm" title="Salvar JSON no Banco">
                                     <i class="fa-solid fa-cloud-arrow-up"></i>
                                 </button>
                             </div>
@@ -500,19 +536,19 @@
             
             <!-- Cards de Status -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <div class="bg-obsidian-900/60 backdrop-blur-md p-5 rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-ember-500/5 transition-all">
+                <div class="glass-panel p-4 md:p-5 rounded-2xl md:rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-sm transition-all">
                     <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Filmes</p>
                     <p id="countMovies" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
-                <div class="bg-obsidian-900/60 backdrop-blur-md p-5 rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-ember-500/5 transition-all">
+                <div class="glass-panel p-4 md:p-5 rounded-2xl md:rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-sm transition-all">
                     <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Séries</p>
                     <p id="countSeries" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
-                <div class="bg-obsidian-900/60 backdrop-blur-md p-5 rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-ember-500/5 transition-all">
+                <div class="glass-panel p-4 md:p-5 rounded-2xl md:rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-sm transition-all">
                     <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Episódios Totais</p>
                     <p id="countTotalEps" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
-                <div class="bg-obsidian-900/60 backdrop-blur-md p-5 rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-red-500/5 transition-all">
+                <div class="glass-panel p-4 md:p-5 rounded-2xl md:rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-red-500/5 transition-all">
                     <p class="text-red-400/80 text-[10px] font-bold uppercase tracking-widest mb-1">Incompletos</p>
                     <p id="countMissing" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
@@ -523,11 +559,11 @@
                 <div class="flex flex-col sm:flex-row w-full lg:w-auto gap-3">
                     <div class="relative w-full sm:w-72">
                         <i class="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs"></i>
-                        <input type="text" oninput="cat.search(this.value)" placeholder="Buscar catálogo..." class="w-full bg-obsidian-900/60 backdrop-blur-md text-zinc-200 text-sm rounded-2xl pl-10 pr-4 py-3 border border-white/5 focus:border-ember-500 focus:outline-none transition-colors shadow-inner">
+                        <input type="text" oninput="cat.search(this.value)" placeholder="Buscar catálogo..." class="w-full glass-panel text-zinc-200 text-sm rounded-2xl pl-10 pr-4 py-3 border border-white/5 focus:border-primary focus:outline-none transition-colors shadow-inner">
                     </div>
                     
                     <div class="relative w-full sm:w-48">
-                        <select onchange="cat.sort(this.value)" class="w-full bg-obsidian-900/60 backdrop-blur-md text-zinc-200 text-sm rounded-2xl px-4 py-3 border border-white/5 focus:border-ember-500 focus:outline-none appearance-none cursor-pointer shadow-inner">
+                        <select onchange="cat.sort(this.value)" class="w-full glass-panel text-zinc-200 text-sm rounded-2xl px-4 py-3 border border-white/5 focus:border-primary focus:outline-none appearance-none cursor-pointer shadow-inner">
                             <option value="newest">Mais Recentes</option>
                             <option value="oldest">Mais Antigos</option>
                             <option value="year">Ano de Lançamento</option>
@@ -537,7 +573,7 @@
                     </div>
 
                     <div class="relative w-full sm:w-44">
-                        <select id="cat-filter-type" onchange="cat.filter(this.value)" class="w-full bg-obsidian-900/60 backdrop-blur-md text-zinc-200 text-sm rounded-2xl px-4 py-3 border border-white/5 focus:border-ember-500 focus:outline-none appearance-none cursor-pointer shadow-inner">
+                        <select id="cat-filter-type" onchange="cat.filter(this.value)" class="w-full glass-panel text-zinc-200 text-sm rounded-2xl px-4 py-3 border border-white/5 focus:border-primary focus:outline-none appearance-none cursor-pointer shadow-inner">
                             <option value="all">Todos</option>
                             <option value="my_uploads">Meus Envios</option>
                             <option value="series">Séries</option>
@@ -554,7 +590,7 @@
                     </button>
 
                     <!-- Botão de Upload em Lote -->
-                    <label class="cursor-pointer bg-gradient-to-r from-ember-500 to-ember-600 hover:from-ember-400 hover:to-ember-500 text-white px-5 py-3 rounded-2xl text-xs font-medium whitespace-nowrap transition-all flex items-center gap-2 mr-2 shadow-lg shadow-ember-500/20" title="Enviar vários ficheiros .json para o banco">
+                    <label class="cursor-pointer bg-primary hover:bg-primary-hover text-white px-5 py-3 rounded-2xl text-xs font-medium whitespace-nowrap transition-all flex items-center gap-2 mr-2 shadow-md" title="Enviar vários ficheiros .json para o banco">
                         <i class="fa-solid fa-cloud-arrow-up"></i> Upload Lote
                         <input type="file" accept=".json" multiple class="hidden" onchange="cat.uploadEmMassa(this)">
                     </label>
@@ -576,7 +612,7 @@
 
         <!-- ABA 3: PEDIDOS / TXT -->
         <div id="view-requests" class="tab-content">
-            <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 md:p-8">
+            <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6 md:p-8">
                 
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-b border-zinc-800 pb-8">
                     <div>
@@ -663,7 +699,7 @@
         <div id="view-ranking" class="tab-content">
             <div class="max-w-2xl mx-auto">
                 <!-- Coluna: Top Colaboradores -->
-                <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 md:p-8">
+                <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6 md:p-8">
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-zinc-800 pb-4 gap-3">
                         <div>
                             <h2 class="text-lg font-semibold text-white flex items-center gap-2">
@@ -691,7 +727,7 @@
         <!-- ABA 4: ARMAZENAMENTO -->
         <div id="view-storage" class="tab-content">
             <div class="max-w-3xl mx-auto space-y-6">
-                <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 md:p-8">
+                <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6 md:p-8">
                     <div class="flex justify-between items-center mb-6">
                         <div>
                             <h2 class="text-lg font-semibold text-white">Limite do Banco de Dados</h2>
@@ -810,7 +846,7 @@
 
         <!-- ABA 5: DENÚNCIAS (Admin-only) -->
         <div id="view-reports" class="tab-content">
-            <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-6 md:p-8">
+            <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6 md:p-8">
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 border-b border-zinc-800 pb-8">
                     <div>
                         <h2 class="text-lg font-semibold text-white flex items-center gap-2">
@@ -874,17 +910,60 @@
     </div>
 
     <!-- Modal do Gestor Visual de Links -->
-    <div id="visualEditorModal" class="fixed inset-0 bg-black/90 backdrop-blur-sm hidden flex items-center justify-center z-[150] p-4">
-        <div class="bg-zinc-900 w-full max-w-4xl rounded-2xl shadow-2xl border border-zinc-800 flex flex-col max-h-[85vh] overflow-hidden">
-            <div class="p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-900">
+    <div id="visualEditorModal" class="fixed inset-0 bg-black/90 backdrop-blur-sm hidden flex items-center justify-center z-[150] p-2 sm:p-4">
+        <div class="bg-zinc-900 w-full max-w-4xl rounded-2xl shadow-2xl border border-zinc-800 flex flex-col max-h-[92vh] sm:max-h-[85vh] overflow-hidden">
+            <div class="p-4 sm:p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-900">
                 <div>
-                    <h3 class="text-lg font-semibold text-white">Gestor de Links</h3>
-                    <p class="text-xs text-zinc-500 mt-1">Altere nomes ou remova URLs do arquivo gerado.</p>
+                    <h3 class="text-sm sm:text-lg font-semibold text-white">Gestor de Links</h3>
+                    <p class="text-[10px] sm:text-xs text-zinc-500 mt-1">Altere nomes ou remova URLs do arquivo gerado.</p>
                 </div>
-                <button onclick="gen.closeVisualEditor()" class="text-zinc-500 hover:text-white bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 w-9 h-9 rounded-full transition flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+                <button onclick="gen.closeVisualEditor()" class="text-zinc-500 hover:text-white bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 w-8 h-8 sm:w-9 sm:h-9 rounded-full transition flex items-center justify-center"><i class="fa-solid fa-xmark text-sm"></i></button>
             </div>
-            <div id="visualEditorContent" class="p-6 overflow-y-auto space-y-3 bg-zinc-950 flex-grow custom-scrollbar"></div>
-            <div class="p-5 bg-zinc-900 border-t border-zinc-800 flex justify-end gap-3">
+            
+            <!-- Painel de Edição em Massa -->
+            <div id="bulkEditContainer" class="bg-zinc-900/90 border-b border-zinc-800 p-3 sm:p-4 space-y-2 sm:space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                    <button onclick="gen.toggleBulkPanel()" class="text-[11px] sm:text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5 hover:text-white transition">
+                        <i class="fa-solid fa-layer-group text-ember-400 animate-pulse"></i> Edição em Massa
+                        <i id="bulkToggleChevron" class="fa-solid fa-chevron-down text-[9px] transition-transform duration-200"></i>
+                    </button>
+                    <div class="flex gap-1.5">
+                        <button onclick="gen.selectAllBulk(true)" class="text-[9px] sm:text-[10px] bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-2 sm:px-3 py-1.5 rounded-lg transition font-medium">Tudo</button>
+                        <button onclick="gen.selectAllBulk(false)" class="text-[9px] sm:text-[10px] bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-2 sm:px-3 py-1.5 rounded-lg transition font-medium">Limpar</button>
+                    </div>
+                </div>
+                <div id="bulkEditControls" class="hidden grid grid-cols-1 sm:grid-cols-4 gap-3 bg-zinc-950/40 p-3 rounded-xl border border-white/5 transition-all">
+                    <div>
+                        <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1.5">Alterar Áudio / Idioma</label>
+                        <select id="bulkAudio" class="input-unified w-full p-2.5 rounded-lg text-xs appearance-none">
+                            <option value="">(Manter original)</option>
+                            <option value="Dublado">Dublado</option>
+                            <option value="Português (PT-BR)">Português (PT-BR)</option>
+                            <option value="English">English</option>
+                            <option value="Legendado">Legendado</option>
+                            <option value="Dual Áudio">Dual Áudio</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1.5">Alterar Qualidade</label>
+                        <select id="bulkQuality" class="input-unified w-full p-2.5 rounded-lg text-xs appearance-none">
+                            <!-- Preenchido via JS -->
+                        </select>
+                    </div>
+                    <div id="bulkSeasonCol">
+                        <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1.5">Mover p/ Temporada</label>
+                        <input type="number" id="bulkSeason" class="input-unified w-full p-2.5 rounded-lg text-xs text-ember-400 bg-zinc-950 border border-zinc-800" placeholder="Ex: 2" min="1">
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="gen.applyBulkEdit()" class="w-full bg-white hover:bg-zinc-200 text-zinc-950 py-2.5 rounded-lg transition text-xs font-bold font-display uppercase tracking-wide">
+                            Aplicar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="visualEditorContent" class="p-3 sm:p-6 overflow-y-auto space-y-3 bg-zinc-950 flex-grow custom-scrollbar"></div>
+            <div class="p-4 sm:p-5 bg-zinc-900 border-t border-zinc-800 flex justify-end gap-3">
                 <button onclick="gen.closeVisualEditor()" class="px-5 py-2.5 bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 text-xs font-medium rounded-xl transition">Descartar</button>
                 <button onclick="gen.saveVisualEditor()" class="px-6 py-2.5 bg-white hover:bg-zinc-200 text-zinc-900 text-xs font-medium rounded-xl transition">Salvar Mudanças</button>
             </div>
@@ -926,7 +1005,7 @@
                 
                 <div class="flex gap-3 pt-2">
                     <button type="button" onclick="closeReportModal()" class="flex-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-400 border border-zinc-800 py-2.5 rounded-xl text-xs font-semibold transition-all">Cancelar</button>
-                    <button type="submit" class="flex-1 bg-red-650 hover:bg-red-600 text-white py-2.5 rounded-xl text-xs font-semibold transition-all shadow-lg shadow-red-600/10">Enviar</button>
+                    <button type="submit" class="flex-1 bg-red-650 hover:bg-red-600 text-white py-2.5 rounded-xl text-xs font-semibold transition-all shadow-sm">Enviar</button>
                 </div>
             </form>
         </div>
@@ -941,7 +1020,7 @@
         <div id="login-modal-backdrop" class="absolute inset-0 bg-black/75 backdrop-blur-md transition-opacity duration-300 opacity-0"></div>
         
         <!-- Conteúdo do Modal com animação de escala e opacidade -->
-        <div id="login-modal-content" class="relative bg-zinc-900/90 border border-zinc-800/80 rounded-2xl w-full max-w-md p-6 md:p-8 shadow-2xl shadow-indigo-500/5 transition-all duration-300 transform scale-95 opacity-0">
+        <div id="login-modal-content" class="relative bg-zinc-900/90 border border-zinc-800/80 rounded-2xl w-full max-w-md p-4 sm:p-6 md:p-8 shadow-2xl shadow-indigo-500/5 transition-all duration-300 transform scale-95 opacity-0">
             
             <!-- Efeito de Brilho de Fundo -->
             <div class="absolute -top-10 -left-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -973,7 +1052,7 @@
                     <button type="button" id="login-modal-cancel" class="flex-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-400 border border-zinc-800 hover:border-zinc-700 py-3 rounded-xl text-xs font-semibold transition-all">
                         Cancelar
                     </button>
-                    <button type="submit" id="login-modal-submit" class="flex-1 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white py-3 rounded-xl text-xs font-semibold transition-all shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2">
+                    <button type="submit" id="login-modal-submit" class="flex-1 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white py-3 rounded-xl text-xs font-semibold transition-all shadow-sm flex items-center justify-center gap-2">
                         <span>Confirmar</span>
                         <i class="fa-solid fa-chevron-right text-[10px]"></i>
                     </button>
@@ -1191,6 +1270,15 @@
                     btnModalEdit.classList.remove('hidden');
                 } else {
                     btnModalEdit.classList.add('hidden');
+                }
+            }
+            
+            const adminLinkSection = document.getElementById('admin-link-section');
+            if (adminLinkSection) {
+                if (isAdmin) {
+                    adminLinkSection.classList.remove('hidden');
+                } else {
+                    adminLinkSection.classList.add('hidden');
                 }
             }
             
@@ -2467,7 +2555,7 @@
                     let totalEps = 0;
                     if (meta.videos && Array.isArray(meta.videos)) {
                         meta.videos.forEach(v => {
-                            if (v.season > 0) {
+                            if (v.season !== undefined && v.season !== null && v.season >= 0) {
                                 if (!seasonMap[v.season]) {
                                     seasonMap[v.season] = [];
                                 }
@@ -2487,7 +2575,11 @@
                     seasonsList.forEach(s => {
                         const epsInSeason = seasonMap[s];
                         const maxEpInSeason = epsInSeason.length > 0 ? Math.max(...epsInSeason) : 0;
-                        htmlList += `<span class="bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-md px-2 py-1 text-[10px] font-mono">T${s}: 1-${maxEpInSeason} (${epsInSeason.length} eps)</span>`;
+                        if (s === 0) {
+                            htmlList += `<span class="bg-purple-950/40 border border-purple-500/30 text-purple-300 rounded-md px-2 py-1 text-[10px] font-mono flex items-center gap-1.5"><i class="fa-solid fa-star text-purple-400"></i> Especiais (T0): 1-${maxEpInSeason} (${epsInSeason.length} eps)</span>`;
+                        } else {
+                            htmlList += `<span class="bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-md px-2 py-1 text-[10px] font-mono">T${s}: 1-${maxEpInSeason} (${epsInSeason.length} eps)</span>`;
+                        }
                     });
                     
                     epsList.innerHTML = htmlList || '<span class="text-zinc-600 italic">Sem episódios</span>';
@@ -2966,7 +3058,17 @@
                             localStorage.removeItem('fenixflix_draft');
                         }
                     } else {
-                        showToast("Erro: " + result.erro, "error");
+                        if (response.status === 401) {
+                            showToast("Sessão do Discord expirou! Faça login novamente para enviar.", "error");
+                            localStorage.removeItem('discord_token');
+                            localStorage.removeItem('discord_username');
+                            localStorage.removeItem('discord_global_name');
+                            localStorage.removeItem('discord_avatar');
+                            localStorage.removeItem('discord_id');
+                            if (typeof updateDiscordUI === 'function') updateDiscordUI();
+                        } else {
+                            showToast("Erro: " + result.erro, "error");
+                        }
                     }
                 } catch (error) {
                     showToast("Erro ao conectar com o servidor", "error");
@@ -2979,6 +3081,52 @@
                     return showToast("Ainda não há links adicionados.", "warning");
                 }
                 gen.editData = JSON.parse(JSON.stringify(gen.currentData));
+
+                // Preencher qualidades no select bulkQuality
+                const bulkQSelect = document.getElementById('bulkQuality');
+                if (bulkQSelect) {
+                    const saved = localStorage.getItem('fenixflix_qualities');
+                    let qualities = ["Nenhuma", "1080p", "720p", "4K", "SD", "FHD", "HD", "CAM"];
+                    if (saved) {
+                        try { qualities = JSON.parse(saved); } catch(e){}
+                    }
+                    bulkQSelect.innerHTML = '<option value="">(Manter original)</option>';
+                    qualities.forEach(q => {
+                        if (q !== "Nenhuma") {
+                            const opt = document.createElement('option');
+                            opt.value = q;
+                            opt.innerText = q;
+                            bulkQSelect.appendChild(opt);
+                        }
+                    });
+                }
+
+                // Configurar campos dependendo do tipo
+                const bulkSeasonCol = document.getElementById('bulkSeasonCol');
+                if (bulkSeasonCol) {
+                    if (gen.editData.type === 'movie') {
+                        bulkSeasonCol.classList.add('hidden');
+                    } else {
+                        bulkSeasonCol.classList.remove('hidden');
+                    }
+                }
+
+                // Resetar inputs de massa
+                const bulkAudio = document.getElementById('bulkAudio');
+                if (bulkAudio) bulkAudio.value = '';
+                const bulkQuality = document.getElementById('bulkQuality');
+                if (bulkQuality) bulkQuality.value = '';
+                const bulkSeason = document.getElementById('bulkSeason');
+                if (bulkSeason) bulkSeason.value = '';
+
+                // Ocultar painel de massa por padrão (principalmente no mobile)
+                const controls = document.getElementById('bulkEditControls');
+                const chevron = document.getElementById('bulkToggleChevron');
+                if (controls && chevron) {
+                    controls.classList.add('hidden');
+                    chevron.classList.remove('rotate-180');
+                }
+
                 gen.renderVisualEditorContent();
                 document.getElementById('visualEditorModal').classList.remove('hidden');
             },
@@ -2995,6 +3143,129 @@
                 showToast("Links atualizados!", "success");
             },
 
+            toggleBulkPanel: () => {
+                const controls = document.getElementById('bulkEditControls');
+                const chevron = document.getElementById('bulkToggleChevron');
+                if (controls && chevron) {
+                    const isHidden = controls.classList.contains('hidden');
+                    if (isHidden) {
+                        controls.classList.remove('hidden');
+                        chevron.classList.add('rotate-180');
+                    } else {
+                        controls.classList.add('hidden');
+                        chevron.classList.remove('rotate-180');
+                    }
+                }
+            },
+
+            selectAllBulk: (select) => {
+                const checkboxes = document.querySelectorAll('.bulk-select-checkbox');
+                checkboxes.forEach(cb => cb.checked = select);
+            },
+
+            applyBulkEdit: () => {
+                const checkboxes = document.querySelectorAll('.bulk-select-checkbox:checked');
+                if (checkboxes.length === 0) {
+                    return showToast("Nenhum episódio/link selecionado.", "warning");
+                }
+
+                const bulkAudio = document.getElementById('bulkAudio').value;
+                const bulkQuality = document.getElementById('bulkQuality').value;
+                const bulkSeasonVal = document.getElementById('bulkSeason').value.trim();
+
+                if (!bulkAudio && !bulkQuality && !bulkSeasonVal) {
+                    return showToast("Defina alguma alteração para aplicar.", "warning");
+                }
+
+                const type = gen.editData.type;
+
+                if (type === 'movie') {
+                    checkboxes.forEach(cb => {
+                        const index = parseInt(cb.getAttribute('data-index'));
+                        const stream = gen.editData.streams[index];
+                        if (stream) {
+                            let parts = stream.name.split('\n');
+                            let audio = parts[0] || '';
+                            let quality = parts[1] || '';
+
+                            if (bulkAudio) audio = bulkAudio;
+                            if (bulkQuality) quality = bulkQuality;
+
+                            stream.name = `${audio}\n${quality}`;
+                        }
+                    });
+                } else {
+                    const itemsToMove = [];
+                    
+                    checkboxes.forEach(cb => {
+                        const season = cb.getAttribute('data-season');
+                        const ep = cb.getAttribute('data-ep');
+                        const index = parseInt(cb.getAttribute('data-index'));
+                        
+                        const stream = gen.editData.streams[season]?.[ep]?.[index];
+                        if (stream) {
+                            let parts = stream.name.split('\n');
+                            let audio = parts[0] || '';
+                            let quality = parts[1] || '';
+
+                            if (bulkAudio) audio = bulkAudio;
+                            if (bulkQuality) quality = bulkQuality;
+
+                            stream.name = `${audio}\n${quality}`;
+
+                            if (bulkSeasonVal && bulkSeasonVal !== season) {
+                                itemsToMove.push({
+                                    fromSeason: season,
+                                    fromEp: ep,
+                                    stream: stream,
+                                    targetSeason: bulkSeasonVal
+                                });
+                            }
+                        }
+                    });
+
+                    if (itemsToMove.length > 0) {
+                        const MOVE_MARKER = '__MOVED__';
+                        itemsToMove.forEach(item => {
+                            item.stream[MOVE_MARKER] = true;
+                        });
+
+                        Object.keys(gen.editData.streams).forEach(s => {
+                            Object.keys(gen.editData.streams[s]).forEach(e => {
+                                gen.editData.streams[s][e] = gen.editData.streams[s][e].filter(stream => {
+                                    if (stream[MOVE_MARKER]) {
+                                        delete stream[MOVE_MARKER];
+                                        return false;
+                                    }
+                                    return true;
+                                });
+                                if (gen.editData.streams[s][e].length === 0) {
+                                    delete gen.editData.streams[s][e];
+                                }
+                            });
+                            if (Object.keys(gen.editData.streams[s]).length === 0) {
+                                delete gen.editData.streams[s];
+                            }
+                        });
+
+                        itemsToMove.forEach(item => {
+                            const tSeason = item.targetSeason;
+                            const ep = item.fromEp;
+                            if (!gen.editData.streams[tSeason]) {
+                                gen.editData.streams[tSeason] = {};
+                            }
+                            if (!gen.editData.streams[tSeason][ep]) {
+                                gen.editData.streams[tSeason][ep] = [];
+                            }
+                            gen.editData.streams[tSeason][ep].push(item.stream);
+                        });
+                    }
+                }
+
+                gen.renderVisualEditorContent();
+                showToast("Modificações em massa aplicadas!", "success");
+            },
+
             updateEditData: (type, index, field, element, season, ep) => {
                 const val = element.value;
                 if (type === 'movie') {
@@ -3002,6 +3273,32 @@
                 } else {
                     gen.editData.streams[season][ep][index][field] = val;
                 }
+            },
+
+            changeEpNum: (season, oldEp, index, element) => {
+                const newEp = element.value.trim();
+                if (!newEp || isNaN(newEp) || parseInt(newEp) < 1) {
+                    element.value = oldEp;
+                    return showToast("Número de episódio inválido.", "warning");
+                }
+                
+                const stream = gen.editData.streams[season]?.[oldEp]?.[index];
+                if (!stream) return;
+
+                // Remove do local antigo
+                gen.editData.streams[season][oldEp].splice(index, 1);
+                if (gen.editData.streams[season][oldEp].length === 0) {
+                    delete gen.editData.streams[season][oldEp];
+                }
+
+                // Insere no local novo
+                if (!gen.editData.streams[season][newEp]) {
+                    gen.editData.streams[season][newEp] = [];
+                }
+                gen.editData.streams[season][newEp].push(stream);
+
+                gen.renderVisualEditorContent();
+                showToast(`Episódio alterado para E${newEp.padStart(2,'0')}`, "success");
             },
 
             removeEditData: (type, index, season, ep) => {
@@ -3029,13 +3326,19 @@
                     } else {
                         gen.editData.streams.forEach((stream, index) => {
                             html += `
-                            <div class="bg-zinc-900 p-3.5 rounded-xl border border-zinc-800 flex flex-col md:flex-row gap-3 items-center group">
-                                <div class="bg-zinc-950 text-zinc-500 w-10 h-10 rounded-lg flex justify-center items-center shrink-0 border border-zinc-800"><i class="fa-solid fa-film text-xs"></i></div>
-                                <div class="flex-grow flex flex-col md:flex-row gap-3 w-full">
-                                    <textarea rows="2" class="input-unified p-2.5 text-xs rounded-lg w-full md:w-1/3 custom-scrollbar" placeholder="Nome" onchange="gen.updateEditData('movie', ${index}, 'name', this)">${escapeHTML(stream.name)}</textarea>
+                            <div class="bg-zinc-900 p-3 rounded-xl border border-zinc-800 flex flex-col md:flex-row gap-3 md:items-center animate-fade-in">
+                                <div class="flex items-center justify-between w-full md:w-auto md:shrink-0 gap-2 border-b border-zinc-850 pb-2 md:border-b-0 md:pb-0">
+                                    <div class="flex items-center gap-3">
+                                        <input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-800 bg-zinc-950 text-primary focus:ring-ember-500 shrink-0" data-type="movie" data-index="${index}">
+                                        <div class="bg-zinc-950 text-zinc-500 border border-zinc-800 px-2.5 py-1 md:w-10 md:h-10 rounded-lg flex justify-center items-center text-xs shrink-0"><i class="fa-solid fa-film text-xs"></i></div>
+                                    </div>
+                                    <button onclick="gen.removeEditData('movie', ${index})" class="md:hidden bg-zinc-950 border border-zinc-800 hover:border-red-900 hover:bg-red-950 text-zinc-500 hover:text-red-400 w-8 h-8 rounded-lg transition flex items-center justify-center shrink-0"><i class="fa-solid fa-trash text-xs"></i></button>
+                                </div>
+                                <div class="flex-grow flex flex-col md:flex-row gap-2.5 w-full">
+                                    <textarea rows="1" class="input-unified p-2.5 text-xs rounded-lg w-full md:w-1/3 custom-scrollbar" placeholder="Nome" onchange="gen.updateEditData('movie', ${index}, 'name', this)">${escapeHTML(stream.name)}</textarea>
                                     <input type="text" class="input-unified p-2.5 text-xs rounded-lg font-mono w-full md:w-2/3" placeholder="URL" value="${escapeHTML(stream.url)}" onchange="gen.updateEditData('movie', ${index}, 'url', this)">
                                 </div>
-                                <button onclick="gen.removeEditData('movie', ${index})" class="bg-zinc-950 border border-zinc-800 hover:border-red-900 hover:bg-red-950 text-zinc-500 hover:text-red-400 w-full md:w-10 h-10 rounded-lg transition shrink-0"><i class="fa-solid fa-trash text-xs"></i></button>
+                                <button onclick="gen.removeEditData('movie', ${index})" class="hidden md:flex bg-zinc-950 border border-zinc-800 hover:border-red-900 hover:bg-red-950 text-zinc-500 hover:text-red-400 w-10 h-10 rounded-lg transition items-center justify-center shrink-0"><i class="fa-solid fa-trash text-xs"></i></button>
                             </div>`;
                         });
                     }
@@ -3046,19 +3349,28 @@
                     seasons.forEach(season => {
                         const eps = Object.keys(gen.editData.streams[season]).sort((a,b) => parseInt(a)-parseInt(b));
                         
-                        html += `<div class="mt-6 mb-3 px-1"><span class="text-zinc-400 text-xs font-semibold uppercase tracking-wider">Temporada ${season}</span></div>`;
+                        html += `<div class="mt-6 mb-3 px-1 border-b border-zinc-850 pb-1 flex items-center justify-between"><span class="text-zinc-400 text-xs font-semibold uppercase tracking-wider">Temporada ${season}</span></div>`;
                         
                         eps.forEach(ep => {
                             gen.editData.streams[season][ep].forEach((stream, index) => {
                                 hasItems = true;
                                 html += `
-                                <div class="bg-zinc-900 p-3.5 rounded-xl border border-zinc-800 flex flex-col md:flex-row gap-3 items-center group">
-                                    <div class="bg-zinc-950 text-zinc-400 border border-zinc-800 font-mono font-medium w-10 h-10 rounded-lg flex justify-center items-center text-xs shrink-0">E${ep.padStart(2,'0')}</div>
-                                    <div class="flex-grow flex flex-col md:flex-row gap-3 w-full">
-                                        <textarea rows="2" class="input-unified p-2.5 text-xs rounded-lg w-full md:w-1/3 custom-scrollbar" placeholder="Nome" onchange="gen.updateEditData('series', ${index}, 'name', this, '${season}', '${ep}')">${escapeHTML(stream.name)}</textarea>
+                                <div class="bg-zinc-900 p-3 rounded-xl border border-zinc-800 flex flex-col md:flex-row gap-3 md:items-center animate-fade-in">
+                                    <div class="flex items-center justify-between w-full md:w-auto md:shrink-0 gap-2 border-b border-zinc-850 pb-2 md:border-b-0 md:pb-0">
+                                        <div class="flex items-center gap-3">
+                                            <input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-800 bg-zinc-950 text-primary focus:ring-ember-500 shrink-0" data-type="series" data-season="${season}" data-ep="${ep}" data-index="${index}">
+                                            <div class="bg-zinc-950 text-zinc-400 border border-zinc-800 rounded-lg flex items-center justify-center shrink-0 p-1 md:w-16 md:h-10 text-xs font-semibold">
+                                                <span class="text-[9px] uppercase text-zinc-500 font-bold hidden md:inline mr-0.5">Ep</span>
+                                                <input type="number" class="w-8 bg-transparent text-white border-0 focus:ring-0 text-center font-mono p-0 font-semibold" value="${ep}" min="1" onchange="gen.changeEpNum('${season}', '${ep}', ${index}, this)">
+                                            </div>
+                                        </div>
+                                        <button onclick="gen.removeEditData('series', ${index}, '${season}', '${ep}')" class="md:hidden bg-zinc-950 border border-zinc-800 hover:border-red-900 hover:bg-red-950 text-zinc-500 hover:text-red-400 w-8 h-8 rounded-lg transition flex items-center justify-center shrink-0"><i class="fa-solid fa-trash text-xs"></i></button>
+                                    </div>
+                                    <div class="flex-grow flex flex-col md:flex-row gap-2.5 w-full">
+                                        <textarea rows="1" class="input-unified p-2.5 text-xs rounded-lg w-full md:w-1/3 custom-scrollbar" placeholder="Nome" onchange="gen.updateEditData('series', ${index}, 'name', this, '${season}', '${ep}')">${escapeHTML(stream.name)}</textarea>
                                         <input type="text" class="input-unified p-2.5 text-xs rounded-lg font-mono w-full md:w-2/3" placeholder="URL" value="${escapeHTML(stream.url)}" onchange="gen.updateEditData('series', ${index}, 'url', this, '${season}', '${ep}')">
                                     </div>
-                                    <button onclick="gen.removeEditData('series', ${index}, '${season}', '${ep}')" class="bg-zinc-950 border border-zinc-800 hover:border-red-900 hover:bg-red-950 text-zinc-500 hover:text-red-400 w-full md:w-10 h-10 rounded-lg transition shrink-0"><i class="fa-solid fa-trash text-xs"></i></button>
+                                    <button onclick="gen.removeEditData('series', ${index}, '${season}', '${ep}')" class="hidden md:flex bg-zinc-950 border border-zinc-800 hover:border-red-900 hover:bg-red-950 text-zinc-500 hover:text-red-400 w-10 h-10 rounded-lg transition items-center justify-center shrink-0"><i class="fa-solid fa-trash text-xs"></i></button>
                                 </div>`;
                             });
                         });
@@ -3164,6 +3476,9 @@
 
                     cat.updateGlobalStats();
                     cat.filter('all');
+                    if (typeof cat.fetchMissingMetadata === 'function') {
+                        cat.fetchMissingMetadata();
+                    }
 
                 } catch (error) {
                     showToast("Erro ao carregar o catálogo", "error");
@@ -3392,6 +3707,28 @@
                 missEl.innerText = totalFaltantes;
             },
 
+            fetchMissingMetadata: async () => {
+                const missing = cat.allItems.filter(i => !i.title && i.id.startsWith('tt') && !i._fetchingMeta);
+                for (const item of missing) {
+                    item._fetchingMeta = true;
+                    try {
+                        const res = await fetch(`https://v3-cinemeta.strem.io/meta/${item.type}/${item.id}.json`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (data && data.meta) {
+                                item.title = data.meta.name;
+                                item.poster = data.meta.poster;
+                                item.year = data.meta.year;
+                                if (cat.filteredItems.includes(item)) {
+                                    cat.renderFiltered();
+                                }
+                            }
+                        }
+                    } catch (e) { console.error("Erro cinemeta", item.id); }
+                    await new Promise(r => setTimeout(r, 150));
+                }
+            },
+
             setLoading: (isLoading) => {
                 const el = document.getElementById('apiStatus');
                 if(!el) return;
@@ -3402,8 +3739,17 @@
             processFiles: async (files) => {
                 if (!files || files.length === 0) return;
 
+                const hasAdminSession = sessionStorage.getItem('fenixflix_senha');
+                const discordToken = localStorage.getItem('discord_token');
+
+                if (!hasAdminSession && !discordToken) {
+                    showToast("Você precisa estar logado com o Discord para salvar links.", "error");
+                    return;
+                }
+
                 let sucesso = 0;
                 let erro = 0;
+                let discordExpired = false;
 
                 showToast(`A processar ${files.length} ficheiros... aguarde.`, 'info');
 
@@ -3424,14 +3770,21 @@
                             formData.append("senha", senha);
                         }
 
+                        const headers = {};
+                        if (discordToken) {
+                            headers['Authorization'] = `Bearer ${discordToken}`;
+                        }
+
                         const response = await fetch(API_URL + '/upload', {
                             method: 'POST',
+                            headers: headers,
                             body: formData
                         });
 
                         if (response.ok) {
                             sucesso++;
                         } else {
+                            if (response.status === 401) discordExpired = true;
                             erro++;
                         }
                     } catch (error) {
@@ -3440,7 +3793,17 @@
                     }
                 }
 
-                showToast(`Upload concluído! Sucesso: ${sucesso} | Erros: ${erro}`, erro > 0 ? 'warning' : 'success');
+                if (discordExpired) {
+                    showToast("Sessão do Discord expirou! Faça login novamente para enviar.", "error");
+                    localStorage.removeItem('discord_token');
+                    localStorage.removeItem('discord_username');
+                    localStorage.removeItem('discord_global_name');
+                    localStorage.removeItem('discord_avatar');
+                    localStorage.removeItem('discord_id');
+                    if (typeof updateDiscordUI === 'function') updateDiscordUI();
+                } else {
+                    showToast(`Upload concluído! Sucesso: ${sucesso} | Erros: ${erro}`, erro > 0 ? 'warning' : 'success');
+                }
                 cat.init();
             },
 
@@ -3889,11 +4252,16 @@
         // --- MÓDULO 3: PROCESSADOR DE PEDIDOS ---
         const reqProcessor = {
             parsedItems: new Map(),
+            filteredItems: [],
+            visibleCount: 50,
+            isLoadingMore: false,
             totalLinesRead: 0,
             tmdbKey: "eyJhbGciOiJIUzI1NiJ9" + ".eyJhdWQiOiJlZTBmMzJmNzY5Mzc0YTkzYTI0ZmNiYzcyMWRlODYzNCIsIm5iZiI6MTc1NjA2MzM2NC4yMzksInN1YiI6IjY4YWI2Njg0ZDAyMjdhYTVlMjlkYjE2MSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.z1hG61Z5RCvn6qEZj60sHxrDZ0hR8QQi4rt18erzF-w",
 
             clearData: () => {
                 reqProcessor.parsedItems.clear();
+                reqProcessor.filteredItems = [];
+                reqProcessor.visibleCount = 50;
                 reqProcessor.totalLinesRead = 0;
                 
                 reqProcessor.updateUI();
@@ -4125,9 +4493,25 @@
                 }
             },
 
+            loadMore: () => {
+                if (reqProcessor.isLoadingMore) return;
+                if (reqProcessor.visibleCount >= reqProcessor.filteredItems.length) return;
+                
+                reqProcessor.isLoadingMore = true;
+                reqProcessor.visibleCount += 50;
+                reqProcessor.renderFiltered();
+                
+                setTimeout(() => {
+                    reqProcessor.isLoadingMore = false;
+                }, 100);
+            },
+
             renderList: () => {
                 const container = document.getElementById('req-results-container');
-                if (reqProcessor.parsedItems.size === 0) return;
+                if (reqProcessor.parsedItems.size === 0) {
+                    container.innerHTML = '<div class="text-center py-8 text-zinc-600 text-sm">Nenhum resultado.</div>';
+                    return;
+                }
 
                 // Atualiza contadores dinamicamente baseado nos filtros atuais
                 reqProcessor.updateUI();
@@ -4153,8 +4537,23 @@
                 else if (sortMode === 'alpha') items.sort((a,b) => (a.title||a.id).localeCompare(b.title||b.id));
                 else if (sortMode === 'type') items.sort((a,b) => a.type.localeCompare(b.type) || (b.count||0) - (a.count||0));
 
+                reqProcessor.filteredItems = items;
+                reqProcessor.visibleCount = 50;
+                reqProcessor.renderFiltered();
+            },
+
+            renderFiltered: () => {
+                const container = document.getElementById('req-results-container');
+                if (reqProcessor.filteredItems.length === 0) {
+                    container.innerHTML = '<div class="text-center py-8 text-zinc-600 text-sm">Nenhum resultado.</div>';
+                    return;
+                }
+
+                const today = new Date().toISOString().split('T')[0];
                 let html = '';
-                items.forEach(item => {
+                const itemsToRender = reqProcessor.filteredItems.slice(0, reqProcessor.visibleCount);
+                
+                itemsToRender.forEach(item => {
                     const typeName = item.type === 'movie' ? 'Filme' : 'Série';
                     const countBadge = (item.count > 1) ? `<span class="text-zinc-500 text-[10px] font-medium ml-2">${item.count} pedidos</span>` : '';
 
@@ -4199,7 +4598,7 @@
                     `;
                 });
 
-                container.innerHTML = html || '<div class="text-center py-8 text-zinc-600 text-sm">Nenhum resultado.</div>';
+                container.innerHTML = html;
             },
 
             removeItem: async (id) => {
@@ -4781,11 +5180,23 @@
                         const safeNome = escapeHTML(col.nome);
                         const safeTitlesStr = escapeHTML(titlesStr);
                         const safeUniqueTitles = escapeHTML(uniqueTitles.join(', '));
+
+                        let avatarImgHtml = `<i class="fa-solid fa-user text-zinc-400 text-sm"></i>`;
+                        if (col.discord_id && col.avatar) {
+                            const avatarUrl = `https://cdn.discordapp.com/avatars/${col.discord_id}/${col.avatar}.png?size=64`;
+                            avatarImgHtml = `<img src="${avatarUrl}" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
+                        } else if (col.discord_id) {
+                            // Calcula avatar padrão caso não tenha hash de avatar mas tenha ID
+                            const defaultIdx = (parseInt(col.discord_id.slice(-4)) || 0) % 5;
+                            const defaultAvatarUrl = `https://cdn.discordapp.com/embed/avatars/${defaultIdx}.png`;
+                            avatarImgHtml = `<img src="${defaultAvatarUrl}" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
+                        }
+
                         tcHtml += `
                             <div class="flex items-center gap-3 bg-obsidian-900/60 p-3.5 rounded-2xl border border-white/5 hover:border-white/10 hover:shadow-lg transition-all">
                                 <div class="w-8 text-center shrink-0">${medal}</div>
-                                <div class="w-9 h-9 bg-obsidian-800 border border-white/5 flex items-center justify-center rounded-xl shrink-0 shadow-inner">
-                                    <i class="fa-solid fa-user text-zinc-400 text-sm"></i>
+                                <div class="w-9 h-9 bg-obsidian-800 border border-white/5 flex items-center justify-center rounded-xl shrink-0 shadow-inner overflow-hidden">
+                                    ${avatarImgHtml}
                                 </div>
                                 <div class="flex-grow min-w-0">
                                     <h4 class="text-white text-xs font-bold font-display tracking-wide truncate">${safeNome}</h4>
@@ -4799,7 +5210,7 @@
                                     </div>
                                     <div class="flex items-center gap-2.5 text-[10px]">
                                         <div class="flex items-center text-zinc-400" title="Filmes enviados">
-                                            <i class="fa-solid fa-film text-ember-500 mr-1"></i>${countMovies} <span class="hidden sm:inline ml-0.5">Filmes</span>
+                                            <i class="fa-solid fa-film text-primary mr-1"></i>${countMovies} <span class="hidden sm:inline ml-0.5">Filmes</span>
                                         </div>
                                         <div class="flex items-center text-zinc-400" title="Episódios de Séries enviados">
                                             <i class="fa-solid fa-tv text-sky-400 mr-1"></i>${countSeries} <span class="hidden sm:inline ml-0.5">Eps</span>
@@ -4914,10 +5325,14 @@
             
             scrollTimeout = setTimeout(() => {
                 scrollTimeout = null;
-                const activeTab = document.querySelector('.tab-content:not(.hidden)');
+                const activeTab = document.querySelector('.tab-content.active') || document.querySelector('.tab-content:not(.hidden)');
                 if (activeTab && activeTab.id === 'view-catalog') {
                     if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 900) {
                         cat.loadMore();
+                    }
+                } else if (activeTab && activeTab.id === 'view-requests') {
+                    if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 900) {
+                        reqProcessor.loadMore();
                     }
                 }
             }, 100); // Limita verificação a cada 100ms

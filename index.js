@@ -119,6 +119,7 @@ const initDB = async () => {
             id SERIAL PRIMARY KEY,
             nome_do_json VARCHAR(255) UNIQUE NOT NULL,
             conteudo JSONB NOT NULL,
+            is_oculto BOOLEAN DEFAULT FALSE,
             criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
     `;
@@ -141,10 +142,32 @@ const initDB = async () => {
             criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
     `;
+    const queryUsuarios = `
+        CREATE TABLE IF NOT EXISTS usuarios_discord (
+            discord_id VARCHAR(50) PRIMARY KEY,
+            username VARCHAR(100) NOT NULL,
+            global_name VARCHAR(100),
+            avatar VARCHAR(100),
+            is_ajudante BOOLEAN DEFAULT FALSE,
+            cargos JSONB DEFAULT '[]'::jsonb,
+            atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+    `;
     try {
         await pool.query(query);
         await pool.query(queryPedidos);
         await pool.query(queryDenuncias);
+        await pool.query(queryUsuarios);
+        
+        // Add new columns if they don't exist (for existing databases)
+        try {
+            await pool.query('ALTER TABLE usuarios_discord ADD COLUMN IF NOT EXISTS is_ajudante BOOLEAN DEFAULT FALSE;');
+            await pool.query('ALTER TABLE usuarios_discord ADD COLUMN IF NOT EXISTS cargos JSONB DEFAULT \'[]\'::jsonb;');
+            await pool.query('ALTER TABLE arquivos_json ADD COLUMN IF NOT EXISTS is_oculto BOOLEAN DEFAULT FALSE;');
+        } catch (e) {
+            console.error('Erro ao adicionar novas colunas:', e.message);
+        }
+
         console.log('Tabelas de banco de dados verificadas/criadas com sucesso.');
     } catch (err) {
         console.error('Erro ao criar tabelas:', err);
@@ -407,24 +430,83 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         
         const userData = await userResponse.json();
         
+        let isAjudante = false;
+        let cargos = [];
+
+        const botToken = process.env.DISCORD_BOT_TOKEN;
+        const guildId = process.env.DISCORD_GUILD_ID;
+        const ajudanteRoleId = process.env.DISCORD_AJUDANTE_ROLE_ID; // opcional
+
+        if (botToken && guildId) {
+            try {
+                const memberResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${userData.id}`, {
+                    headers: {
+                        'Authorization': `Bot ${botToken}`,
+                        'User-Agent': 'FenixStudio (https://fenixstudio.com, 1.0.0)'
+                    }
+                });
+                if (memberResponse.ok) {
+                    const memberData = await memberResponse.json();
+                    cargos = memberData.roles || [];
+                    // Verifica se tem a tag de Ajudante
+                    if (ajudanteRoleId) {
+                        isAjudante = cargos.includes(ajudanteRoleId);
+                    } else {
+                        // fallback caso não tenha role_id específico: procurar o cargo "Ajudante" por nome requereria buscar todos os cargos da guild, o que é mais complexo.
+                        // Assumimos que o role_id será fornecido
+                        // Ou podemos permitir qualquer membro do servidor ser "ajudante" pra fins de teste? Não.
+                        // Se não tem role_id configurado, não podemos verificar o nome do cargo sem outra requisição.
+                        console.warn('DISCORD_AJUDANTE_ROLE_ID não configurado. Não foi possível verificar se é ajudante pelo cargo.');
+                    }
+                } else {
+                    console.warn('Usuário não está no servidor ou erro ao buscar member info:', memberResponse.status);
+                }
+            } catch (memberErr) {
+                console.error('Erro ao buscar cargos do membro no servidor:', memberErr.message);
+            }
+        }
+
         const payload = {
             id: userData.id,
             username: userData.username,
             global_name: userData.global_name || userData.username,
-            avatar: userData.avatar
+            avatar: userData.avatar,
+            isAjudante,
+            cargos
         };
+        
+        // Salva/atualiza o perfil do usuário do Discord no banco de dados local
+        try {
+            const queryUpsertUser = `
+                INSERT INTO usuarios_discord (discord_id, username, global_name, avatar, is_ajudante, cargos, atualizado_em)
+                VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+                ON CONFLICT (discord_id)
+                DO UPDATE SET username = EXCLUDED.username, global_name = EXCLUDED.global_name, avatar = EXCLUDED.avatar, is_ajudante = EXCLUDED.is_ajudante, cargos = EXCLUDED.cargos, atualizado_em = CURRENT_TIMESTAMP;
+            `;
+            await pool.query(queryUpsertUser, [userData.id, userData.username, userData.global_name || userData.username, userData.avatar, isAjudante, JSON.stringify(cargos)]);
+        } catch (dbErr) {
+            console.error("Erro ao salvar usuário do Discord no banco de dados:", dbErr.message);
+        }
         
         const token = generateToken(payload);
         
         // Define redirect target from state if present, otherwise default to relative path '/'
         let baseRedirect = '/';
-        if (state) {
+        const stateStr = String(state || '').trim();
+        
+        if (stateStr) {
             try {
-                if (state.startsWith('http://') || state.startsWith('https://')) {
-                    const parsedUrl = new URL(state);
-                    const allowedHosts = ['localhost', '127.0.0.1'];
-                    if (allowedHosts.includes(parsedUrl.hostname) || parsedUrl.hostname.includes('fenix')) {
-                        baseRedirect = state;
+                // Proteção contra open redirect: se for caminho relativo, aceitamos (mas não // para evitar url bypass)
+                if (stateStr.startsWith('/') && !stateStr.startsWith('//')) {
+                    baseRedirect = stateStr;
+                } else if (stateStr.startsWith('http://') || stateStr.startsWith('https://')) {
+                    const parsedUrl = new URL(stateStr);
+                    const currentHost = String(req.get('host') || '').split(':')[0];
+                    const allowedHosts = ['localhost', '127.0.0.1', currentHost];
+                    
+                    // Validação estrita: aceita apenas hosts permitidos ou subdomínios confiáveis
+                    if (allowedHosts.includes(parsedUrl.hostname) || parsedUrl.hostname.endsWith('.fenixstudio.com') || parsedUrl.hostname === 'fenixstudio.com') {
+                        baseRedirect = parsedUrl.href; // Reconstrói a URL para sanitizar
                     }
                 }
             } catch (e) {
@@ -432,8 +514,10 @@ app.get('/api/auth/discord/callback', async (req, res) => {
             }
         }
         
+        // Garante rigidamente o tipo String para evitar falhas de Type Validation apontadas pelo Snyk
+        baseRedirect = String(baseRedirect);
         const separator = baseRedirect.includes('?') ? '&' : '?';
-        res.redirect(`${baseRedirect}${separator}discord_token=${token}&discord_username=${encodeURIComponent(payload.username)}&discord_global_name=${encodeURIComponent(payload.global_name)}&discord_avatar=${encodeURIComponent(payload.avatar || '')}&discord_id=${payload.id}`);
+        res.redirect(`${baseRedirect}${separator}discord_token=${token}&discord_username=${encodeURIComponent(payload.username)}&discord_global_name=${encodeURIComponent(payload.global_name)}&discord_avatar=${encodeURIComponent(payload.avatar || '')}&discord_id=${payload.id}&is_ajudante=${isAjudante}`);
     } catch (err) {
         console.error("Erro no callback do Discord:", err);
         res.status(500).send("Erro interno durante autenticação do Discord.");
@@ -472,14 +556,42 @@ app.post('/upload', upload.none(), async (req, res) => {
         return res.status(401).json({ erro: 'Você precisa estar logado com o Discord para salvar links.' });
     }
 
-    // Se estiver logado via Discord, forçar a autoria das streams a pertencer a esse usuário
+    // ==========================================
+    // VERIFICAR EXISTÊNCIA DO ARQUIVO PARA LÓGICA DE EDIÇÃO/AUTORIA
+    // ==========================================
+    let isEdit = false;
+    let existingContent = null;
+    try {
+        const checkQuery = 'SELECT conteudo FROM arquivos_json WHERE nome_do_json = $1;';
+        const checkRes = await pool.query(checkQuery, [nome]);
+        if (checkRes.rows.length > 0) {
+            isEdit = true;
+            existingContent = typeof checkRes.rows[0].conteudo === 'string'
+                ? JSON.parse(checkRes.rows[0].conteudo)
+                : checkRes.rows[0].conteudo;
+        }
+    } catch (checkErr) {
+        console.error("⚠️ Erro ao buscar dados existentes:", checkErr.message);
+    }
+
+    const isAjudante = user && user.isAjudante;
+    const canOverwrite = isAdmin || isAjudante;
+
+    // Se estiver logado via Discord, forçar a autoria das streams
     if (user && !isAdmin) {
         const discordName = user.global_name || user.username;
-        parsedConteudo.colaborador = discordName;
+        
+        // Se for um "lote" novo (não é edição) OU se não for ajudante, forçamos o nickname atual
+        if (!isEdit || !isAjudante) {
+            parsedConteudo.colaborador = discordName;
+        } else {
+            // Se for ajudante editando, tenta manter o autor original (ou o que veio no JSON)
+            parsedConteudo.colaborador = parsedConteudo.colaborador || discordName;
+        }
         
         if (parsedConteudo.type === 'movie' && Array.isArray(parsedConteudo.streams)) {
             parsedConteudo.streams.forEach(s => {
-                s.colaborador = discordName;
+                s.colaborador = (!isEdit || !isAjudante) ? discordName : (s.colaborador || discordName);
             });
         } else if (parsedConteudo.type === 'series' && parsedConteudo.streams && typeof parsedConteudo.streams === 'object') {
             Object.keys(parsedConteudo.streams).forEach(seasonNum => {
@@ -488,7 +600,7 @@ app.post('/upload', upload.none(), async (req, res) => {
                     const epStreams = season[epNum] || [];
                     if (Array.isArray(epStreams)) {
                         epStreams.forEach(s => {
-                            s.colaborador = discordName;
+                            s.colaborador = (!isEdit || !isAjudante) ? discordName : (s.colaborador || discordName);
                         });
                     }
                 });
@@ -540,22 +652,13 @@ app.post('/upload', upload.none(), async (req, res) => {
     let finalConteudo = parsedConteudo;
     injectDateIntoStreams(finalConteudo);
 
-    try {
-        if (!isAdmin) {
-            const checkQuery = 'SELECT conteudo FROM arquivos_json WHERE nome_do_json = $1;';
-            const checkRes = await pool.query(checkQuery, [nome]);
-            if (checkRes.rows.length > 0) {
-                const existingContent = typeof checkRes.rows[0].conteudo === 'string'
-                    ? JSON.parse(checkRes.rows[0].conteudo)
-                    : checkRes.rows[0].conteudo;
-                finalConteudo = mergeMediaContents(existingContent, parsedConteudo);
-                console.log(`[Upload] Mesclando conteúdo existente para '${nome}'`);
-            }
+    if (isEdit) {
+        if (!canOverwrite) {
+            finalConteudo = mergeMediaContents(existingContent, parsedConteudo);
+            console.log(`[Upload] Mesclando conteúdo existente para '${nome}'`);
         } else {
-            console.log(`[Upload Admin] Sobrescrevendo conteúdo para '${nome}' (sem mesclar)`);
+            console.log(`[Upload Admin/Ajudante] Sobrescrevendo conteúdo para '${nome}' (sem mesclar)`);
         }
-    } catch (checkErr) {
-        console.error("⚠️ Erro ao buscar e mesclar dados existentes:", checkErr.message);
     }
 
     try {
@@ -581,8 +684,15 @@ app.post('/upload', upload.none(), async (req, res) => {
 // ROTA 2: Listar todos os JSONs (/api/all)
 // ==========================================
 app.get('/api/all', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    const user = verifyToken(token);
+    const { senha } = req.query;
+    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+    const canSeeHidden = (senha === adminPassword) || (user && user.isAjudante);
+
     try {
-        const query = 'SELECT conteudo FROM arquivos_json ORDER BY criado_em DESC;';
+        const query = `SELECT conteudo FROM arquivos_json ${canSeeHidden ? '' : 'WHERE is_oculto = FALSE'} ORDER BY criado_em DESC;`;
         const result = await pool.query(query);
         res.json(result.rows.map(r => r.conteudo));
     } catch (err) {
@@ -595,8 +705,15 @@ app.get('/api/all', async (req, res) => {
 // ROTA 2b: Listar todos para o Catálogo (/api/catalog)
 // ==========================================
 app.get('/api/catalog', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    const user = verifyToken(token);
+    const { senha } = req.query;
+    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+    const canSeeHidden = (senha === adminPassword) || (user && user.isAjudante);
+
     try {
-        const query = 'SELECT conteudo FROM arquivos_json ORDER BY criado_em DESC;';
+        const query = `SELECT conteudo FROM arquivos_json ${canSeeHidden ? '' : 'WHERE is_oculto = FALSE'} ORDER BY criado_em DESC;`;
         const result = await pool.query(query);
         res.json(result.rows.map(r => r.conteudo));
     } catch (err) {
@@ -658,6 +775,17 @@ app.get('/:nome', async (req, res) => {
         return res.status(404).json({ erro: 'Rota reservada.' });
     }
     try {
+        const authHeader = req.headers.authorization;
+        const token = authHeader && authHeader.split(' ')[1];
+        const user = verifyToken(token);
+        
+        const { senha } = req.query;
+        const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+        
+        const isAdmin = (senha === adminPassword);
+        const isAjudante = user && user.isAjudante;
+        const canSeeHidden = isAdmin || isAjudante;
+
         const query = `
             UPDATE arquivos_json 
             SET conteudo = jsonb_set(
@@ -666,12 +794,13 @@ app.get('/:nome', async (req, res) => {
                 to_jsonb(COALESCE((conteudo->>'views')::int, 0) + 1)
             ) 
             WHERE nome_do_json = $1 
+            ${canSeeHidden ? '' : 'AND is_oculto = FALSE'}
             RETURNING conteudo;
         `;
         const result = await pool.query(query, [req.params.nome]);
 
         if (result.rows.length === 0) {
-            return res.status(404).json({ erro: 'JSON não encontrado.' });
+            return res.status(404).json({ erro: 'JSON não encontrado ou oculto.' });
         }
 
         // Retorna diretamente o objeto JSON, sem encapsular
@@ -859,6 +988,43 @@ app.post('/api/pedidos/delete', async (req, res) => {
 });
 
 // ==========================================
+// ROTA 9x: Ocultar/Desocultar Arquivo (/api/arquivos/ocultar)
+// ==========================================
+app.post('/api/arquivos/ocultar', async (req, res) => {
+    const { nome, is_oculto, senha } = req.body;
+    
+    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    const user = verifyToken(token);
+
+    const isAdmin = (senha === adminPassword);
+    const isAjudante = user && user.isAjudante;
+
+    if (!isAdmin && !isAjudante) {
+        return res.status(401).json({ erro: 'Acesso não autorizado para ocultar arquivos.' });
+    }
+
+    if (!nome) {
+        return res.status(400).json({ erro: 'Nome do arquivo é obrigatório.' });
+    }
+
+    try {
+        const query = 'UPDATE arquivos_json SET is_oculto = $1 WHERE nome_do_json = $2 RETURNING *;';
+        const result = await pool.query(query, [is_oculto, nome]);
+        
+        if (result.rowCount === 0) {
+            return res.status(404).json({ erro: 'Arquivo não encontrado.' });
+        }
+        
+        res.json({ sucesso: true, mensagem: `Arquivo ${is_oculto ? 'ocultado' : 'desocultado'} com sucesso.` });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: 'Erro ao alterar visibilidade do arquivo.' });
+    }
+});
+
+// ==========================================
 // ROTA 9b: Denunciar Conteúdo (/api/denunciar)
 // ==========================================
 app.post('/api/denunciar', async (req, res) => {
@@ -883,13 +1049,19 @@ app.post('/api/denunciar', async (req, res) => {
 });
 
 // ==========================================
-// ROTA 9c: Listar Denúncias (/api/denuncias) - Admin-only
+// ROTA 9c: Listar Denúncias (/api/denuncias) - Admin ou Ajudante
 // ==========================================
 app.get('/api/denuncias', async (req, res) => {
     const { senha } = req.query;
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    const user = verifyToken(token);
 
-    if (senha !== adminPassword) {
+    const isAdmin = (senha === adminPassword);
+    const isAjudante = user && user.isAjudante;
+
+    if (!isAdmin && !isAjudante) {
         return res.status(401).json({ erro: 'Acesso não autorizado.' });
     }
 
@@ -904,14 +1076,20 @@ app.get('/api/denuncias', async (req, res) => {
 });
 
 // ==========================================
-// ROTA 9d: Resolver/Apagar Denúncia (/api/denuncias/delete) - Admin-only
+// ROTA 9d: Resolver/Apagar Denúncia (/api/denuncias/delete) - Admin ou Ajudante
 // ==========================================
 app.post('/api/denuncias/delete', async (req, res) => {
     const { id, senha } = req.body;
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    const user = verifyToken(token);
 
-    if (senha !== adminPassword) {
-        return res.status(401).json({ erro: 'Senha incorreta.' });
+    const isAdmin = (senha === adminPassword);
+    const isAjudante = user && user.isAjudante;
+
+    if (!isAdmin && !isAjudante) {
+        return res.status(401).json({ erro: 'Acesso não autorizado.' });
     }
 
     if (!id) {
@@ -987,19 +1165,34 @@ app.get('/api/colaboradores', async (req, res) => {
                          END
                      ) AS ep
                 WHERE conteudo->>'type' = 'series'
+            ),
+            raw_ranking AS (
+                SELECT 
+                    stream->>'colaborador' AS nome,
+                    MAX(stream->>'colaborador_id') AS stream_discord_id,
+                    MAX(stream->>'colaborador_avatar') AS stream_avatar,
+                    COUNT(*)::int AS count,
+                    json_agg(json_build_object(
+                        'title', COALESCE(title, nome_do_json),
+                        'type', type
+                    )) AS envios_detalhes
+                FROM flattened_streams
+                WHERE stream->>'colaborador' IS NOT NULL 
+                  AND stream->>'colaborador' <> ''
+                  ${dateFilter}
+                GROUP BY nome
             )
             SELECT 
-                stream->>'colaborador' AS nome,
-                COUNT(*)::int AS count,
-                json_agg(json_build_object(
-                    'title', COALESCE(title, nome_do_json),
-                    'type', type
-                )) AS envios_detalhes
-            FROM flattened_streams
-            WHERE stream->>'colaborador' IS NOT NULL 
-              AND stream->>'colaborador' <> ''
-              ${dateFilter}
-            GROUP BY nome
+                r.nome,
+                r.count,
+                r.envios_detalhes,
+                COALESCE(u.discord_id, r.stream_discord_id) AS discord_id,
+                COALESCE(u.avatar, r.stream_avatar) AS avatar,
+                COALESCE(u.is_ajudante, FALSE) AS is_ajudante
+            FROM raw_ranking r
+            LEFT JOIN usuarios_discord u 
+              ON (r.stream_discord_id IS NOT NULL AND u.discord_id = r.stream_discord_id)
+              OR (r.stream_discord_id IS NULL AND (LOWER(u.global_name) = LOWER(r.nome) OR LOWER(u.username) = LOWER(r.nome)))
             ORDER BY count DESC;
         `;
         const result = await pool.query(query);
