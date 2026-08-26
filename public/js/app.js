@@ -4425,71 +4425,247 @@ function clearDiscordSession() {
             }
         }
 
-        function previewFile(nome) {
+        async function previewFile(nome) {
             if (!window.currentPendentes) return;
             const pendente = window.currentPendentes.find(p => p.nome_do_json === nome);
             if (!pendente || !pendente.conteudo) {
                 return showToast("Conteúdo não encontrado para pré-visualização.", "error");
             }
             
+            // Buscar o arquivo atual (publicado) para comparar e mostrar apenas o que é NOVO
+            let liveContent = null;
+            try {
+                const res = await fetch(API_URL + '/api/content/' + nome);
+                if (res.ok) {
+                    liveContent = await res.json();
+                }
+            } catch (e) {
+                console.error("Erro ao buscar liveContent:", e);
+            }
+
             const { type, title, streams } = pendente.conteudo;
+            
+            // Função para extrair audio e qualidade do s.name
+            const parseName = (name) => {
+                const parts = (name || '').split('\n');
+                return { audio: parts[0] || '', quality: parts[1] || '' };
+            };
+
+            window.previewSaveChanges = async function() {
+                const modal = document.getElementById('previewModal');
+                const inputs = modal.querySelectorAll('.stream-edit-input');
+                
+                // Vamos usar o liveContent como base (para não perder episódios aprovados recentemente)
+                // Se liveContent não existir, usamos o pendente como base
+                let finalContent = liveContent ? JSON.parse(JSON.stringify(liveContent)) : JSON.parse(JSON.stringify(pendente.conteudo));
+                
+                // Garantir que as estruturas existam
+                if (type === 'movie' && !finalContent.streams) finalContent.streams = [];
+                if (type === 'series' && !finalContent.streams) finalContent.streams = {};
+
+                // Extrair os streams NOvos que o modal renderizou
+                const newStreamsProcessed = new Set();
+
+                inputs.forEach(input => {
+                    const idx = input.getAttribute('data-idx');
+                    const season = input.getAttribute('data-season');
+                    const ep = input.getAttribute('data-ep');
+                    
+                    const urlVal = modal.querySelector(`.url-input[data-idx="${idx}"]`)?.value || '';
+                    const audioVal = modal.querySelector(`.audio-input[data-idx="${idx}"]`)?.value || '';
+                    const qualityVal = modal.querySelector(`.quality-input[data-idx="${idx}"]`)?.value || '';
+                    
+                    if (type === 'movie') {
+                        if (pendente.conteudo.streams[idx] && !newStreamsProcessed.has(idx)) {
+                            newStreamsProcessed.add(idx);
+                            let s = pendente.conteudo.streams[idx];
+                            s.url = urlVal;
+                            s.name = `${audioVal}\n${qualityVal}`;
+                            // Adicionar ao finalContent se não existir
+                            if (!finalContent.streams.some(x => x.url === s.url)) {
+                                finalContent.streams.push(s);
+                            }
+                        }
+                    } else {
+                        if (pendente.conteudo.streams[season] && pendente.conteudo.streams[season][ep] && pendente.conteudo.streams[season][ep][idx]) {
+                            const uniqueKey = season + '-' + ep + '-' + idx;
+                            if (!newStreamsProcessed.has(uniqueKey)) {
+                                newStreamsProcessed.add(uniqueKey);
+                                let s = pendente.conteudo.streams[season][ep][idx];
+                                s.url = urlVal;
+                                s.name = `${audioVal}\n${qualityVal}`;
+                                
+                                if (!finalContent.streams[season]) finalContent.streams[season] = {};
+                                if (!finalContent.streams[season][ep]) finalContent.streams[season][ep] = [];
+                                
+                                if (!finalContent.streams[season][ep].some(x => x.url === s.url)) {
+                                    finalContent.streams[season][ep].push(s);
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Aprovar com o conteúdo modificado e mesclado
+                const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
+                const discordToken = localStorage.getItem('discord_token');
+                
+                const headers = { 'Content-Type': 'application/json', 'x-admin-password': adminSenha };
+                if (discordToken) headers['Authorization'] = `Bearer ${discordToken}`;
+
+                try {
+                    const res = await fetch(API_URL + '/api/arquivos/aprovar', {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ nome, senha: adminSenha, conteudo: pendente.conteudo })
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        showToast("Arquivo editado e aprovado com sucesso!", "success");
+                        document.getElementById('previewModal').remove();
+                        loadApprovalsList();
+                    } else {
+                        showToast(data.erro || 'Erro ao aprovar', "error");
+                    }
+                } catch (e) {
+                    showToast("Erro ao aprovar", "error");
+                }
+            };
+
+            window.playInPreview = function(url) {
+                const player = document.getElementById('previewPlayer');
+                player.src = url;
+                player.classList.remove('hidden');
+                player.play();
+            };
+
             let streamsHtml = '';
             
             if (type === 'movie' && Array.isArray(streams)) {
-                streamsHtml += '<h4 class="font-semibold text-white mt-4 mb-2">Filme (Links)</h4><ul class="space-y-2">';
+                let countNew = 0;
                 streams.forEach((s, idx) => {
-                    streamsHtml += `<li class="p-2 bg-zinc-800/50 rounded flex justify-between items-center text-sm">
-                        <div>
-                            <span class="text-zinc-400 block text-xs">Colaborador: ${escapeHTML(s.colaborador || 'Desconhecido')}</span>
+                    const isNew = !liveContent || !liveContent.streams || !liveContent.streams.some(ls => ls.url === s.url);
+                    if (!isNew) return; // Mostra apenas novos
+                    countNew++;
+                    
+                    const { audio, quality } = parseName(s.name);
+                    streamsHtml += `<div class="p-3 bg-zinc-800/50 border border-zinc-700/50 rounded flex flex-col gap-2 text-sm mb-3">
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold text-emerald-400">Novo Link de Filme</span>
+                            <span class="text-zinc-400 text-xs">Colaborador: ${escapeHTML(s.colaborador || 'Desconhecido')}</span>
                         </div>
-                        <a href="${escapeHTML(s.url)}" target="_blank" class="px-3 py-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 text-xs">Testar Link</a>
-                    </li>`;
+                        <div class="grid grid-cols-2 gap-2 mt-1">
+                            <div>
+                                <label class="text-[10px] text-zinc-500 uppercase">Áudio</label>
+                                <input type="text" class="stream-edit-input audio-input w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white" data-idx="${idx}" value="${escapeHTML(audio)}">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-zinc-500 uppercase">Qualidade</label>
+                                <input type="text" class="stream-edit-input quality-input w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white" data-idx="${idx}" value="${escapeHTML(quality)}">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-zinc-500 uppercase">URL do Vídeo</label>
+                            <input type="text" class="stream-edit-input url-input w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-indigo-300" data-idx="${idx}" value="${escapeHTML(s.url)}">
+                        </div>
+                        <button onclick="playInPreview(this.parentElement.querySelector('.url-input').value)" class="mt-2 w-full px-3 py-1.5 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 text-xs flex items-center justify-center gap-2 transition-colors">
+                            <i class="fa-solid fa-play"></i> Testar no Player
+                        </button>
+                    </div>`;
                 });
-                streamsHtml += '</ul>';
+                if (countNew === 0) streamsHtml = '<p class="text-zinc-500 text-sm">Nenhuma mudança nova detectada nos links.</p>';
+                else streamsHtml = `<h4 class="font-semibold text-white mb-3">Diferenças: ${countNew} Link(s) Novo(s)</h4>` + streamsHtml;
+                
             } else if (type === 'series' && streams && typeof streams === 'object') {
+                let countNew = 0;
                 Object.keys(streams).forEach(season => {
-                    streamsHtml += `<h4 class="font-semibold text-white mt-4 mb-2">Temporada ${season}</h4>`;
                     Object.keys(streams[season]).forEach(ep => {
                         const epStreams = streams[season][ep];
                         if (Array.isArray(epStreams)) {
-                            epStreams.forEach((s) => {
-                                streamsHtml += `<div class="p-2 bg-zinc-800/50 rounded flex justify-between items-center text-sm mb-2 ml-4 border-l-2 border-indigo-500/30">
-                                    <div>
-                                        <span class="font-semibold text-indigo-400">Episódio ${ep}</span>
-                                        <span class="text-zinc-400 block text-xs">Colaborador: ${escapeHTML(s.colaborador || 'Desconhecido')}</span>
+                            epStreams.forEach((s, idx) => {
+                                const isNew = !liveContent || !liveContent.streams || !liveContent.streams[season] || !liveContent.streams[season][ep] || !liveContent.streams[season][ep].some(ls => ls.url === s.url);
+                                if (!isNew) return; // Mostra apenas novos
+                                countNew++;
+                                
+                                const { audio, quality } = parseName(s.name);
+                                streamsHtml += `<div class="p-3 bg-zinc-800/50 border border-zinc-700/50 rounded flex flex-col gap-2 text-sm mb-3 border-l-2 border-indigo-500">
+                                    <div class="flex justify-between items-center">
+                                        <span class="font-bold text-indigo-400">T${season} E${ep}</span>
+                                        <span class="text-zinc-400 text-xs">Colaborador: ${escapeHTML(s.colaborador || 'Desconhecido')}</span>
                                     </div>
-                                    <a href="${escapeHTML(s.url)}" target="_blank" class="px-3 py-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 text-xs flex-shrink-0 ml-2">Testar Link</a>
+                                    <div class="grid grid-cols-2 gap-2 mt-1">
+                                        <div>
+                                            <label class="text-[10px] text-zinc-500 uppercase">Áudio</label>
+                                            <input type="text" class="stream-edit-input audio-input w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white" data-season="${season}" data-ep="${ep}" data-idx="${idx}" value="${escapeHTML(audio)}">
+                                        </div>
+                                        <div>
+                                            <label class="text-[10px] text-zinc-500 uppercase">Qualidade</label>
+                                            <input type="text" class="stream-edit-input quality-input w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white" data-season="${season}" data-ep="${ep}" data-idx="${idx}" value="${escapeHTML(quality)}">
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="text-[10px] text-zinc-500 uppercase">URL do Vídeo</label>
+                                        <input type="text" class="stream-edit-input url-input w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-indigo-300" data-season="${season}" data-ep="${ep}" data-idx="${idx}" value="${escapeHTML(s.url)}">
+                                    </div>
+                                    <button onclick="playInPreview(this.parentElement.querySelector('.url-input').value)" class="mt-2 w-full px-3 py-1.5 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 text-xs flex items-center justify-center gap-2 transition-colors">
+                                        <i class="fa-solid fa-play"></i> Testar no Player
+                                    </button>
                                 </div>`;
                             });
                         }
                     });
                 });
+                if (countNew === 0) streamsHtml = '<p class="text-zinc-500 text-sm">Nenhuma mudança ou episódio novo detectado.</p>';
+                else streamsHtml = `<h4 class="font-semibold text-white mb-3">Diferenças: ${countNew} Episódio(s) Novo(s)</h4>` + streamsHtml;
             } else {
                 streamsHtml = '<p class="text-zinc-500 text-sm mt-4">Nenhum link encontrado ou formato desconhecido.</p>';
             }
             
             const modalHtml = `
             <div id="previewModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-                <div class="bg-[#0f0f11] border border-zinc-800/60 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+                <div class="bg-[#0f0f11] border border-zinc-800/60 rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
                     <div class="p-4 border-b border-zinc-800/60 flex justify-between items-center bg-zinc-900/30">
-                        <h3 class="text-lg font-bold text-white flex items-center gap-2"><i class="fa-solid fa-eye text-indigo-500"></i> Pré-visualização: ${escapeHTML(title || nome)}</h3>
+                        <h3 class="text-lg font-bold text-white flex items-center gap-2"><i class="fa-solid fa-code-merge text-indigo-500"></i> Editar e Aprovar: ${escapeHTML(title || nome)}</h3>
                         <button onclick="document.getElementById('previewModal').remove()" class="text-zinc-400 hover:text-white transition-colors w-8 h-8 rounded-lg hover:bg-zinc-800 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
                     </div>
-                    <div class="p-4 overflow-y-auto custom-scrollbar flex-1 text-zinc-300">
-                        <div class="mb-4">
-                            <p class="text-sm"><span class="text-zinc-500">Arquivo:</span> <span class="font-mono text-xs bg-zinc-900 px-1.5 py-0.5 rounded">${escapeHTML(nome)}</span></p>
-                            <p class="text-sm mt-1"><span class="text-zinc-500">Tipo:</span> <span class="uppercase text-xs font-semibold px-2 py-0.5 rounded ${type === 'movie' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-purple-500/10 text-purple-500'}">${escapeHTML(type || 'Desconhecido')}</span></p>
+                    
+                    <div class="flex flex-col md:flex-row flex-1 overflow-hidden">
+                        <!-- Lado Esquerdo: Player -->
+                        <div class="w-full md:w-1/2 p-4 bg-black border-b md:border-b-0 md:border-r border-zinc-800/60 flex flex-col justify-center items-center">
+                            <video id="previewPlayer" controls class="w-full max-h-64 md:max-h-full rounded border border-zinc-800 hidden"></video>
+                            <div id="previewEmptyState" class="text-zinc-600 text-sm flex flex-col items-center gap-2">
+                                <i class="fa-solid fa-film text-3xl"></i>
+                                <p>Selecione um link para testar</p>
+                            </div>
+                            <script>
+                                document.getElementById('previewPlayer').addEventListener('play', () => {
+                                    document.getElementById('previewEmptyState').style.display = 'none';
+                                });
+                            </script>
                         </div>
-                        <hr class="border-zinc-800/60 my-4">
-                        ${streamsHtml}
+                        
+                        <!-- Lado Direito: Edição e Lista -->
+                        <div class="w-full md:w-1/2 p-4 overflow-y-auto custom-scrollbar bg-[#0f0f11]">
+                            ${streamsHtml}
+                        </div>
                     </div>
-                    <div class="p-4 border-t border-zinc-800/60 bg-zinc-900/30 flex justify-end">
-                        <button onclick="document.getElementById('previewModal').remove()" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors text-sm font-medium">Fechar</button>
+                    
+                    <div class="p-4 border-t border-zinc-800/60 bg-zinc-900/30 flex justify-between items-center">
+                        <span class="text-xs text-zinc-500">Mostrando apenas os links que foram alterados/adicionados.</span>
+                        <div class="flex gap-2">
+                            <button onclick="document.getElementById('previewModal').remove()" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors text-sm font-medium">Cancelar</button>
+                            <button onclick="previewSaveChanges()" class="px-4 py-2 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-lg transition-colors text-sm font-bold flex items-center gap-2">
+                                <i class="fa-solid fa-check"></i> Salvar e Aprovar
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>`;
             
             document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            const player = document.getElementById('previewPlayer');
+            player.onplay = () => { document.getElementById('previewEmptyState').style.display = 'none'; };
         }
 
         async function approveFile(nome) {

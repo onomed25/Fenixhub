@@ -1138,7 +1138,7 @@ app.get('/api/arquivos/pendentes', async (req, res) => {
 });
 
 app.post('/api/arquivos/aprovar', async (req, res) => {
-    const { nome, senha } = req.body;
+    const { nome, senha, conteudo } = req.body;
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
     const authHeader = req.headers.authorization;
     let token = authHeader && authHeader.split(' ')[1];
@@ -1156,7 +1156,7 @@ app.post('/api/arquivos/aprovar', async (req, res) => {
         const getPending = await pool.query('SELECT conteudo FROM envios_pendentes WHERE nome_do_json = $1 ORDER BY id DESC LIMIT 1;', [nome]);
         if (getPending.rowCount === 0) return res.status(404).json({ erro: 'Arquivo pendente não encontrado.' });
         
-        const conteudo = getPending.rows[0].conteudo;
+        const conteudoToSave = conteudo || getPending.rows[0].conteudo;
 
         // 2. Mescla e Pública
         const upsertQuery = `
@@ -1165,7 +1165,7 @@ app.post('/api/arquivos/aprovar', async (req, res) => {
             ON CONFLICT (nome_do_json) 
             DO UPDATE SET conteudo = EXCLUDED.conteudo, is_pendente = FALSE, criado_em = CURRENT_TIMESTAMP;
         `;
-        await pool.query(upsertQuery, [nome, JSON.stringify(conteudo)]);
+        await pool.query(upsertQuery, [nome, JSON.stringify(conteudoToSave)]);
         
         // 3. Remove da fila
         await pool.query('DELETE FROM envios_pendentes WHERE nome_do_json = $1;', [nome]);
