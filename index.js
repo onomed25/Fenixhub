@@ -1460,9 +1460,9 @@ const server = app.listen(PORT, async () => {
 // Desativa o timeout padrão de 5 minutos do Node.js para uploads grandes
 
 // TMDB Proxy Route
-app.get('/api/tmdb/*', async (req, res) => {
+app.get('/api/tmdb/*path', async (req, res) => {
     try {
-        const tmdbPath = req.params[0];
+        const tmdbPath = Array.isArray(req.params.path) ? req.params.path.join('/') : req.params.path;
         const tmdbKey = process.env.TMDB_KEY || "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJlZTBmMzJmNzY5Mzc0YTkzYTI0ZmNiYzcyMWRlODYzNCIsIm5iZiI6MTc1NjA2MzM2NC4yMzksInN1YiI6IjY4YWI2Njg0ZDAyMjdhYTVlMjlkYjE2MSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.z1hG61Z5RCvn6qEZj60sHxrDZ0hR8QQi4rt18erzF-w";
         let url = `https://api.themoviedb.org/3/${tmdbPath}`;
         
