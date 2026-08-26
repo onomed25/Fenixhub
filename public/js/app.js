@@ -4453,41 +4453,44 @@ function clearDiscordSession() {
 
             window.previewSaveChanges = async function() {
                 const modal = document.getElementById('previewModal');
-                const inputs = modal.querySelectorAll('.stream-edit-input');
+                const inputs = modal.querySelectorAll('.stream-edit-input.audio-input'); // Usar um para iterar
                 
-                // Vamos usar o liveContent como base (para não perder episódios aprovados recentemente)
-                // Se liveContent não existir, usamos o pendente como base
+                // Vamos usar o liveContent como base
                 let finalContent = liveContent ? JSON.parse(JSON.stringify(liveContent)) : JSON.parse(JSON.stringify(pendente.conteudo));
                 
                 // Garantir que as estruturas existam
                 if (type === 'movie' && !finalContent.streams) finalContent.streams = [];
                 if (type === 'series' && !finalContent.streams) finalContent.streams = {};
 
-                // Extrair os streams NOvos que o modal renderizou
                 const newStreamsProcessed = new Set();
 
                 inputs.forEach(input => {
                     const idx = input.getAttribute('data-idx');
-                    const season = input.getAttribute('data-season');
-                    const ep = input.getAttribute('data-ep');
+                    const season = input.getAttribute('data-season') || null;
+                    const ep = input.getAttribute('data-ep') || null;
                     
                     const urlVal = modal.querySelector(`.url-input[data-idx="${idx}"]`)?.value || '';
                     const audioVal = modal.querySelector(`.audio-input[data-idx="${idx}"]`)?.value || '';
                     const qualityVal = modal.querySelector(`.quality-input[data-idx="${idx}"]`)?.value || '';
+                    const isChecked = modal.querySelector(`.approve-checkbox[data-idx="${idx}"]`).checked;
                     
+                    // Se a caixa de aprovar não estiver marcada, nós ignoramos e NÃO adicionamos esse link
+                    if (!isChecked) return;
+
                     if (type === 'movie') {
                         if (pendente.conteudo.streams[idx] && !newStreamsProcessed.has(idx)) {
                             newStreamsProcessed.add(idx);
                             let s = pendente.conteudo.streams[idx];
                             s.url = urlVal;
                             s.name = `${audioVal}\n${qualityVal}`;
+                            
                             // Adicionar ao finalContent se não existir
                             if (!finalContent.streams.some(x => x.url === s.url)) {
                                 finalContent.streams.push(s);
                             }
                         }
                     } else {
-                        if (pendente.conteudo.streams[season] && pendente.conteudo.streams[season][ep] && pendente.conteudo.streams[season][ep][idx]) {
+                        if (season && ep && pendente.conteudo.streams[season] && pendente.conteudo.streams[season][ep] && pendente.conteudo.streams[season][ep][idx]) {
                             const uniqueKey = season + '-' + ep + '-' + idx;
                             if (!newStreamsProcessed.has(uniqueKey)) {
                                 newStreamsProcessed.add(uniqueKey);
@@ -4506,7 +4509,8 @@ function clearDiscordSession() {
                     }
                 });
 
-                // Aprovar com o conteúdo modificado e mesclado
+                // Se houver algum link antigo que não esteja mais no pending (caso de edição e deleção), ele fica mantido no liveContent.
+
                 const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
                 const discordToken = localStorage.getItem('discord_token');
                 
@@ -4517,11 +4521,12 @@ function clearDiscordSession() {
                     const res = await fetch(API_URL + '/api/arquivos/aprovar', {
                         method: 'POST',
                         headers,
-                        body: JSON.stringify({ nome, senha: adminSenha, conteudo: pendente.conteudo })
+                        // ENVIA O FINAL CONTENT! (Correção do bug anterior que enviava o pendente.conteudo cru)
+                        body: JSON.stringify({ nome, senha: adminSenha, conteudo: finalContent })
                     });
                     const data = await res.json();
                     if (res.ok) {
-                        showToast("Arquivo editado e aprovado com sucesso!", "success");
+                        showToast("Links selecionados foram aprovados!", "success");
                         document.getElementById('previewModal').remove();
                         loadApprovalsList();
                     } else {
@@ -4532,25 +4537,22 @@ function clearDiscordSession() {
                 }
             };
 
-            window.playInPreview = function(url) {
-                const player = document.getElementById('previewPlayer');
-                player.src = url;
-                player.classList.remove('hidden');
-                player.play();
-            };
-
             let streamsHtml = '';
             
             if (type === 'movie' && Array.isArray(streams)) {
                 let countNew = 0;
                 streams.forEach((s, idx) => {
                     const isNew = !liveContent || !liveContent.streams || !liveContent.streams.some(ls => ls.url === s.url);
-                    if (!isNew) return; // Mostra apenas novos
+                    if (!isNew) return; 
                     countNew++;
                     
                     const { audio, quality } = parseName(s.name);
-                    streamsHtml += `<div class="p-3 bg-zinc-800/50 border border-zinc-700/50 rounded flex flex-col gap-2 text-sm mb-3">
-                        <div class="flex justify-between items-center">
+                    streamsHtml += `<div class="p-3 bg-zinc-800/50 border border-zinc-700/50 rounded flex flex-col gap-2 text-sm mb-3 relative">
+                        <div class="absolute -top-3 -right-2 flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 px-2 py-1 rounded shadow-lg">
+                            <input type="checkbox" class="approve-checkbox w-3.5 h-3.5 accent-emerald-500 cursor-pointer" data-idx="${idx}" checked title="Marque para aprovar este link">
+                            <span class="text-[10px] text-zinc-300 font-bold uppercase">Aprovar</span>
+                        </div>
+                        <div class="flex justify-between items-center mt-1">
                             <span class="font-semibold text-emerald-400">Novo Link de Filme</span>
                             <span class="text-zinc-400 text-xs">Colaborador: ${escapeHTML(s.colaborador || 'Desconhecido')}</span>
                         </div>
@@ -4584,12 +4586,16 @@ function clearDiscordSession() {
                         if (Array.isArray(epStreams)) {
                             epStreams.forEach((s, idx) => {
                                 const isNew = !liveContent || !liveContent.streams || !liveContent.streams[season] || !liveContent.streams[season][ep] || !liveContent.streams[season][ep].some(ls => ls.url === s.url);
-                                if (!isNew) return; // Mostra apenas novos
+                                if (!isNew) return;
                                 countNew++;
                                 
                                 const { audio, quality } = parseName(s.name);
-                                streamsHtml += `<div class="p-3 bg-zinc-800/50 border border-zinc-700/50 rounded flex flex-col gap-2 text-sm mb-3 border-l-2 border-indigo-500">
-                                    <div class="flex justify-between items-center">
+                                streamsHtml += `<div class="p-3 bg-zinc-800/50 border border-zinc-700/50 rounded flex flex-col gap-2 text-sm mb-3 border-l-2 border-indigo-500 relative">
+                                    <div class="absolute -top-3 -right-2 flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 px-2 py-1 rounded shadow-lg">
+                                        <input type="checkbox" class="approve-checkbox w-3.5 h-3.5 accent-emerald-500 cursor-pointer" data-idx="${idx}" checked title="Marque para aprovar este link">
+                                        <span class="text-[10px] text-zinc-300 font-bold uppercase">Aprovar</span>
+                                    </div>
+                                    <div class="flex justify-between items-center mt-1">
                                         <span class="font-bold text-indigo-400">T${season} E${ep}</span>
                                         <span class="text-zinc-400 text-xs">Colaborador: ${escapeHTML(s.colaborador || 'Desconhecido')}</span>
                                     </div>
@@ -4631,17 +4637,12 @@ function clearDiscordSession() {
                     
                     <div class="flex flex-col md:flex-row flex-1 overflow-hidden">
                         <!-- Lado Esquerdo: Player -->
-                        <div class="w-full md:w-1/2 p-4 bg-black border-b md:border-b-0 md:border-r border-zinc-800/60 flex flex-col justify-center items-center">
+                        <div class="w-full md:w-1/2 p-4 bg-black border-b md:border-b-0 md:border-r border-zinc-800/60 flex flex-col justify-center items-center relative">
                             <video id="previewPlayer" controls class="w-full max-h-64 md:max-h-full rounded border border-zinc-800 hidden"></video>
                             <div id="previewEmptyState" class="text-zinc-600 text-sm flex flex-col items-center gap-2">
                                 <i class="fa-solid fa-film text-3xl"></i>
                                 <p>Selecione um link para testar</p>
                             </div>
-                            <script>
-                                document.getElementById('previewPlayer').addEventListener('play', () => {
-                                    document.getElementById('previewEmptyState').style.display = 'none';
-                                });
-                            </script>
                         </div>
                         
                         <!-- Lado Direito: Edição e Lista -->
@@ -4651,7 +4652,7 @@ function clearDiscordSession() {
                     </div>
                     
                     <div class="p-4 border-t border-zinc-800/60 bg-zinc-900/30 flex justify-between items-center">
-                        <span class="text-xs text-zinc-500">Mostrando apenas os links que foram alterados/adicionados.</span>
+                        <span class="text-xs text-zinc-500">Desmarque a caixinha "Aprovar" nos links que quiser rejeitar.</span>
                         <div class="flex gap-2">
                             <button onclick="document.getElementById('previewModal').remove()" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors text-sm font-medium">Cancelar</button>
                             <button onclick="previewSaveChanges()" class="px-4 py-2 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-lg transition-colors text-sm font-bold flex items-center gap-2">
