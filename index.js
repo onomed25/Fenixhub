@@ -633,6 +633,8 @@ app.post('/upload', upload.none(), async (req, res) => {
         if (!isEdit || !isAjudante) {
             parsedConteudo.colaborador = discordName;
             parsedConteudo.colaborador_role = roleStr;
+            parsedConteudo.colaborador_id = user.id;
+            parsedConteudo.colaborador_avatar = user.avatar;
         } else {
             // Se for ajudante editando, tenta manter o autor original (ou o que veio no JSON)
             parsedConteudo.colaborador = parsedConteudo.colaborador || discordName;

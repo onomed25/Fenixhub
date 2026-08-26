@@ -4373,6 +4373,9 @@ function clearDiscordSession() {
                             </td>
                             <td class="py-3.5 pl-4 text-center">
                                 <div class="flex items-center justify-center gap-2">
+                                    <button onclick="previewFile(${jsNome})" class="w-8 h-8 rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 border border-blue-500/30 transition-colors" title="Visualizar/Testar">
+                                        <i class="fa-solid fa-eye text-[10px]"></i>
+                                    </button>
                                     <button onclick="approveFile(${jsNome})" class="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30 transition-colors" title="Aprovar">
                                         <i class="fa-solid fa-check text-[10px]"></i>
                                     </button>
