@@ -1,0 +1,106 @@
+
+        :root {
+            --bg: #05070D;
+            --surface: #111827;
+            --surface-translucent: rgba(17, 24, 39, 0.6);
+            --text: #FFF8F0;
+            --text-soft: #D7DEE9;
+            --primary: #FF6A00;
+            --primary-hover: #FF8126;
+            --highlight: #FFB020;
+            --danger: #E83D1C;
+            --on-accent: #111827;
+        }
+
+        body { 
+            background-color: var(--bg); 
+            color: var(--text); 
+            background-image: radial-gradient(circle at top right, rgba(255,106,0,0.05), transparent 40%),
+                              radial-gradient(circle at bottom left, rgba(255,176,32,0.03), transparent 40%);
+            background-attachment: fixed;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        h1, h2, h3, h4, h5, h6 { font-family: 'Clash Display', sans-serif; letter-spacing: -0.01em; }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 6px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,106,0,0.5); }
+
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Apple Design: Glassmorphism Inputs */
+        .input-unified {
+            background-color: var(--surface-translucent);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: var(--text);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .input-unified:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(255,106,0,0.15);
+            outline: none;
+        }
+
+        .loader {
+            border: 2px solid var(--surface);
+            border-top: 2px solid var(--text-soft);
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .tab-content { display: none; animation: fadeSlide 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .tab-content.active { display: block; }
+        @keyframes fadeSlide { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Apple Design: Dynamic Island Nav */
+        .nav-btn { 
+            background-color: transparent; 
+            color: var(--text-soft); 
+            border: none;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+        
+        .nav-btn.active { 
+            background: rgba(255,255,255,0.1); 
+            color: var(--text); 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        .nav-btn:hover:not(.active) {
+            color: var(--text);
+            background: rgba(255,255,255,0.05);
+        }
+
+        /* Apple Design: Spring Buttons */
+        button, .nav-btn, .glass-panel {
+            transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background-color 200ms ease, opacity 200ms ease, border-color 200ms ease;
+        }
+        button:active:not(:disabled) {
+            transform: scale(0.97);
+        }
+        
+        /* Modal Backdrop */
+        .glass-panel {
+            background: var(--surface-translucent);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 24px;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(100%) scale(0.95); opacity: 0; }
+            to { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        .toast { animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+        
+        .progress-fill { transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+    

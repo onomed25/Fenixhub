@@ -9,37 +9,61 @@ const multer = require('multer');
 const { Pool } = require('pg');
 const fs = require('fs');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const rateLimit = require('express-rate-limit');
+const compression = require('compression');
+const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
+
+// Validar variáveis de ambiente críticas
+if (!process.env.ADMIN_PASSWORD) {
+    console.error("ERRO FATAL: ADMIN_PASSWORD não configurada no .env");
+    process.exit(1);
+}
+
 
 // Configuração JWT para Discord
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
 
 function generateToken(payload) {
-    // Validade de 30 dias
-    const exp = Date.now() + 30 * 24 * 60 * 60 * 1000;
-    const data = { ...payload, exp };
-    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-    const body = Buffer.from(JSON.stringify(data)).toString('base64url');
-    const signature = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
-    return `${header}.${body}.${signature}`;
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: '30d' });
+}
+
+
+function checkPassword(input, actual) {
+    if (!input || !actual) return false;
+    const inputBuf = Buffer.from(input);
+    const actualBuf = Buffer.from(actual);
+    if (inputBuf.length !== actualBuf.length) return false;
+    return crypto.timingSafeEqual(inputBuf, actualBuf);
 }
 
 function verifyToken(token) {
     if (!token) return null;
     try {
-        const [header, body, signature] = token.split('.');
-        const expectedSignature = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
-        if (signature !== expectedSignature) return null;
-        
-        const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
-        if (payload.exp && Date.now() > payload.exp) return null;
-        return payload;
+        return jwt.verify(token, JWT_SECRET);
     } catch (err) {
         return null;
     }
 }
 
+
 const app = express();
 app.disable('x-powered-by');
+app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false
+}));
+app.use(compression());
+app.use(cookieParser());
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 500, 
+    message: { erro: 'Muitas requisições deste IP, tente novamente mais tarde.' }
+});
+app.use('/api/', limiter);
+
 const upload = multer();
 
 // Configuração do Multer com armazenamento em disco para uploads grandes (Telegram)
@@ -82,6 +106,11 @@ function logProcessProgress(key, name, progress) {
 // Limita o tamanho do JSON recebido via POST (ajustado para 10MB conforme solicitado)
 app.use(express.json({ limit: '10mb' })); 
 app.use(cors());
+
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date() });
+});
+
 
 // Configuração do banco de dados (Pool pequeno para economizar memória)
 const pool = new Pool({
@@ -154,11 +183,20 @@ const initDB = async () => {
             atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
     `;
+    const queryEnvios = `
+        CREATE TABLE IF NOT EXISTS envios_pendentes (
+            id SERIAL PRIMARY KEY,
+            nome_do_json VARCHAR(255) UNIQUE NOT NULL,
+            conteudo JSONB NOT NULL,
+            criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+    `;
     try {
         await pool.query(query);
         await pool.query(queryPedidos);
         await pool.query(queryDenuncias);
         await pool.query(queryUsuarios);
+        await pool.query(queryEnvios);
         
         // Add new columns if they don't exist (for existing databases)
         try {
@@ -198,7 +236,19 @@ app.get('/', (req, res) => {
 // ==========================================
 // ROTA 0b: Servir o CDN (pasta cdn)
 // ==========================================
-app.use('/cdn', express.static(path.join(__dirname, 'cdn')));
+const staticOptions = {
+    maxAge: '1d', // Cache for 1 day
+    setHeaders: (res, path) => {
+        if (express.static.mime.lookup(path) === 'text/html') {
+            res.setHeader('Cache-Control', 'public, max-age=0'); // Don't cache HTML
+        }
+    }
+};
+app.use('/cdn', express.static(path.join(__dirname, 'cdn'), staticOptions));
+app.use('/js', express.static(path.join(__dirname, 'public/js'), staticOptions));
+app.use('/css', express.static(path.join(__dirname, 'public/css'), staticOptions));
+app.use('/assets', express.static(path.join(__dirname, 'public/assets'), staticOptions));
+
 
 // ==========================================
 // CONFIGURAÇÕES TMDB E RPDB
@@ -538,11 +588,14 @@ app.post('/upload', upload.none(), async (req, res) => {
 
     // Verificar autenticação (Discord Token ou Senha Admin)
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token && req.cookies && req.cookies.discord_token) {
+        token = req.cookies.discord_token;
+    }
     const user = verifyToken(token);
 
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
-    const isAdmin = (senha === adminPassword);
+    const isAdmin = (checkPassword(senha, adminPassword));
 
     if (!isAdmin && !user) {
         return res.status(401).json({ erro: 'Você precisa estar logado com o Discord para salvar links.' });
@@ -569,21 +622,25 @@ app.post('/upload', upload.none(), async (req, res) => {
     const isAjudante = user && user.isAjudante;
     const canOverwrite = isAdmin || isAjudante;
 
-    // Se estiver logado via Discord, forçar a autoria das streams
+    // Se estiver logado via Discord, forçar a autoria das streams e registrar o cargo
     if (user && !isAdmin) {
         const discordName = user.global_name || user.username;
+        const roleStr = isAjudante ? 'ajudante' : 'membro';
         
         // Se for um "lote" novo (não é edição) OU se não for ajudante, forçamos o nickname atual
         if (!isEdit || !isAjudante) {
             parsedConteudo.colaborador = discordName;
+            parsedConteudo.colaborador_role = roleStr;
         } else {
             // Se for ajudante editando, tenta manter o autor original (ou o que veio no JSON)
             parsedConteudo.colaborador = parsedConteudo.colaborador || discordName;
+            parsedConteudo.colaborador_role = parsedConteudo.colaborador_role || roleStr;
         }
         
         if (parsedConteudo.type === 'movie' && Array.isArray(parsedConteudo.streams)) {
             parsedConteudo.streams.forEach(s => {
                 s.colaborador = (!isEdit || !isAjudante) ? discordName : (s.colaborador || discordName);
+                s.colaborador_role = (!isEdit || !isAjudante) ? roleStr : (s.colaborador_role || roleStr);
             });
         } else if (parsedConteudo.type === 'series' && parsedConteudo.streams && typeof parsedConteudo.streams === 'object') {
             Object.keys(parsedConteudo.streams).forEach(seasonNum => {
@@ -593,6 +650,7 @@ app.post('/upload', upload.none(), async (req, res) => {
                     if (Array.isArray(epStreams)) {
                         epStreams.forEach(s => {
                             s.colaborador = (!isEdit || !isAjudante) ? discordName : (s.colaborador || discordName);
+                            s.colaborador_role = (!isEdit || !isAjudante) ? roleStr : (s.colaborador_role || roleStr);
                         });
                     }
                 });
@@ -628,8 +686,14 @@ app.post('/upload', upload.none(), async (req, res) => {
                 }
             }
 
-            if (!parsedConteudo.poster) {
-                parsedConteudo.poster = `${RPDB_BASE_URL}/imdb/poster-default/${imdbID}.jpg`;
+            if (!parsedConteudo.poster || parsedConteudo.poster.includes('ratingposterdb')) {
+                if (cinemetaData && cinemetaData.poster) {
+                    parsedConteudo.poster = cinemetaData.poster;
+                } else if (tmdbData && tmdbData.poster_path) {
+                    parsedConteudo.poster = `https://image.tmdb.org/t/p/w500${tmdbData.poster_path}`;
+                } else {
+                    parsedConteudo.poster = `${RPDB_BASE_URL}/imdb/poster-default/${imdbID}.jpg`;
+                }
             }
 
             if (!parsedConteudo.id) {
@@ -688,12 +752,18 @@ app.post('/upload', upload.none(), async (req, res) => {
 // ROTA 2: Listar todos os JSONs (/api/all)
 // ==========================================
 app.get('/api/all', async (req, res) => {
+    res.redirect('/api/catalog');
+});
+/*
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token && req.cookies && req.cookies.discord_token) {
+        token = req.cookies.discord_token;
+    }
     const user = verifyToken(token);
-    const { senha } = req.query;
+    const senha = req.headers['x-admin-password'];
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
-    const canSeeHidden = (senha === adminPassword) || (user && user.isAjudante);
+    const canSeeHidden = (checkPassword(senha, adminPassword)) || (user && user.isAjudante);
 
     try {
         const query = `SELECT conteudo FROM arquivos_json ${canSeeHidden ? '' : 'WHERE is_oculto = FALSE AND is_pendente = FALSE'} ORDER BY criado_em DESC;`;
@@ -706,15 +776,19 @@ app.get('/api/all', async (req, res) => {
 });
 
 // ==========================================
+*/
 // ROTA 2b: Listar todos para o Catálogo (/api/catalog)
 // ==========================================
 app.get('/api/catalog', async (req, res) => {
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token && req.cookies && req.cookies.discord_token) {
+        token = req.cookies.discord_token;
+    }
     const user = verifyToken(token);
-    const { senha } = req.query;
+    const senha = req.headers['x-admin-password'];
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
-    const canSeeHidden = (senha === adminPassword) || (user && user.isAjudante);
+    const canSeeHidden = (checkPassword(senha, adminPassword)) || (user && user.isAjudante);
 
     try {
         const query = `SELECT conteudo FROM arquivos_json ${canSeeHidden ? '' : 'WHERE is_oculto = FALSE AND is_pendente = FALSE'} ORDER BY criado_em DESC;`;
@@ -729,11 +803,11 @@ app.get('/api/catalog', async (req, res) => {
 // ==========================================
 // ROTA 2c: Apagar JSON (/api/delete)
 // ==========================================
-app.post('/api/delete', async (req, res) => {
+app.delete('/api/delete', async (req, res) => {
     const { id, senha } = req.body;
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
 
-    if (senha !== adminPassword) {
+    if (!checkPassword(senha, adminPassword)) {
         return res.status(401).json({ erro: 'Senha incorreta.' });
     }
 
@@ -773,20 +847,23 @@ app.get('/count', async (req, res) => {
 // ==========================================
 // ROTA 4: Visualizar JSON específico (/:nome)
 // ==========================================
-app.get('/:nome', async (req, res) => {
+app.get('/api/content/:nome', async (req, res) => {
     if (req.params.nome === 'favicon.ico') return res.status(204).end();
     if (['upload', 'api', 'count'].includes(req.params.nome)) {
         return res.status(404).json({ erro: 'Rota reservada.' });
     }
     try {
         const authHeader = req.headers.authorization;
-        const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token && req.cookies && req.cookies.discord_token) {
+        token = req.cookies.discord_token;
+    }
         const user = verifyToken(token);
         
-        const { senha } = req.query;
+        const senha = req.headers['x-admin-password'];
         const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
         
-        const isAdmin = (senha === adminPassword);
+        const isAdmin = (checkPassword(senha, adminPassword));
         const isAjudante = user && user.isAjudante;
         const canSeeHidden = isAdmin || isAjudante;
 
@@ -873,7 +950,7 @@ app.post('/api/verify', (req, res) => {
     const { senha } = req.body;
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
 
-    if (senha === adminPassword) {
+    if (checkPassword(senha, adminPassword)) {
         return res.json({ sucesso: true });
     }
     return res.status(401).json({ erro: 'Senha incorreta.' });
@@ -916,33 +993,29 @@ app.post('/api/pedidos', async (req, res) => {
 // ==========================================
 // ROTA 8: Listar e Somar Pedidos (/api/pedidos)
 // ==========================================
-app.get('/api/pedidos', async (req, res) => {
-    const { id, type, episode } = req.query;
-
-    // Se o usuário passou parâmetros de busca na URL (GET), ele quer criar um pedido direto pelo link do navegador
-    if (id && type) {
-        try {
-            // Verificar se já foi lançado no TMDB
-            const tmdbData = await getTMDBInfo(id);
-            if (tmdbData && tmdbData.release_date) {
-                const today = new Date().toISOString().split('T')[0];
-                if (tmdbData.release_date > today) {
-                    return res.status(400).json({ erro: `Conteúdo não lançado ainda (Lançamento: ${tmdbData.release_date}).` });
-                }
+app.post('/api/pedidos', async (req, res) => {
+    const { id, type, episode } = req.body;
+    if (!id || !type) return res.status(400).json({ erro: 'Faltam parâmetros id ou type' });
+    try {
+        const tmdbData = await getTMDBInfo(id);
+        if (tmdbData && tmdbData.release_date) {
+            const today = new Date().toISOString().split('T')[0];
+            if (tmdbData.release_date > today) {
+                return res.status(400).json({ erro: `Conteúdo não lançado ainda (Lançamento: ${tmdbData.release_date}).` });
             }
-
-            const queryInsert = `
-                INSERT INTO pedidos_sugeridos (imdb_id, tipo, episodio)
-                VALUES ($1, $2, $3);
-            `;
-            await pool.query(queryInsert, [id, type, episode || null]);
-            return res.json({ sucesso: true, mensagem: `Pedido para o ID '${id}' registrado com sucesso no banco de dados!` });
-        } catch (err) {
-            console.error("Erro TMDB em /api/search:", err.message);
-            return res.status(500).json({ erro: 'Erro ao registrar pedido via URL.' });
         }
+        const queryInsert = `
+            INSERT INTO pedidos_sugeridos (imdb_id, tipo, episodio)
+            VALUES ($1, $2, $3);
+        `;
+        await pool.query(queryInsert, [id, type, episode || null]);
+        return res.json({ sucesso: true, mensagem: `Pedido para o ID '${id}' registrado com sucesso no banco de dados!` });
+    } catch (err) {
+        return res.status(500).json({ erro: 'Erro ao registrar pedido via URL.' });
     }
+});
 
+app.get('/api/pedidos', async (req, res) => {
     // Caso contrário (sem parâmetros), apenas lista todos
     try {
         const query = `
@@ -973,7 +1046,7 @@ app.post('/api/pedidos/delete', async (req, res) => {
     const { id, senha } = req.body;
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
 
-    if (senha !== adminPassword) {
+    if (!checkPassword(senha, adminPassword)) {
         return res.status(401).json({ erro: 'Senha incorreta.' });
     }
 
@@ -999,10 +1072,13 @@ app.post('/api/arquivos/ocultar', async (req, res) => {
     
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token && req.cookies && req.cookies.discord_token) {
+        token = req.cookies.discord_token;
+    }
     const user = verifyToken(token);
 
-    const isAdmin = (senha === adminPassword);
+    const isAdmin = (checkPassword(senha, adminPassword));
     const isAjudante = user && user.isAjudante;
 
     if (!isAdmin && !isAjudante) {
@@ -1056,18 +1132,21 @@ app.post('/api/denunciar', async (req, res) => {
 // ROTAS DE APROVAÇÃO (Moderation Queue)
 // ==========================================
 app.get('/api/arquivos/pendentes', async (req, res) => {
-    const { senha } = req.query;
+    const senha = req.headers['x-admin-password'];
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token && req.cookies && req.cookies.discord_token) {
+        token = req.cookies.discord_token;
+    }
     const user = verifyToken(token);
 
-    if (senha !== adminPassword && (!user || !user.isAjudante)) {
+    if (!checkPassword(senha, adminPassword) && (!user || !user.isAjudante)) {
         return res.status(401).json({ erro: 'Não autorizado.' });
     }
 
     try {
-        const query = 'SELECT nome_do_json, conteudo, criado_em FROM arquivos_json WHERE is_pendente = TRUE ORDER BY criado_em ASC;';
+        const query = 'SELECT nome_do_json, conteudo, criado_em FROM envios_pendentes ORDER BY criado_em ASC;';
         const result = await pool.query(query);
         res.json(result.rows);
     } catch (err) {
@@ -1080,19 +1159,36 @@ app.post('/api/arquivos/aprovar', async (req, res) => {
     const { nome, senha } = req.body;
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token && req.cookies && req.cookies.discord_token) {
+        token = req.cookies.discord_token;
+    }
     const user = verifyToken(token);
 
-    if (senha !== adminPassword && (!user || !user.isAjudante)) {
+    if (!checkPassword(senha, adminPassword) && (!user || !user.isAjudante)) {
         return res.status(401).json({ erro: 'Não autorizado.' });
     }
 
     try {
-        const query = 'UPDATE arquivos_json SET is_pendente = FALSE WHERE nome_do_json = $1 RETURNING *;';
-        const result = await pool.query(query, [nome]);
+        // 1. Busca da fila
+        const getPending = await pool.query('SELECT conteudo FROM envios_pendentes WHERE nome_do_json = $1 ORDER BY id DESC LIMIT 1;', [nome]);
+        if (getPending.rowCount === 0) return res.status(404).json({ erro: 'Arquivo pendente não encontrado.' });
         
-        if (result.rowCount === 0) return res.status(404).json({ erro: 'Arquivo pendente não encontrado.' });
-        res.json({ sucesso: true, mensagem: 'Arquivo aprovado!' });
+        const conteudo = getPending.rows[0].conteudo;
+
+        // 2. Mescla e Pública
+        const upsertQuery = `
+            INSERT INTO arquivos_json (nome_do_json, conteudo, is_pendente) 
+            VALUES ($1, $2, FALSE)
+            ON CONFLICT (nome_do_json) 
+            DO UPDATE SET conteudo = EXCLUDED.conteudo, is_pendente = FALSE, criado_em = CURRENT_TIMESTAMP;
+        `;
+        await pool.query(upsertQuery, [nome, JSON.stringify(conteudo)]);
+        
+        // 3. Remove da fila
+        await pool.query('DELETE FROM envios_pendentes WHERE nome_do_json = $1;', [nome]);
+        
+        res.json({ sucesso: true, mensagem: 'Arquivo aprovado e publicado com sucesso!' });
     } catch (err) {
         console.error(err);
         res.status(500).json({ erro: 'Erro ao aprovar.' });
@@ -1103,15 +1199,18 @@ app.post('/api/arquivos/rejeitar', async (req, res) => {
     const { nome, senha } = req.body;
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token && req.cookies && req.cookies.discord_token) {
+        token = req.cookies.discord_token;
+    }
     const user = verifyToken(token);
 
-    if (senha !== adminPassword && (!user || !user.isAjudante)) {
+    if (!checkPassword(senha, adminPassword) && (!user || !user.isAjudante)) {
         return res.status(401).json({ erro: 'Não autorizado.' });
     }
 
     try {
-        const query = 'DELETE FROM arquivos_json WHERE nome_do_json = $1 RETURNING *;';
+        const query = 'DELETE FROM envios_pendentes WHERE nome_do_json = $1 RETURNING *;';
         const result = await pool.query(query, [nome]);
         
         if (result.rowCount === 0) return res.status(404).json({ erro: 'Arquivo pendente não encontrado.' });
@@ -1126,13 +1225,16 @@ app.post('/api/arquivos/rejeitar', async (req, res) => {
 // ROTA 9c: Listar Denúncias (/api/denuncias) - Admin ou Ajudante
 // ==========================================
 app.get('/api/denuncias', async (req, res) => {
-    const { senha } = req.query;
+    const senha = req.headers['x-admin-password'];
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token && req.cookies && req.cookies.discord_token) {
+        token = req.cookies.discord_token;
+    }
     const user = verifyToken(token);
 
-    const isAdmin = (senha === adminPassword);
+    const isAdmin = (checkPassword(senha, adminPassword));
     const isAjudante = user && user.isAjudante;
 
     if (!isAdmin && !isAjudante) {
@@ -1152,14 +1254,17 @@ app.get('/api/denuncias', async (req, res) => {
 // ==========================================
 // ROTA 9d: Resolver/Apagar Denúncia (/api/denuncias/delete) - Admin ou Ajudante
 // ==========================================
-app.post('/api/denuncias/delete', async (req, res) => {
+app.delete('/api/denuncias/delete', async (req, res) => {
     const { id, senha } = req.body;
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token && req.cookies && req.cookies.discord_token) {
+        token = req.cookies.discord_token;
+    }
     const user = verifyToken(token);
 
-    const isAdmin = (senha === adminPassword);
+    const isAdmin = (checkPassword(senha, adminPassword));
     const isAjudante = user && user.isAjudante;
 
     if (!isAdmin && !isAjudante) {
@@ -1353,4 +1458,25 @@ const server = app.listen(PORT, async () => {
 });
 
 // Desativa o timeout padrão de 5 minutos do Node.js para uploads grandes
-server.timeout = 0;
+
+// TMDB Proxy Route
+app.get('/api/tmdb/*', async (req, res) => {
+    try {
+        const tmdbPath = req.params[0];
+        const tmdbKey = process.env.TMDB_KEY || "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJlZTBmMzJmNzY5Mzc0YTkzYTI0ZmNiYzcyMWRlODYzNCIsIm5iZiI6MTc1NjA2MzM2NC4yMzksInN1YiI6IjY4YWI2Njg0ZDAyMjdhYTVlMjlkYjE2MSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.z1hG61Z5RCvn6qEZj60sHxrDZ0hR8QQi4rt18erzF-w";
+        let url = `https://api.themoviedb.org/3/${tmdbPath}`;
+        
+        const urlObj = new URL(url);
+        for (const [key, value] of Object.entries(req.query)) {
+            urlObj.searchParams.append(key, value);
+        }
+        
+        const response = await fetch(urlObj.toString(), {
+            headers: { "Authorization": `Bearer ${tmdbKey}` }
+        });
+        const data = await response.json();
+        res.json(data);
+    } catch (e) {
+        res.status(500).json({ erro: "TMDB error" });
+    }
+});
