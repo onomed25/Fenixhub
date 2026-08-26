@@ -1298,6 +1298,42 @@ function clearDiscordSession() {
             },
 
             getMaxEpForSeason: (seasonNum) => {
+                // Not actually used much, but kept for compatibility
+                return 999;
+            },
+            
+            checkLimits: (type) => {
+                if (!gen.seasonMap || !gen.maxSeason) return;
+                
+                const seasonInput = document.getElementById('seasonNum');
+                const epInput = document.getElementById('startEp');
+                if (!seasonInput || !epInput) return;
+
+                let sVal = parseInt(seasonInput.value, 10);
+                
+                if (type === 'season') {
+                    if (sVal > gen.maxSeason) {
+                        seasonInput.value = gen.maxSeason;
+                        sVal = gen.maxSeason;
+                        showToast(`A temporada máxima desta série é ${gen.maxSeason}.`, "warning");
+                    }
+                    if (gen.seasonMap[sVal]) {
+                        const maxEp = Math.max(...gen.seasonMap[sVal]);
+                        if (parseInt(epInput.value, 10) > maxEp) {
+                            epInput.value = maxEp;
+                        }
+                    }
+                } else if (type === 'ep') {
+                    if (gen.seasonMap[sVal]) {
+                        const maxEp = Math.max(...gen.seasonMap[sVal]);
+                        let epVal = parseInt(epInput.value, 10);
+                        if (epVal > maxEp) {
+                            epInput.value = maxEp;
+                            showToast(`O episódio máximo da temporada ${sVal} é ${maxEp}.`, "warning");
+                        }
+                    }
+                }
+            },
                 const videos = (gen.lastCinemetaResult && gen.lastCinemetaResult.meta && gen.lastCinemetaResult.meta.videos) 
                     || (gen.currentData && gen.currentData.cinemetaVideos);
                 if (!videos || !Array.isArray(videos)) return null;
@@ -1539,6 +1575,9 @@ function clearDiscordSession() {
                     const seasonsList = Object.keys(seasonMap).map(Number).sort((a, b) => a - b);
                     const maxSeason = seasonsList.length > 0 ? Math.max(...seasonsList) : 0;
                     
+                    gen.seasonMap = seasonMap;
+                    gen.maxSeason = maxSeason;
+
                     maxSeasonEl.innerText = maxSeason > 0 ? `${maxSeason} Temp.` : 'N/A';
                     totalEpsEl.innerText = `${totalEps} eps`;
                     
@@ -1554,6 +1593,9 @@ function clearDiscordSession() {
                     });
                     
                     epsList.innerHTML = htmlList || '<span class="text-zinc-600 italic">Sem episódios</span>';
+                    
+                    gen.checkLimits('season');
+                    gen.checkLimits('ep');
                 } else {
                     typeEl.innerText = "FILME";
                     typeEl.className = "text-[9px] uppercase tracking-wider text-amber-400 font-semibold border border-amber-500/30 px-1.5 py-0.5 rounded bg-amber-500/10";
@@ -4018,6 +4060,8 @@ function clearDiscordSession() {
                     saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
                     saveBtn.setAttribute('title', 'Salvar JSON no Banco');
                 }
+                
+                checkMyPendings();
             } else {
                 if (nameText) nameText.innerText = "";
                 
@@ -4049,6 +4093,37 @@ function clearDiscordSession() {
                 }
             }
             if (typeof updateAdminUI === 'function') updateAdminUI();
+        }
+
+        async function checkMyPendings() {
+            const token = localStorage.getItem('discord_token');
+            const isAjudante = localStorage.getItem('is_ajudante') === 'true';
+            const isAdmin = sessionStorage.getItem('fenixflix_senha');
+            
+            if (token && !isAjudante && !isAdmin) {
+                try {
+                    const res = await fetch(API_URL + '/api/meus-pendentes', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const pendentes = await res.json();
+                        let badge = document.getElementById('my-pending-badge');
+                        if (pendentes.length > 0) {
+                            if (!badge) {
+                                badge = document.createElement('div');
+                                badge.id = 'my-pending-badge';
+                                badge.className = 'fixed top-24 right-4 md:right-8 bg-[var(--surface-translucent)] backdrop-blur-[24px] border border-[rgba(255,106,0,0.3)] text-[var(--text)] px-4 py-3 rounded-2xl shadow-[0_8px_30px_rgba(255,106,0,0.15)] z-50 flex items-center gap-3 transition-all duration-300 transform scale-100';
+                                badge.innerHTML = `<i class="fa-solid fa-clock-rotate-left text-[var(--primary)]"></i> <div class="text-xs font-medium">Seu envio está aguardando aprovação (${pendentes.length})</div>`;
+                                document.body.appendChild(badge);
+                            } else {
+                                badge.innerHTML = `<i class="fa-solid fa-clock-rotate-left text-[var(--primary)]"></i> <div class="text-xs font-medium">Seu envio está aguardando aprovação (${pendentes.length})</div>`;
+                            }
+                        } else {
+                            if (badge) badge.remove();
+                        }
+                    }
+                } catch (e) { console.error("Erro ao verificar pendentes", e); }
+            }
         }
 
         function discordLogout() {
@@ -4458,11 +4533,16 @@ function clearDiscordSession() {
                 // Vamos usar o liveContent como base
                 let finalContent = liveContent ? JSON.parse(JSON.stringify(liveContent)) : JSON.parse(JSON.stringify(pendente.conteudo));
                 
+                let remainingPendingContent = JSON.parse(JSON.stringify(pendente.conteudo));
+                if (type === 'movie') remainingPendingContent.streams = [];
+                if (type === 'series') remainingPendingContent.streams = {};
+
                 // Garantir que as estruturas existam
                 if (type === 'movie' && !finalContent.streams) finalContent.streams = [];
                 if (type === 'series' && !finalContent.streams) finalContent.streams = {};
 
                 const newStreamsProcessed = new Set();
+                const unselectedStreamsProcessed = new Set();
 
                 inputs.forEach(input => {
                     const idx = input.getAttribute('data-idx');
@@ -4474,19 +4554,22 @@ function clearDiscordSession() {
                     const qualityVal = modal.querySelector(`.quality-input[data-idx="${idx}"]`)?.value || '';
                     const isChecked = modal.querySelector(`.approve-checkbox[data-idx="${idx}"]`).checked;
                     
-                    // Se a caixa de aprovar não estiver marcada, nós ignoramos e NÃO adicionamos esse link
-                    if (!isChecked) return;
-
                     if (type === 'movie') {
                         if (pendente.conteudo.streams[idx] && !newStreamsProcessed.has(idx)) {
                             newStreamsProcessed.add(idx);
                             let s = pendente.conteudo.streams[idx];
-                            s.url = urlVal;
-                            s.name = `${audioVal}\n${qualityVal}`;
                             
-                            // Adicionar ao finalContent se não existir
-                            if (!finalContent.streams.some(x => x.url === s.url)) {
-                                finalContent.streams.push(s);
+                            if (isChecked) {
+                                s.url = urlVal;
+                                s.name = `${audioVal}\n${qualityVal}`;
+                                // Adicionar ao finalContent se não existir
+                                if (!finalContent.streams.some(x => x.url === s.url)) {
+                                    finalContent.streams.push(s);
+                                }
+                            } else {
+                                if (!remainingPendingContent.streams.some(x => x.url === s.url)) {
+                                    remainingPendingContent.streams.push(s);
+                                }
                             }
                         }
                     } else {
@@ -4495,21 +4578,27 @@ function clearDiscordSession() {
                             if (!newStreamsProcessed.has(uniqueKey)) {
                                 newStreamsProcessed.add(uniqueKey);
                                 let s = pendente.conteudo.streams[season][ep][idx];
-                                s.url = urlVal;
-                                s.name = `${audioVal}\n${qualityVal}`;
                                 
-                                if (!finalContent.streams[season]) finalContent.streams[season] = {};
-                                if (!finalContent.streams[season][ep]) finalContent.streams[season][ep] = [];
-                                
-                                if (!finalContent.streams[season][ep].some(x => x.url === s.url)) {
-                                    finalContent.streams[season][ep].push(s);
+                                if (isChecked) {
+                                    s.url = urlVal;
+                                    s.name = `${audioVal}\n${qualityVal}`;
+                                    if (!finalContent.streams[season]) finalContent.streams[season] = {};
+                                    if (!finalContent.streams[season][ep]) finalContent.streams[season][ep] = [];
+                                    
+                                    if (!finalContent.streams[season][ep].some(x => x.url === s.url)) {
+                                        finalContent.streams[season][ep].push(s);
+                                    }
+                                } else {
+                                    if (!remainingPendingContent.streams[season]) remainingPendingContent.streams[season] = {};
+                                    if (!remainingPendingContent.streams[season][ep]) remainingPendingContent.streams[season][ep] = [];
+                                    if (!remainingPendingContent.streams[season][ep].some(x => x.url === s.url)) {
+                                        remainingPendingContent.streams[season][ep].push(s);
+                                    }
                                 }
                             }
                         }
                     }
                 });
-
-                // Se houver algum link antigo que não esteja mais no pending (caso de edição e deleção), ele fica mantido no liveContent.
 
                 const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
                 const discordToken = localStorage.getItem('discord_token');
@@ -4521,8 +4610,12 @@ function clearDiscordSession() {
                     const res = await fetch(API_URL + '/api/arquivos/aprovar', {
                         method: 'POST',
                         headers,
-                        // ENVIA O FINAL CONTENT! (Correção do bug anterior que enviava o pendente.conteudo cru)
-                        body: JSON.stringify({ nome, senha: adminSenha, conteudo: finalContent })
+                        body: JSON.stringify({ 
+                            nome, 
+                            senha: adminSenha, 
+                            conteudo: finalContent, 
+                            restantePendente: remainingPendingContent 
+                        })
                     });
                     const data = await res.json();
                     if (res.ok) {

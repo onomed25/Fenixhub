@@ -218,17 +218,16 @@ const initDB = async () => {
 // ==========================================
 let cachedHtml = '';
 try {
-    cachedHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+    const rawHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+    const telegramUrl = process.env.TELEGRAM_API_URL || '';
+    cachedHtml = rawHtml.replace('__TELEGRAM_API_URL_PLACEHOLDER__', telegramUrl);
 } catch (err) {
     console.error("Erro ao carregar index.html na inicialização:", err);
 }
 
 app.get('/', (req, res) => {
-    // Usa o HTML em cache para evitar bloqueio do Event Loop (correção de DoS)
-    const telegramUrl = process.env.TELEGRAM_API_URL || '';
-    const html = cachedHtml.replace('__TELEGRAM_API_URL_PLACEHOLDER__', telegramUrl);
-    
-    res.send(html);
+    // Usa o HTML pré-processado e em cache para máxima performance
+    res.send(cachedHtml);
 });
 
 // ==========================================
@@ -586,6 +585,26 @@ app.post('/upload', upload.none(), async (req, res) => {
         } catch (e) {
             return res.status(400).json({ erro: 'O conteúdo enviado não é um JSON válido.' });
         }
+    }
+
+    if (!parsedConteudo || typeof parsedConteudo !== 'object' || Array.isArray(parsedConteudo)) {
+        return res.status(400).json({ erro: 'Estrutura JSON inválida. O conteúdo deve ser um objeto.' });
+    }
+    
+    if (parsedConteudo.type !== 'movie' && parsedConteudo.type !== 'series') {
+        return res.status(400).json({ erro: 'O JSON deve possuir um "type" válido (movie ou series).' });
+    }
+    
+    if (parsedConteudo.streams === undefined || parsedConteudo.streams === null) {
+        return res.status(400).json({ erro: 'O JSON deve conter a propriedade "streams".' });
+    }
+    
+    if (parsedConteudo.type === 'movie' && !Array.isArray(parsedConteudo.streams)) {
+        return res.status(400).json({ erro: 'Para filmes, "streams" deve ser um array.' });
+    }
+    
+    if (parsedConteudo.type === 'series' && (typeof parsedConteudo.streams !== 'object' || Array.isArray(parsedConteudo.streams))) {
+        return res.status(400).json({ erro: 'Para séries, "streams" deve ser um objeto.' });
     }
 
     // Verificar autenticação (Discord Token ou Senha Admin)
@@ -1113,6 +1132,28 @@ app.post('/api/denunciar', async (req, res) => {
 // ==========================================
 // ROTAS DE APROVAÇÃO (Moderation Queue)
 // ==========================================
+app.get('/api/meus-pendentes', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token && req.cookies && req.cookies.discord_token) {
+        token = req.cookies.discord_token;
+    }
+    const user = verifyToken(token);
+    if (!user) return res.json([]);
+    
+    try {
+        const query = `
+            SELECT nome_do_json FROM envios_pendentes 
+            WHERE conteudo->>'colaborador_id' = $1;
+        `;
+        const result = await pool.query(query, [user.id]);
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ erro: 'Erro' });
+    }
+});
+
 app.get('/api/arquivos/pendentes', async (req, res) => {
     const senha = req.headers['x-admin-password'];
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
@@ -1138,7 +1179,7 @@ app.get('/api/arquivos/pendentes', async (req, res) => {
 });
 
 app.post('/api/arquivos/aprovar', async (req, res) => {
-    const { nome, senha, conteudo } = req.body;
+    const { nome, senha, conteudo, restantePendente } = req.body;
     const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
     const authHeader = req.headers.authorization;
     let token = authHeader && authHeader.split(' ')[1];
@@ -1167,8 +1208,31 @@ app.post('/api/arquivos/aprovar', async (req, res) => {
         `;
         await pool.query(upsertQuery, [nome, JSON.stringify(conteudoToSave)]);
         
-        // 3. Remove da fila
-        await pool.query('DELETE FROM envios_pendentes WHERE nome_do_json = $1;', [nome]);
+        // 3. Gerencia a fila
+        if (restantePendente) {
+            let temRestante = false;
+            if (restantePendente.type === 'movie' && restantePendente.streams && restantePendente.streams.length > 0) {
+                temRestante = true;
+            } else if (restantePendente.type === 'series' && restantePendente.streams) {
+                for (let s in restantePendente.streams) {
+                    for (let e in restantePendente.streams[s]) {
+                        if (restantePendente.streams[s][e].length > 0) {
+                            temRestante = true;
+                            break;
+                        }
+                    }
+                    if (temRestante) break;
+                }
+            }
+
+            if (temRestante) {
+                await pool.query('UPDATE envios_pendentes SET conteudo = $1 WHERE nome_do_json = $2', [JSON.stringify(restantePendente), nome]);
+            } else {
+                await pool.query('DELETE FROM envios_pendentes WHERE nome_do_json = $1;', [nome]);
+            }
+        } else {
+            await pool.query('DELETE FROM envios_pendentes WHERE nome_do_json = $1;', [nome]);
+        }
         
         res.json({ sucesso: true, mensagem: 'Arquivo aprovado e publicado com sucesso!' });
     } catch (err) {
