@@ -560,7 +560,7 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         // Define o token apenas via cookie (evita vazamento na query string e no log)
         res.cookie('discord_token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false }); 
         
-        res.redirect(`${baseRedirect}${separator}discord_username=${encodeURIComponent(payload.username)}&discord_global_name=${encodeURIComponent(payload.global_name)}&discord_avatar=${encodeURIComponent(payload.avatar || '')}&discord_id=${payload.id}&is_ajudante=${isAjudante}`);
+        res.redirect(`${baseRedirect}${separator}discord_token=${encodeURIComponent(token)}&discord_username=${encodeURIComponent(payload.username)}&discord_global_name=${encodeURIComponent(payload.global_name)}&discord_avatar=${encodeURIComponent(payload.avatar || '')}&discord_id=${payload.id}&is_ajudante=${isAjudante}`);
     } catch (err) {
         console.error("Erro no callback do Discord:", err);
         res.status(500).send("Erro interno durante autenticação do Discord.");
