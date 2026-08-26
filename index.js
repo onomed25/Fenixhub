@@ -33,10 +33,9 @@ function generateToken(payload) {
 
 function checkPassword(input, actual) {
     if (!input || !actual) return false;
-    const inputBuf = Buffer.from(input);
-    const actualBuf = Buffer.from(actual);
-    if (inputBuf.length !== actualBuf.length) return false;
-    return crypto.timingSafeEqual(inputBuf, actualBuf);
+    const hash1 = crypto.createHash('sha256').update(input).digest();
+    const hash2 = crypto.createHash('sha256').update(actual).digest();
+    return crypto.timingSafeEqual(hash1, hash2);
 }
 
 function verifyToken(token) {
@@ -213,7 +212,6 @@ const initDB = async () => {
         console.error('Erro ao criar tabelas:', err);
     }
 };
-initDB();
 
 // ==========================================
 // ROTA 0: Servir o Frontend (index.html)
@@ -238,8 +236,8 @@ app.get('/', (req, res) => {
 // ==========================================
 const staticOptions = {
     maxAge: '1d', // Cache for 1 day
-    setHeaders: (res, path) => {
-        if (express.static.mime.lookup(path) === 'text/html') {
+    setHeaders: (res, pathStr) => {
+        if (path.extname(pathStr).toLowerCase() === '.html') {
             res.setHeader('Cache-Control', 'public, max-age=0'); // Don't cache HTML
         }
     }
@@ -559,7 +557,11 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         // Garante rigidamente o tipo String para evitar falhas de Type Validation apontadas pelo Snyk
         baseRedirect = String(baseRedirect);
         const separator = baseRedirect.includes('?') ? '&' : '?';
-        res.redirect(`${baseRedirect}${separator}discord_token=${token}&discord_username=${encodeURIComponent(payload.username)}&discord_global_name=${encodeURIComponent(payload.global_name)}&discord_avatar=${encodeURIComponent(payload.avatar || '')}&discord_id=${payload.id}&is_ajudante=${isAjudante}`);
+        
+        // Define o token apenas via cookie (evita vazamento na query string e no log)
+        res.cookie('discord_token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false }); 
+        
+        res.redirect(`${baseRedirect}${separator}discord_username=${encodeURIComponent(payload.username)}&discord_global_name=${encodeURIComponent(payload.global_name)}&discord_avatar=${encodeURIComponent(payload.avatar || '')}&discord_id=${payload.id}&is_ajudante=${isAjudante}`);
     } catch (err) {
         console.error("Erro no callback do Discord:", err);
         res.status(500).send("Erro interno durante autenticação do Discord.");
@@ -993,28 +995,6 @@ app.post('/api/pedidos', async (req, res) => {
 // ==========================================
 // ROTA 8: Listar e Somar Pedidos (/api/pedidos)
 // ==========================================
-app.post('/api/pedidos', async (req, res) => {
-    const { id, type, episode } = req.body;
-    if (!id || !type) return res.status(400).json({ erro: 'Faltam parâmetros id ou type' });
-    try {
-        const tmdbData = await getTMDBInfo(id);
-        if (tmdbData && tmdbData.release_date) {
-            const today = new Date().toISOString().split('T')[0];
-            if (tmdbData.release_date > today) {
-                return res.status(400).json({ erro: `Conteúdo não lançado ainda (Lançamento: ${tmdbData.release_date}).` });
-            }
-        }
-        const queryInsert = `
-            INSERT INTO pedidos_sugeridos (imdb_id, tipo, episodio)
-            VALUES ($1, $2, $3);
-        `;
-        await pool.query(queryInsert, [id, type, episode || null]);
-        return res.json({ sucesso: true, mensagem: `Pedido para o ID '${id}' registrado com sucesso no banco de dados!` });
-    } catch (err) {
-        return res.status(500).json({ erro: 'Erro ao registrar pedido via URL.' });
-    }
-});
-
 app.get('/api/pedidos', async (req, res) => {
     // Caso contrário (sem parâmetros), apenas lista todos
     try {
@@ -1447,14 +1427,18 @@ let PORT = process.env.PORT || 3000;
 if (process.env.SPACE_ID) {
     PORT = 7860;
 }
-const server = app.listen(PORT, async () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
-    
-    // Executa verificação inicial de limpeza
-    await verificarELimparMaisVistos();
-    
-    // Agenda para rodar a cada 1 hora
-    setInterval(verificarELimparMaisVistos, 60 * 60 * 1000);
+initDB().then(() => {
+    const server = app.listen(PORT, async () => {
+        console.log(`Servidor rodando na porta ${PORT}`);
+        
+        // Executa verificação inicial de limpeza
+        await verificarELimparMaisVistos();
+        
+        // Agenda para rodar a cada 1 hora
+        setInterval(verificarELimparMaisVistos, 60 * 60 * 1000);
+    });
+}).catch(err => {
+    console.error("Erro ao inicializar o banco de dados:", err);
 });
 
 // Desativa o timeout padrão de 5 minutos do Node.js para uploads grandes
@@ -1463,7 +1447,10 @@ const server = app.listen(PORT, async () => {
 app.get('/api/tmdb/*path', async (req, res) => {
     try {
         const tmdbPath = Array.isArray(req.params.path) ? req.params.path.join('/') : req.params.path;
-        const tmdbKey = process.env.TMDB_KEY || "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJlZTBmMzJmNzY5Mzc0YTkzYTI0ZmNiYzcyMWRlODYzNCIsIm5iZiI6MTc1NjA2MzM2NC4yMzksInN1YiI6IjY4YWI2Njg0ZDAyMjdhYTVlMjlkYjE2MSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.z1hG61Z5RCvn6qEZj60sHxrDZ0hR8QQi4rt18erzF-w";
+        const tmdbKey = process.env.TMDB_KEY;
+        if (!tmdbKey) {
+            return res.status(500).json({ erro: "TMDB key is missing" });
+        }
         let url = `https://api.themoviedb.org/3/${tmdbPath}`;
         
         const urlObj = new URL(url);

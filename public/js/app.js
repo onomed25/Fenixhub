@@ -3942,20 +3942,24 @@ function clearDiscordSession() {
             }
 
             const params = new URLSearchParams(window.location.search);
-            const token = params.get('discord_token');
+            let token = params.get('discord_token');
+            if (!token) {
+                const cookieMatch = document.cookie.match(/(?:^|;\s*)discord_token=([^;]*)/);
+                if (cookieMatch) token = cookieMatch[1];
+            }
             const username = params.get('discord_username');
             const globalName = params.get('discord_global_name');
             const avatar = params.get('discord_avatar');
             const id = params.get('discord_id');
             const isAjudante = params.get('is_ajudante');
             
-            if (token) {
-                localStorage.setItem('discord_token', token);
-                localStorage.setItem('discord_username', username || '');
-                localStorage.setItem('discord_global_name', globalName || '');
-                localStorage.setItem('discord_avatar', avatar || '');
-                localStorage.setItem('discord_id', id || '');
-                localStorage.setItem('is_ajudante', isAjudante === 'true' ? 'true' : 'false');
+            if (token || username) {
+                if (token) localStorage.setItem('discord_token', token);
+                if (username) localStorage.setItem('discord_username', username);
+                if (globalName) localStorage.setItem('discord_global_name', globalName);
+                if (avatar) localStorage.setItem('discord_avatar', avatar);
+                if (id) localStorage.setItem('discord_id', id);
+                if (isAjudante) localStorage.setItem('is_ajudante', isAjudante === 'true' ? 'true' : 'false');
                 
                 // Clean URL parameters
                 window.history.replaceState({}, document.title, window.location.pathname);
