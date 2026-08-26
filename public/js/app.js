@@ -4507,7 +4507,6 @@ function clearDiscordSession() {
                 return showToast("Conteúdo não encontrado para pré-visualização.", "error");
             }
             
-            // Buscar o arquivo atual (publicado) para comparar e mostrar apenas o que é NOVO
             let liveContent = null;
             try {
                 const res = await fetch(API_URL + '/api/content/' + nome);
@@ -4520,56 +4519,92 @@ function clearDiscordSession() {
 
             const { type, title, streams } = pendente.conteudo;
             
-            // Função para extrair audio e qualidade do s.name
             const parseName = (name) => {
                 const parts = (name || '').split('\n');
                 return { audio: parts[0] || '', quality: parts[1] || '' };
             };
 
+            
+            window.toggleApproval = function(checkbox) {
+                const container = checkbox.closest('.stream-card');
+                const elementsToDisable = container.querySelectorAll('.stream-edit-input, button:not(.close-btn)');
+                const label = checkbox.closest('label');
+                
+                if (checkbox.checked) {
+                    container.classList.remove('opacity-40', 'grayscale');
+                    elementsToDisable.forEach(el => el.disabled = false);
+                    label.classList.remove('bg-zinc-800', 'hover:bg-zinc-700', 'text-zinc-400', 'border-zinc-700');
+                    label.classList.add('bg-emerald-500/10', 'hover:bg-emerald-500/20', 'text-emerald-500', 'border-emerald-500/20');
+                } else {
+                    container.classList.add('opacity-40', 'grayscale');
+                    elementsToDisable.forEach(el => el.disabled = true);
+                    label.classList.remove('bg-emerald-500/10', 'hover:bg-emerald-500/20', 'text-emerald-500', 'border-emerald-500/20');
+                    label.classList.add('bg-zinc-800', 'hover:bg-zinc-700', 'text-zinc-400', 'border-zinc-700');
+                }
+            };
+
+            window.playInPreview = function(url) {
+                const player = document.getElementById('previewPlayer');
+                const bases = [
+                    "https://husky-denny-fenixflixaddon-ec8e842b.koyeb.app",
+                    "https://passing-melinda-onomed1-d0cbec40.koyeb.app"
+                ];
+                const base = bases[Math.floor(Math.random() * bases.length)];
+
+                let url_stream = url;
+                if (url_stream && url_stream.includes("/stream/")) {
+                    const path_index = url_stream.indexOf("/stream/");
+                    const pathUrl = url_stream.substring(path_index);
+                    url_stream = `${base}${pathUrl}`;
+                }
+
+                player.src = url_stream;
+                player.load();
+                player.classList.remove('hidden');
+                player.play().catch(e => console.warn("Autoplay block", e));
+            };
+
             window.previewSaveChanges = async function() {
                 const modal = document.getElementById('previewModal');
-                const inputs = modal.querySelectorAll('.stream-edit-input.audio-input'); // Usar um para iterar
+                const inputs = modal.querySelectorAll('.stream-edit-input.audio-input'); 
                 
-                // Vamos usar o liveContent como base
                 let finalContent = liveContent ? JSON.parse(JSON.stringify(liveContent)) : JSON.parse(JSON.stringify(pendente.conteudo));
                 
-                let remainingPendingContent = JSON.parse(JSON.stringify(pendente.conteudo));
-                if (type === 'movie') remainingPendingContent.streams = [];
-                if (type === 'series') remainingPendingContent.streams = {};
-
-                // Garantir que as estruturas existam
                 if (type === 'movie' && !finalContent.streams) finalContent.streams = [];
                 if (type === 'series' && !finalContent.streams) finalContent.streams = {};
 
                 const newStreamsProcessed = new Set();
-                const unselectedStreamsProcessed = new Set();
 
                 inputs.forEach(input => {
                     const idx = input.getAttribute('data-idx');
                     const season = input.getAttribute('data-season') || null;
                     const ep = input.getAttribute('data-ep') || null;
                     
-                    const urlVal = modal.querySelector(`.url-input[data-idx="${idx}"]`)?.value || '';
-                    const audioVal = modal.querySelector(`.audio-input[data-idx="${idx}"]`)?.value || '';
-                    const qualityVal = modal.querySelector(`.quality-input[data-idx="${idx}"]`)?.value || '';
-                    const isChecked = modal.querySelector(`.approve-checkbox[data-idx="${idx}"]`).checked;
+                    const selector = type === 'movie' ? `[data-idx="${idx}"]` : `[data-season="${season}"][data-ep="${ep}"][data-idx="${idx}"]`;
                     
+                    let urlVal = modal.querySelector(`.url-input${selector}`)?.value || '';
+                    if (urlVal.includes('/stream/')) {
+                        urlVal = urlVal.substring(urlVal.indexOf('/stream/'));
+                    }
+                    
+                    const audioVal = modal.querySelector(`.audio-input${selector}`)?.value || '';
+                    const qualityVal = modal.querySelector(`.quality-input${selector}`)?.value || '';
+                    const isChecked = modal.querySelector(`.approve-checkbox${selector}`).checked;
+                    
+                    const newSeason = type === 'series' ? (modal.querySelector(`.season-input${selector}`)?.value || season) : null;
+                    const newEp = type === 'series' ? (modal.querySelector(`.ep-input${selector}`)?.value || ep) : null;
+
+                    if (!isChecked) return;
+
                     if (type === 'movie') {
                         if (pendente.conteudo.streams[idx] && !newStreamsProcessed.has(idx)) {
                             newStreamsProcessed.add(idx);
                             let s = pendente.conteudo.streams[idx];
+                            s.url = urlVal;
+                            s.name = `${audioVal}\n${qualityVal}`;
                             
-                            if (isChecked) {
-                                s.url = urlVal;
-                                s.name = `${audioVal}\n${qualityVal}`;
-                                // Adicionar ao finalContent se não existir
-                                if (!finalContent.streams.some(x => x.url === s.url)) {
-                                    finalContent.streams.push(s);
-                                }
-                            } else {
-                                if (!remainingPendingContent.streams.some(x => x.url === s.url)) {
-                                    remainingPendingContent.streams.push(s);
-                                }
+                            if (!finalContent.streams.some(x => x.url === s.url)) {
+                                finalContent.streams.push(s);
                             }
                         }
                     } else {
@@ -4578,22 +4613,14 @@ function clearDiscordSession() {
                             if (!newStreamsProcessed.has(uniqueKey)) {
                                 newStreamsProcessed.add(uniqueKey);
                                 let s = pendente.conteudo.streams[season][ep][idx];
+                                s.url = urlVal;
+                                s.name = `${audioVal}\n${qualityVal}`;
                                 
-                                if (isChecked) {
-                                    s.url = urlVal;
-                                    s.name = `${audioVal}\n${qualityVal}`;
-                                    if (!finalContent.streams[season]) finalContent.streams[season] = {};
-                                    if (!finalContent.streams[season][ep]) finalContent.streams[season][ep] = [];
-                                    
-                                    if (!finalContent.streams[season][ep].some(x => x.url === s.url)) {
-                                        finalContent.streams[season][ep].push(s);
-                                    }
-                                } else {
-                                    if (!remainingPendingContent.streams[season]) remainingPendingContent.streams[season] = {};
-                                    if (!remainingPendingContent.streams[season][ep]) remainingPendingContent.streams[season][ep] = [];
-                                    if (!remainingPendingContent.streams[season][ep].some(x => x.url === s.url)) {
-                                        remainingPendingContent.streams[season][ep].push(s);
-                                    }
+                                if (!finalContent.streams[newSeason]) finalContent.streams[newSeason] = {};
+                                if (!finalContent.streams[newSeason][newEp]) finalContent.streams[newSeason][newEp] = [];
+                                
+                                if (!finalContent.streams[newSeason][newEp].some(x => x.url === s.url)) {
+                                    finalContent.streams[newSeason][newEp].push(s);
                                 }
                             }
                         }
@@ -4610,12 +4637,7 @@ function clearDiscordSession() {
                     const res = await fetch(API_URL + '/api/arquivos/aprovar', {
                         method: 'POST',
                         headers,
-                        body: JSON.stringify({ 
-                            nome, 
-                            senha: adminSenha, 
-                            conteudo: finalContent, 
-                            restantePendente: remainingPendingContent 
-                        })
+                        body: JSON.stringify({ nome, senha: adminSenha, conteudo: finalContent })
                     });
                     const data = await res.json();
                     if (res.ok) {
@@ -4630,6 +4652,82 @@ function clearDiscordSession() {
                 }
             };
 
+            const generateStreamHtml = (s, idx, audio, quality, isMovie, season, ep) => {
+                const audios = ['Dublado', 'Português (PT-BR)', 'English', 'Legendado', 'Dual Áudio'];
+                const qualities = ["Nenhuma", "1080p", "720p", "4K", "SD", "FHD", "HD", "CAM"];
+                
+                let audioOpts = audios.map(a => `<option value="${a}" ${audio === a ? 'selected' : ''}>${a}</option>`).join('');
+                if (audio && !audios.includes(audio)) audioOpts += `<option value="${escapeHTML(audio)}" selected>${escapeHTML(audio)}</option>`;
+                
+                let qualityOpts = qualities.map(q => `<option value="${q}" ${quality === q ? 'selected' : ''}>${q}</option>`).join('');
+                if (quality && !qualities.includes(quality)) qualityOpts += `<option value="${escapeHTML(quality)}" selected>${escapeHTML(quality)}</option>`;
+
+                const dataAttr = isMovie ? `data-idx="${idx}"` : `data-season="${season}" data-ep="${ep}" data-idx="${idx}"`;
+                
+                let headerContent = '';
+                if (isMovie) {
+                    headerContent = `<span class="font-bold text-indigo-400 text-lg md:text-base flex items-center gap-2"><i class="fa-solid fa-file-video opacity-50"></i> Novo Link de Filme</span>`;
+                } else {
+                    headerContent = `
+                        <div class="flex items-center gap-3 mb-2">
+                            <div class="flex items-center bg-zinc-950 border border-zinc-700/80 rounded-lg px-3 py-2 md:px-2 md:py-1 focus-within:border-indigo-500 transition-colors shadow-inner w-24 md:w-20">
+                                <span class="text-indigo-500/80 font-bold text-xs md:text-[10px] uppercase tracking-wider mr-2 md:mr-1">T</span>
+                                <input type="number" min="1" class="stream-edit-input season-input w-full bg-transparent text-indigo-300 font-extrabold text-base md:text-sm outline-none text-center" ${dataAttr} value="${season}">
+                            </div>
+                            <div class="flex items-center bg-zinc-950 border border-zinc-700/80 rounded-lg px-3 py-2 md:px-2 md:py-1 focus-within:border-indigo-500 transition-colors shadow-inner w-24 md:w-20">
+                                <span class="text-indigo-500/80 font-bold text-xs md:text-[10px] uppercase tracking-wider mr-2 md:mr-1">E</span>
+                                <input type="number" min="1" class="stream-edit-input ep-input w-full bg-transparent text-indigo-300 font-extrabold text-base md:text-sm outline-none text-center" ${dataAttr} value="${ep}">
+                            </div>
+                        </div>
+                    `;
+                }
+
+                let displayUrl = s.url;
+                if (displayUrl && displayUrl.includes('/stream/')) displayUrl = displayUrl.substring(displayUrl.indexOf('/stream/'));
+
+                return `
+                <div class="stream-card p-4 md:p-5 bg-zinc-900/60 border border-zinc-800/80 rounded-xl flex flex-col gap-4 md:gap-3 mb-4 relative hover:border-zinc-700 transition-colors shadow-sm duration-300">
+                    <div class="absolute top-4 right-4 flex items-center gap-2">
+                        <label class="flex items-center gap-2 cursor-pointer bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/20 px-3 py-2 md:px-2.5 md:py-1.5 rounded-lg transition-colors select-none">
+                            <input type="checkbox" class="approve-checkbox w-5 h-5 md:w-4 md:h-4 accent-emerald-500 cursor-pointer" ${dataAttr} checked onchange="window.toggleApproval(this)">
+                            <span class="text-sm md:text-xs font-bold uppercase tracking-wider">Aprovar</span>
+                        </label>
+                    </div>
+                    <div class="flex justify-between items-center pr-32">
+                        <div class="flex flex-col">
+                            ${headerContent}
+                            <span class="text-zinc-500 text-sm md:text-xs flex items-center gap-1.5 mt-0.5">
+                                <i class="fa-solid fa-user-astronaut text-xs md:text-[10px]"></i> ${escapeHTML(s.colaborador || 'Desconhecido')}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-3 mt-2 md:mt-1">
+                        <div>
+                            <label class="text-[11px] md:text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 md:mb-1.5 block">Idioma / Áudio</label>
+                            <select class="stream-edit-input audio-input w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 md:px-3 md:py-2 text-base md:text-sm text-zinc-200 outline-none focus:border-indigo-500 transition-colors appearance-none" ${dataAttr}>
+                                ${audioOpts}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[11px] md:text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 md:mb-1.5 block">Qualidade</label>
+                            <select class="stream-edit-input quality-input w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 md:px-3 md:py-2 text-base md:text-sm text-zinc-200 outline-none focus:border-indigo-500 transition-colors appearance-none" ${dataAttr}>
+                                ${qualityOpts}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-1">
+                        <label class="text-[11px] md:text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 md:mb-1.5 block">Link / URL do Vídeo</label>
+                        <div class="flex flex-col md:flex-row gap-3 md:gap-2">
+                            <input type="text" class="stream-edit-input url-input w-full md:flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 md:px-3 md:py-2 text-base md:text-sm text-indigo-300 font-mono outline-none focus:border-indigo-500 transition-colors" ${dataAttr} value="${escapeHTML(displayUrl)}">
+                            <button onclick="playInPreview(this.parentElement.querySelector('.url-input').value)" class="w-full md:w-auto shrink-0 px-5 py-3 md:px-4 md:py-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg hover:bg-indigo-500/20 text-base md:text-sm font-bold flex items-center justify-center gap-2 transition-colors">
+                                <i class="fa-solid fa-play"></i> Testar no Player
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+            };
+
             let streamsHtml = '';
             
             if (type === 'movie' && Array.isArray(streams)) {
@@ -4638,38 +4736,11 @@ function clearDiscordSession() {
                     const isNew = !liveContent || !liveContent.streams || !liveContent.streams.some(ls => ls.url === s.url);
                     if (!isNew) return; 
                     countNew++;
-                    
                     const { audio, quality } = parseName(s.name);
-                    streamsHtml += `<div class="p-3 bg-zinc-800/50 border border-zinc-700/50 rounded flex flex-col gap-2 text-sm mb-3 relative">
-                        <div class="absolute -top-3 -right-2 flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 px-2 py-1 rounded shadow-lg">
-                            <input type="checkbox" class="approve-checkbox w-3.5 h-3.5 accent-emerald-500 cursor-pointer" data-idx="${idx}" checked title="Marque para aprovar este link">
-                            <span class="text-[10px] text-zinc-300 font-bold uppercase">Aprovar</span>
-                        </div>
-                        <div class="flex justify-between items-center mt-1">
-                            <span class="font-semibold text-emerald-400">Novo Link de Filme</span>
-                            <span class="text-zinc-400 text-xs">Colaborador: ${escapeHTML(s.colaborador || 'Desconhecido')}</span>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2 mt-1">
-                            <div>
-                                <label class="text-[10px] text-zinc-500 uppercase">Áudio</label>
-                                <input type="text" class="stream-edit-input audio-input w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white" data-idx="${idx}" value="${escapeHTML(audio)}">
-                            </div>
-                            <div>
-                                <label class="text-[10px] text-zinc-500 uppercase">Qualidade</label>
-                                <input type="text" class="stream-edit-input quality-input w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white" data-idx="${idx}" value="${escapeHTML(quality)}">
-                            </div>
-                        </div>
-                        <div>
-                            <label class="text-[10px] text-zinc-500 uppercase">URL do Vídeo</label>
-                            <input type="text" class="stream-edit-input url-input w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-indigo-300" data-idx="${idx}" value="${escapeHTML(s.url)}">
-                        </div>
-                        <button onclick="playInPreview(this.parentElement.querySelector('.url-input').value)" class="mt-2 w-full px-3 py-1.5 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 text-xs flex items-center justify-center gap-2 transition-colors">
-                            <i class="fa-solid fa-play"></i> Testar no Player
-                        </button>
-                    </div>`;
+                    streamsHtml += generateStreamHtml(s, idx, audio, quality, true, null, null);
                 });
-                if (countNew === 0) streamsHtml = '<p class="text-zinc-500 text-sm">Nenhuma mudança nova detectada nos links.</p>';
-                else streamsHtml = `<h4 class="font-semibold text-white mb-3">Diferenças: ${countNew} Link(s) Novo(s)</h4>` + streamsHtml;
+                if (countNew === 0) streamsHtml = '<div class="text-zinc-500 text-sm flex flex-col items-center justify-center p-12 text-center gap-3"><i class="fa-solid fa-check-circle text-4xl text-zinc-700"></i><p>Nenhuma mudança nova detectada.</p></div>';
+                else streamsHtml = `<h4 class="font-bold text-white mb-4 text-xl md:text-lg flex items-center gap-2"><i class="fa-solid fa-list-check text-indigo-500"></i> ${countNew} ${countNew === 1 ? 'Link Novo Encontrado' : 'Links Novos Encontrados'}</h4>` + streamsHtml;
                 
             } else if (type === 'series' && streams && typeof streams === 'object') {
                 let countNew = 0;
@@ -4681,75 +4752,58 @@ function clearDiscordSession() {
                                 const isNew = !liveContent || !liveContent.streams || !liveContent.streams[season] || !liveContent.streams[season][ep] || !liveContent.streams[season][ep].some(ls => ls.url === s.url);
                                 if (!isNew) return;
                                 countNew++;
-                                
                                 const { audio, quality } = parseName(s.name);
-                                streamsHtml += `<div class="p-3 bg-zinc-800/50 border border-zinc-700/50 rounded flex flex-col gap-2 text-sm mb-3 border-l-2 border-indigo-500 relative">
-                                    <div class="absolute -top-3 -right-2 flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 px-2 py-1 rounded shadow-lg">
-                                        <input type="checkbox" class="approve-checkbox w-3.5 h-3.5 accent-emerald-500 cursor-pointer" data-idx="${idx}" checked title="Marque para aprovar este link">
-                                        <span class="text-[10px] text-zinc-300 font-bold uppercase">Aprovar</span>
-                                    </div>
-                                    <div class="flex justify-between items-center mt-1">
-                                        <span class="font-bold text-indigo-400">T${season} E${ep}</span>
-                                        <span class="text-zinc-400 text-xs">Colaborador: ${escapeHTML(s.colaborador || 'Desconhecido')}</span>
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-2 mt-1">
-                                        <div>
-                                            <label class="text-[10px] text-zinc-500 uppercase">Áudio</label>
-                                            <input type="text" class="stream-edit-input audio-input w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white" data-season="${season}" data-ep="${ep}" data-idx="${idx}" value="${escapeHTML(audio)}">
-                                        </div>
-                                        <div>
-                                            <label class="text-[10px] text-zinc-500 uppercase">Qualidade</label>
-                                            <input type="text" class="stream-edit-input quality-input w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white" data-season="${season}" data-ep="${ep}" data-idx="${idx}" value="${escapeHTML(quality)}">
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label class="text-[10px] text-zinc-500 uppercase">URL do Vídeo</label>
-                                        <input type="text" class="stream-edit-input url-input w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-indigo-300" data-season="${season}" data-ep="${ep}" data-idx="${idx}" value="${escapeHTML(s.url)}">
-                                    </div>
-                                    <button onclick="playInPreview(this.parentElement.querySelector('.url-input').value)" class="mt-2 w-full px-3 py-1.5 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 text-xs flex items-center justify-center gap-2 transition-colors">
-                                        <i class="fa-solid fa-play"></i> Testar no Player
-                                    </button>
-                                </div>`;
+                                streamsHtml += generateStreamHtml(s, idx, audio, quality, false, season, ep);
                             });
                         }
                     });
                 });
-                if (countNew === 0) streamsHtml = '<p class="text-zinc-500 text-sm">Nenhuma mudança ou episódio novo detectado.</p>';
-                else streamsHtml = `<h4 class="font-semibold text-white mb-3">Diferenças: ${countNew} Episódio(s) Novo(s)</h4>` + streamsHtml;
+                if (countNew === 0) streamsHtml = '<div class="text-zinc-500 text-sm flex flex-col items-center justify-center p-12 text-center gap-3"><i class="fa-solid fa-check-circle text-4xl text-zinc-700"></i><p>Nenhuma mudança nova detectada.</p></div>';
+                else streamsHtml = `<h4 class="font-bold text-white mb-4 text-xl md:text-lg flex items-center gap-2"><i class="fa-solid fa-list-check text-indigo-500"></i> ${countNew} ${countNew === 1 ? 'Episódio Novo Encontrado' : 'Episódios Novos Encontrados'}</h4>` + streamsHtml;
             } else {
                 streamsHtml = '<p class="text-zinc-500 text-sm mt-4">Nenhum link encontrado ou formato desconhecido.</p>';
             }
             
             const modalHtml = `
-            <div id="previewModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-                <div class="bg-[#0f0f11] border border-zinc-800/60 rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
-                    <div class="p-4 border-b border-zinc-800/60 flex justify-between items-center bg-zinc-900/30">
-                        <h3 class="text-lg font-bold text-white flex items-center gap-2"><i class="fa-solid fa-code-merge text-indigo-500"></i> Editar e Aprovar: ${escapeHTML(title || nome)}</h3>
-                        <button onclick="document.getElementById('previewModal').remove()" class="text-zinc-400 hover:text-white transition-colors w-8 h-8 rounded-lg hover:bg-zinc-800 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+            <div id="previewModal" class="fixed inset-0 bg-black/95 md:bg-black/90 backdrop-blur-md z-[9999] flex items-end md:items-center justify-center p-0 md:p-6">
+                <div class="bg-[#0f0f11] border-t md:border border-zinc-800/80 rounded-t-3xl md:rounded-2xl w-full max-w-5xl h-[95vh] md:h-auto md:max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+                    <div class="px-5 py-4 md:px-6 border-b border-zinc-800/80 flex justify-between items-center bg-zinc-900/50">
+                        <h3 class="text-lg md:text-xl font-bold text-white flex items-center gap-2 tracking-tight line-clamp-1">
+                            <i class="fa-solid fa-code-merge text-indigo-500 shrink-0"></i> Revisão
+                            <span class="text-xs md:text-sm font-normal text-zinc-500 ml-1 truncate">${escapeHTML(title || nome)}</span>
+                        </h3>
+                        <button onclick="document.getElementById('previewModal').remove()" class="text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors w-10 h-10 rounded-full flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-xmark text-xl md:text-lg"></i>
+                        </button>
                     </div>
                     
                     <div class="flex flex-col md:flex-row flex-1 overflow-hidden">
                         <!-- Lado Esquerdo: Player -->
-                        <div class="w-full md:w-1/2 p-4 bg-black border-b md:border-b-0 md:border-r border-zinc-800/60 flex flex-col justify-center items-center relative">
-                            <video id="previewPlayer" controls class="w-full max-h-64 md:max-h-full rounded border border-zinc-800 hidden"></video>
-                            <div id="previewEmptyState" class="text-zinc-600 text-sm flex flex-col items-center gap-2">
-                                <i class="fa-solid fa-film text-3xl"></i>
-                                <p>Selecione um link para testar</p>
+                        <div class="w-full md:w-[45%] p-4 md:p-6 bg-black border-b md:border-b-0 md:border-r border-zinc-800/80 flex flex-col justify-center items-center relative group shrink-0">
+                            <video id="previewPlayer" controls class="w-full h-auto max-h-[30vh] md:max-h-full rounded-xl shadow-lg ring-1 ring-white/10 hidden"></video>
+                            <div id="previewEmptyState" class="text-zinc-600 text-sm flex flex-col items-center gap-3 py-10 md:py-0">
+                                <div class="w-16 h-16 rounded-full bg-zinc-900 flex items-center justify-center">
+                                    <i class="fa-solid fa-film text-3xl md:text-2xl text-zinc-700"></i>
+                                </div>
+                                <p class="font-medium text-center">Selecione um link para testar</p>
                             </div>
                         </div>
                         
                         <!-- Lado Direito: Edição e Lista -->
-                        <div class="w-full md:w-1/2 p-4 overflow-y-auto custom-scrollbar bg-[#0f0f11]">
+                        <div class="w-full md:w-[55%] p-4 md:p-6 overflow-y-auto custom-scrollbar bg-[#0f0f11]">
                             ${streamsHtml}
                         </div>
                     </div>
                     
-                    <div class="p-4 border-t border-zinc-800/60 bg-zinc-900/30 flex justify-between items-center">
-                        <span class="text-xs text-zinc-500">Desmarque a caixinha "Aprovar" nos links que quiser rejeitar.</span>
-                        <div class="flex gap-2">
-                            <button onclick="document.getElementById('previewModal').remove()" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors text-sm font-medium">Cancelar</button>
-                            <button onclick="previewSaveChanges()" class="px-4 py-2 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-lg transition-colors text-sm font-bold flex items-center gap-2">
-                                <i class="fa-solid fa-check"></i> Salvar e Aprovar
+                    <div class="px-5 py-5 md:px-6 md:py-4 border-t border-zinc-800/80 bg-zinc-900/50 flex flex-col md:flex-row justify-between items-center gap-4">
+                        <span class="text-xs text-zinc-400 flex items-center gap-2 hidden md:flex">
+                            <i class="fa-solid fa-circle-info text-indigo-500/70"></i> 
+                            Apenas os itens marcados com "Aprovar" serão adicionados.
+                        </span>
+                        <div class="flex gap-3 w-full md:w-auto">
+                            <button onclick="document.getElementById('previewModal').remove()" class="flex-1 md:flex-none px-5 py-3 md:py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-colors text-base md:text-sm font-semibold">Cancelar</button>
+                            <button onclick="previewSaveChanges()" class="flex-1 md:flex-none px-6 py-3 md:py-2.5 bg-emerald-500 text-zinc-950 hover:bg-emerald-400 rounded-xl transition-colors text-base md:text-sm font-extrabold shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-check"></i> Aprovar
                             </button>
                         </div>
                     </div>

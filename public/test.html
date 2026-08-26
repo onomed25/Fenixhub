@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Visual - Aprovador</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #09090b; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #52525b; }
+        .stream-card { transition: all 0.3s ease; }
+    </style>
+    <script>
+        window.toggleApproval = function(checkbox) {
+            const container = checkbox.closest('.stream-card');
+            const elementsToDisable = container.querySelectorAll('.stream-edit-input, button:not(.close-btn)');
+            const label = checkbox.closest('label');
+            
+            if (checkbox.checked) {
+                container.classList.remove('opacity-40', 'grayscale');
+                elementsToDisable.forEach(el => el.disabled = false);
+                label.classList.remove('bg-zinc-800', 'hover:bg-zinc-700', 'text-zinc-400', 'border-zinc-700');
+                label.classList.add('bg-emerald-500/10', 'hover:bg-emerald-500/20', 'text-emerald-500', 'border-emerald-500/20');
+            } else {
+                container.classList.add('opacity-40', 'grayscale');
+                elementsToDisable.forEach(el => el.disabled = true);
+                label.classList.remove('bg-emerald-500/10', 'hover:bg-emerald-500/20', 'text-emerald-500', 'border-emerald-500/20');
+                label.classList.add('bg-zinc-800', 'hover:bg-zinc-700', 'text-zinc-400', 'border-zinc-700');
+            }
+        };
+    </script>
+</head>
+<body class="text-zinc-200 antialiased h-screen w-screen relative">
+    
+    <div class="p-10 opacity-30">
+        <h1 class="text-3xl font-bold mb-4">Painel de Aprovador (Fundo)</h1>
+        <div class="w-full h-64 bg-zinc-900 rounded-xl mb-4"></div>
+        <div class="w-full h-64 bg-zinc-900 rounded-xl mb-4"></div>
+    </div>
+
+    <div id="previewModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[9999] flex items-center justify-center p-4 md:p-6">
+        <div class="bg-[#0f0f11] border border-zinc-800/80 rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+            <div class="px-6 py-4 border-b border-zinc-800/80 flex justify-between items-center bg-zinc-900/50">
+                <h3 class="text-xl font-bold text-white flex items-center gap-2 tracking-tight">
+                    <i class="fa-solid fa-code-merge text-indigo-500"></i> Revisão de Aprovação
+                    <span class="text-sm font-normal text-zinc-500 ml-2">tt42751057 (3).json</span>
+                </h3>
+                <button onclick="alert('Fechou o modal!')" class="text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors w-10 h-10 rounded-full flex items-center justify-center">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            
+            <div class="flex flex-col md:flex-row flex-1 overflow-hidden">
+                <div class="w-full md:w-[45%] p-6 bg-black border-b md:border-b-0 md:border-r border-zinc-800/80 flex flex-col justify-center items-center relative group">
+                    <video id="previewPlayer" controls class="w-full h-auto max-h-64 md:max-h-full rounded-xl shadow-lg ring-1 ring-white/10 hidden"></video>
+                    <div id="previewEmptyState" class="text-zinc-600 text-sm flex flex-col items-center gap-3">
+                        <div class="w-16 h-16 rounded-full bg-zinc-900 flex items-center justify-center">
+                            <i class="fa-solid fa-film text-2xl text-zinc-700"></i>
+                        </div>
+                        <p class="font-medium">Selecione um link para testar</p>
+                    </div>
+                </div>
+                
+                <div class="w-full md:w-[55%] p-6 overflow-y-auto custom-scrollbar bg-[#0f0f11]">
+                    
+                    <h4 class="font-bold text-white mb-4 text-lg flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-indigo-500"></i> 2 Episódios Novos Encontrados
+                    </h4>
+
+                    <!-- ITEM 1 -->
+                    <div class="stream-card p-4 bg-zinc-900/60 border border-zinc-800/80 rounded-xl flex flex-col gap-3 mb-4 relative hover:border-zinc-700 transition-colors shadow-sm border-l-2 border-indigo-500">
+                        <div class="absolute top-4 right-4 flex items-center gap-2">
+                            <label class="flex items-center gap-2 cursor-pointer bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/20 px-2.5 py-1.5 rounded-lg transition-colors select-none">
+                                <input type="checkbox" class="w-4 h-4 accent-emerald-500 cursor-pointer" checked onchange="window.toggleApproval(this)">
+                                <span class="text-xs font-bold uppercase tracking-wider">Aprovar</span>
+                            </label>
+                        </div>
+                        <div class="flex justify-between items-center pr-28">
+                            <div class="flex flex-col">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <div class="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 focus-within:border-indigo-500 transition-colors shadow-inner w-20">
+                                        <span class="text-indigo-500/70 font-bold text-[10px] uppercase tracking-wider mr-1">Temp</span>
+                                        <input type="number" min="1" class="stream-edit-input w-full bg-transparent text-indigo-300 font-bold text-sm outline-none text-center" value="1">
+                                    </div>
+                                    <div class="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 focus-within:border-indigo-500 transition-colors shadow-inner w-20">
+                                        <span class="text-indigo-500/70 font-bold text-[10px] uppercase tracking-wider mr-1">Epis</span>
+                                        <input type="number" min="1" class="stream-edit-input w-full bg-transparent text-indigo-300 font-bold text-sm outline-none text-center" value="63">
+                                    </div>
+                                </div>
+                                <span class="text-zinc-500 text-xs flex items-center gap-1.5 mt-0.5">
+                                    <i class="fa-solid fa-user-astronaut text-[10px]"></i> fenixflix
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-3 mt-1">
+                            <div>
+                                <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">Idioma / Áudio</label>
+                                <select class="stream-edit-input w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-500 transition-colors">
+                                    <option value="Dublado" selected>Dublado</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">Qualidade</label>
+                                <select class="stream-edit-input w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-500 transition-colors">
+                                    <option value="FHD" selected>FHD</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mt-1">
+                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">Link / URL do Vídeo</label>
+                            <div class="flex gap-2">
+                                <input type="text" class="stream-edit-input flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-indigo-300 font-mono outline-none focus:border-indigo-500 transition-colors" value="/stream/18855?hash=6f9ab404">
+                                <button onclick="alert('Teste de clique')" class="shrink-0 px-4 py-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg hover:bg-indigo-500/20 text-sm font-bold flex items-center justify-center gap-2 transition-colors">
+                                    <i class="fa-solid fa-play"></i> Testar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ITEM 2 (COMEÇA DESMARCADO E ESCURO) -->
+                    <div class="stream-card opacity-40 grayscale p-4 bg-zinc-900/60 border border-zinc-800/80 rounded-xl flex flex-col gap-3 mb-4 relative hover:border-zinc-700 transition-colors shadow-sm border-l-2 border-indigo-500">
+                        <div class="absolute top-4 right-4 flex items-center gap-2">
+                            <label class="flex items-center gap-2 cursor-pointer bg-zinc-800 hover:bg-zinc-700 text-zinc-400 border border-zinc-700 px-2.5 py-1.5 rounded-lg transition-colors select-none">
+                                <input type="checkbox" class="approve-checkbox w-4 h-4 cursor-pointer" onchange="window.toggleApproval(this)">
+                                <span class="text-xs font-bold uppercase tracking-wider">Aprovar</span>
+                            </label>
+                        </div>
+                        <div class="flex justify-between items-center pr-28">
+                            <div class="flex flex-col">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <div class="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 focus-within:border-indigo-500 transition-colors shadow-inner w-20">
+                                        <span class="text-indigo-500/70 font-bold text-[10px] uppercase tracking-wider mr-1">Temp</span>
+                                        <input type="number" min="1" disabled class="stream-edit-input w-full bg-transparent text-indigo-300 font-bold text-sm outline-none text-center" value="1">
+                                    </div>
+                                    <div class="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 focus-within:border-indigo-500 transition-colors shadow-inner w-20">
+                                        <span class="text-indigo-500/70 font-bold text-[10px] uppercase tracking-wider mr-1">Epis</span>
+                                        <input type="number" min="1" disabled class="stream-edit-input w-full bg-transparent text-indigo-300 font-bold text-sm outline-none text-center" value="64">
+                                    </div>
+                                </div>
+                                <span class="text-zinc-500 text-xs flex items-center gap-1.5 mt-0.5">
+                                    <i class="fa-solid fa-user-astronaut text-[10px]"></i> fenixflix
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-3 mt-1">
+                            <div>
+                                <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">Idioma / Áudio</label>
+                                <select disabled class="stream-edit-input w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none">
+                                    <option value="Legendado" selected>Legendado</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">Qualidade</label>
+                                <select disabled class="stream-edit-input w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none">
+                                    <option value="1080p" selected>1080p</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mt-1">
+                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">Link / URL do Vídeo</label>
+                            <div class="flex gap-2">
+                                <input disabled type="text" class="stream-edit-input flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-500 font-mono outline-none" value="/stream/12345?hash=abcdef">
+                                <button disabled class="shrink-0 px-4 py-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg hover:bg-indigo-500/20 text-sm font-bold flex items-center justify-center gap-2 transition-colors">
+                                    <i class="fa-solid fa-play"></i> Testar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="px-6 py-4 border-t border-zinc-800/80 bg-zinc-900/50 flex flex-col md:flex-row justify-between items-center gap-4">
+                <span class="text-xs text-zinc-400 flex items-center gap-2">
+                    <i class="fa-solid fa-circle-info text-indigo-500/70"></i> 
+                    Apenas os itens marcados com "Aprovar" serão adicionados.
+                </span>
+                <div class="flex gap-3 w-full md:w-auto">
+                    <button onclick="alert('Fechou o modal!')" class="flex-1 md:flex-none px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-colors text-sm font-semibold">Cancelar</button>
+                    <button onclick="alert('Simulação: Itens salvos e aprovados com sucesso!')" class="flex-1 md:flex-none px-6 py-2.5 bg-emerald-500 text-zinc-950 hover:bg-emerald-400 rounded-xl transition-colors text-sm font-extrabold shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-check"></i> Aprovar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
