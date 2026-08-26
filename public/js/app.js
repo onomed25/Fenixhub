@@ -3,7 +3,12 @@ let isAdmin = false;
 const VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.avi', '.webm', '.ts', '.mov', '.flv', '.3gp', '.mpeg', '.m4v'];
 const QUALITIES = ["Nenhuma", "1080p", "720p", "4K", "SD", "FHD", "HD", "CAM"];
 function clearDiscordSession() {
-    clearDiscordSession();
+    localStorage.removeItem('discord_token');
+    localStorage.removeItem('discord_username');
+    localStorage.removeItem('discord_global_name');
+    localStorage.removeItem('discord_avatar');
+    localStorage.removeItem('discord_id');
+    localStorage.removeItem('is_ajudante');
 }
 
         // --- CONFIGURAÇÃO API ---
@@ -161,11 +166,6 @@ function clearDiscordSession() {
                 return null;
             }
         }
-
-
-function clearDiscordSession() {
-    clearDiscordSession();
-}
 
         function updateAdminUI() {
             const isLogged = sessionStorage.getItem('fenixflix_senha') !== null;
