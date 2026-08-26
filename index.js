@@ -49,6 +49,7 @@ function verifyToken(token) {
 
 
 const app = express();
+app.set('trust proxy', 1); // Render.com (e outros proxies) encaminham X-Forwarded-For
 app.disable('x-powered-by');
 app.use(helmet({
     contentSecurityPolicy: false,
