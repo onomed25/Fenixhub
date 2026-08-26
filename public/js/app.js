@@ -1298,10 +1298,15 @@ function clearDiscordSession() {
             },
 
             getMaxEpForSeason: (seasonNum) => {
-                // Not actually used much, but kept for compatibility
-                return 999;
+                const videos = (gen.lastCinemetaResult && gen.lastCinemetaResult.meta && gen.lastCinemetaResult.meta.videos) 
+                    || (gen.currentData && gen.currentData.cinemetaVideos);
+                if (!videos || !Array.isArray(videos)) return null;
+                const eps = videos
+                    .filter(v => v.season === parseInt(seasonNum))
+                    .map(v => v.episode || v.number || 0);
+                return eps.length > 0 ? Math.max(...eps) : null;
             },
-            
+
             checkLimits: (type) => {
                 if (!gen.seasonMap || !gen.maxSeason) return;
                 
@@ -1333,14 +1338,6 @@ function clearDiscordSession() {
                         }
                     }
                 }
-            },
-                const videos = (gen.lastCinemetaResult && gen.lastCinemetaResult.meta && gen.lastCinemetaResult.meta.videos) 
-                    || (gen.currentData && gen.currentData.cinemetaVideos);
-                if (!videos || !Array.isArray(videos)) return null;
-                const eps = videos
-                    .filter(v => v.season === parseInt(seasonNum))
-                    .map(v => v.episode || v.number || 0);
-                return eps.length > 0 ? Math.max(...eps) : null;
             },
 
             smartSearch: async () => {
