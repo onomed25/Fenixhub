@@ -648,33 +648,28 @@ app.post('/upload', upload.none(), async (req, res) => {
         const discordName = user.global_name || user.username;
         const roleStr = isAjudante ? 'ajudante' : 'membro';
         
-        // Se for um "lote" novo (não é edição) OU se não for ajudante, forçamos o nickname atual
-        if (!isEdit || !isAjudante) {
-            parsedConteudo.colaborador = discordName;
-            parsedConteudo.colaborador_role = roleStr;
-            parsedConteudo.colaborador_id = user.id;
-            parsedConteudo.colaborador_avatar = user.avatar;
-        } else {
-            // Se for ajudante editando, tenta manter o autor original (ou o que veio no JSON)
-            parsedConteudo.colaborador = parsedConteudo.colaborador || discordName;
-            parsedConteudo.colaborador_role = parsedConteudo.colaborador_role || roleStr;
-        }
+        // Preserve o colaborador fornecido no JSON, mas faça fallback para o discordName
+        parsedConteudo.colaborador = parsedConteudo.colaborador || discordName;
+        parsedConteudo.colaborador_role = parsedConteudo.colaborador_role || roleStr;
+        parsedConteudo.colaborador_id = parsedConteudo.colaborador_id || user.id;
+        parsedConteudo.colaborador_avatar = parsedConteudo.colaborador_avatar || user.avatar;
         
+        const injectColaboradorIntoStream = (s) => {
+            s.colaborador = s.colaborador || discordName;
+            s.colaborador_role = s.colaborador_role || roleStr;
+            s.colaborador_id = s.colaborador_id || user.id;
+            s.colaborador_avatar = s.colaborador_avatar || user.avatar;
+        };
+
         if (parsedConteudo.type === 'movie' && Array.isArray(parsedConteudo.streams)) {
-            parsedConteudo.streams.forEach(s => {
-                s.colaborador = (!isEdit || !isAjudante) ? discordName : (s.colaborador || discordName);
-                s.colaborador_role = (!isEdit || !isAjudante) ? roleStr : (s.colaborador_role || roleStr);
-            });
+            parsedConteudo.streams.forEach(injectColaboradorIntoStream);
         } else if (parsedConteudo.type === 'series' && parsedConteudo.streams && typeof parsedConteudo.streams === 'object') {
             Object.keys(parsedConteudo.streams).forEach(seasonNum => {
                 const season = parsedConteudo.streams[seasonNum] || {};
                 Object.keys(season).forEach(epNum => {
                     const epStreams = season[epNum] || [];
                     if (Array.isArray(epStreams)) {
-                        epStreams.forEach(s => {
-                            s.colaborador = (!isEdit || !isAjudante) ? discordName : (s.colaborador || discordName);
-                            s.colaborador_role = (!isEdit || !isAjudante) ? roleStr : (s.colaborador_role || roleStr);
-                        });
+                        epStreams.forEach(injectColaboradorIntoStream);
                     }
                 });
             });
