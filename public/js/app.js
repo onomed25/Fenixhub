@@ -13,7 +13,7 @@ function clearDiscordSession() {
 
         // --- CONFIGURAÇÃO API ---
         const API_URL = '';
-        const TELEGRAM_API_URL = '__TELEGRAM_API_URL_PLACEHOLDER__';
+        const TELEGRAM_API_URL = window.TELEGRAM_API_URL && window.TELEGRAM_API_URL !== '__TELEGRAM_API_URL_PLACEHOLDER__' ? window.TELEGRAM_API_URL : '';
 
         // --- UTILIDADES ---
         function showToast(message, type = 'success') {

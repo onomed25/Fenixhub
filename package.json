@@ -3,7 +3,12 @@
   "version": "1.0.1",
   "description": "Fenix Studio Application",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "jest --testPathPattern=tests/ --forceExit --detectOpenHandles",
+    "test:coverage": "jest --coverage --testPathPattern=tests/ --forceExit --detectOpenHandles",
+    "test:unit": "jest --testPathPattern=tests/unit/ --forceExit",
+    "test:integration": "jest --testPathPattern=tests/integration/ --forceExit --detectOpenHandles"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

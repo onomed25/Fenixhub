@@ -22,9 +22,25 @@ if (!process.env.ADMIN_PASSWORD) {
     process.exit(1);
 }
 
+if (!process.env.JWT_SECRET) {
+    console.error("ERRO FATAL: JWT_SECRET não configurada no .env");
+    process.exit(1);
+}
+
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+
+function extractToken(req) {
+    const authHeader = req.headers.authorization;
+    let token = authHeader && authHeader.split(' ')[1];
+    if (!token && req.cookies && req.cookies.discord_token) {
+        token = req.cookies.discord_token;
+    }
+    return token;
+}
+
 
 // Configuração JWT para Discord
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+const JWT_SECRET = process.env.JWT_SECRET;
 
 function generateToken(payload) {
     return jwt.sign(payload, JWT_SECRET, { expiresIn: '30d' });
@@ -33,9 +49,12 @@ function generateToken(payload) {
 
 function checkPassword(input, actual) {
     if (!input || !actual) return false;
-    const hash1 = crypto.createHash('sha256').update(input).digest();
-    const hash2 = crypto.createHash('sha256').update(actual).digest();
-    return crypto.timingSafeEqual(hash1, hash2);
+    try {
+        // actual (e.g. ADMIN_PASSWORD from .env) must be a bcrypt hash
+        return bcrypt.compareSync(input, actual);
+    } catch (e) {
+        return false;
+    }
 }
 
 function verifyToken(token) {
@@ -105,13 +124,17 @@ function logProcessProgress(key, name, progress) {
 
 // Limita o tamanho do JSON recebido via POST (ajustado para 10MB conforme solicitado)
 app.use(express.json({ limit: '10mb' })); 
-app.use(cors());
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000'],
+  credentials: true
+}));
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });
 });
 
 
+const net = require('net');
 // Configuração do banco de dados (Pool pequeno para economizar memória)
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -119,7 +142,6 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }, // Necessário para serviços gerenciados como Render/Supabase
     // Força a conexão a utilizar apenas IPv4 interceptando o método connect do socket
     stream: (config) => {
-        const net = require('net');
         const socket = new net.Socket();
         const originalConnect = socket.connect;
         
@@ -558,10 +580,15 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         baseRedirect = String(baseRedirect);
         const separator = baseRedirect.includes('?') ? '&' : '?';
         
-        // Define o token apenas via cookie (evita vazamento na query string e no log)
-        res.cookie('discord_token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false }); 
+        // Define o token via cookie seguro (evita vazamento)
+        res.cookie('discord_token', token, {
+            maxAge: 30 * 24 * 60 * 60 * 1000,
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax'
+        }); 
         
-        res.redirect(`${baseRedirect}${separator}discord_token=${encodeURIComponent(token)}&discord_username=${encodeURIComponent(payload.username)}&discord_global_name=${encodeURIComponent(payload.global_name)}&discord_avatar=${encodeURIComponent(payload.avatar || '')}&discord_id=${payload.id}&is_ajudante=${isAjudante}`);
+        res.redirect(`${baseRedirect}${separator}discord_username=${encodeURIComponent(payload.username)}&discord_global_name=${encodeURIComponent(payload.global_name)}&discord_avatar=${encodeURIComponent(payload.avatar || '')}&discord_id=${payload.id}&is_ajudante=${isAjudante}`);
     } catch (err) {
         console.error("Erro no callback do Discord:", err);
         res.status(500).send("Erro interno durante autenticação do Discord.");
@@ -609,14 +636,10 @@ app.post('/upload', upload.none(), async (req, res) => {
     }
 
     // Verificar autenticação (Discord Token ou Senha Admin)
-    const authHeader = req.headers.authorization;
-    let token = authHeader && authHeader.split(' ')[1];
-    if (!token && req.cookies && req.cookies.discord_token) {
-        token = req.cookies.discord_token;
-    }
+    const token = extractToken(req);
     const user = verifyToken(token);
 
-    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+    const adminPassword = ADMIN_PASSWORD;
     const isAdmin = (checkPassword(senha, adminPassword));
 
     if (!isAdmin && !user) {
@@ -771,17 +794,17 @@ app.post('/upload', upload.none(), async (req, res) => {
 // ROTA 2: Listar todos os JSONs (/api/all)
 // ==========================================
 app.get('/api/all', async (req, res) => {
-    res.redirect('/api/catalog');
+    res.setHeader('Location', '/api/catalog');
+    res.status(302).json({ 
+        message: 'Redirecting to /api/catalog',
+        redirect: '/api/catalog'
+    });
 });
 /*
-    const authHeader = req.headers.authorization;
-    let token = authHeader && authHeader.split(' ')[1];
-    if (!token && req.cookies && req.cookies.discord_token) {
-        token = req.cookies.discord_token;
-    }
+    const token = extractToken(req);
     const user = verifyToken(token);
     const senha = req.headers['x-admin-password'];
-    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+    const adminPassword = ADMIN_PASSWORD;
     const canSeeHidden = (checkPassword(senha, adminPassword)) || (user && user.isAjudante);
 
     try {
@@ -799,14 +822,10 @@ app.get('/api/all', async (req, res) => {
 // ROTA 2b: Listar todos para o Catálogo (/api/catalog)
 // ==========================================
 app.get('/api/catalog', async (req, res) => {
-    const authHeader = req.headers.authorization;
-    let token = authHeader && authHeader.split(' ')[1];
-    if (!token && req.cookies && req.cookies.discord_token) {
-        token = req.cookies.discord_token;
-    }
+    const token = extractToken(req);
     const user = verifyToken(token);
     const senha = req.headers['x-admin-password'];
-    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+    const adminPassword = ADMIN_PASSWORD;
     const canSeeHidden = (checkPassword(senha, adminPassword)) || (user && user.isAjudante);
 
     try {
@@ -824,7 +843,7 @@ app.get('/api/catalog', async (req, res) => {
 // ==========================================
 app.delete('/api/delete', async (req, res) => {
     const { id, senha } = req.body;
-    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+    const adminPassword = ADMIN_PASSWORD;
 
     if (!checkPassword(senha, adminPassword)) {
         return res.status(401).json({ erro: 'Senha incorreta.' });
@@ -872,15 +891,11 @@ app.get('/api/content/:nome', async (req, res) => {
         return res.status(404).json({ erro: 'Rota reservada.' });
     }
     try {
-        const authHeader = req.headers.authorization;
-    let token = authHeader && authHeader.split(' ')[1];
-    if (!token && req.cookies && req.cookies.discord_token) {
-        token = req.cookies.discord_token;
-    }
+        const token = extractToken(req);
         const user = verifyToken(token);
         
         const senha = req.headers['x-admin-password'];
-        const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+        const adminPassword = ADMIN_PASSWORD;
         
         const isAdmin = (checkPassword(senha, adminPassword));
         const isAjudante = user && user.isAjudante;
@@ -967,7 +982,7 @@ app.get('/api/stats', async (req, res) => {
 // ==========================================
 app.post('/api/verify', (req, res) => {
     const { senha } = req.body;
-    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+    const adminPassword = ADMIN_PASSWORD;
 
     if (checkPassword(senha, adminPassword)) {
         return res.json({ sucesso: true });
@@ -1041,7 +1056,7 @@ app.get('/api/pedidos', async (req, res) => {
 // ==========================================
 app.post('/api/pedidos/delete', async (req, res) => {
     const { id, senha } = req.body;
-    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
+    const adminPassword = ADMIN_PASSWORD;
 
     if (!checkPassword(senha, adminPassword)) {
         return res.status(401).json({ erro: 'Senha incorreta.' });
@@ -1067,12 +1082,8 @@ app.post('/api/pedidos/delete', async (req, res) => {
 app.post('/api/arquivos/ocultar', async (req, res) => {
     const { nome, is_oculto, senha } = req.body;
     
-    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
-    const authHeader = req.headers.authorization;
-    let token = authHeader && authHeader.split(' ')[1];
-    if (!token && req.cookies && req.cookies.discord_token) {
-        token = req.cookies.discord_token;
-    }
+    const adminPassword = ADMIN_PASSWORD;
+    const token = extractToken(req);
     const user = verifyToken(token);
 
     const isAdmin = (checkPassword(senha, adminPassword));
@@ -1087,8 +1098,9 @@ app.post('/api/arquivos/ocultar', async (req, res) => {
     }
 
     try {
+        const isOcultoBoolean = Boolean(is_oculto);
         const query = 'UPDATE arquivos_json SET is_oculto = $1 WHERE nome_do_json = $2 RETURNING *;';
-        const result = await pool.query(query, [is_oculto, nome]);
+        const result = await pool.query(query, [isOcultoBoolean, nome]);
         
         if (result.rowCount === 0) {
             return res.status(404).json({ erro: 'Arquivo não encontrado.' });
@@ -1129,11 +1141,7 @@ app.post('/api/denunciar', async (req, res) => {
 // ROTAS DE APROVAÇÃO (Moderation Queue)
 // ==========================================
 app.get('/api/meus-pendentes', async (req, res) => {
-    const authHeader = req.headers.authorization;
-    let token = authHeader && authHeader.split(' ')[1];
-    if (!token && req.cookies && req.cookies.discord_token) {
-        token = req.cookies.discord_token;
-    }
+    const token = extractToken(req);
     const user = verifyToken(token);
     if (!user) return res.json([]);
     
@@ -1152,12 +1160,8 @@ app.get('/api/meus-pendentes', async (req, res) => {
 
 app.get('/api/arquivos/pendentes', async (req, res) => {
     const senha = req.headers['x-admin-password'];
-    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
-    const authHeader = req.headers.authorization;
-    let token = authHeader && authHeader.split(' ')[1];
-    if (!token && req.cookies && req.cookies.discord_token) {
-        token = req.cookies.discord_token;
-    }
+    const adminPassword = ADMIN_PASSWORD;
+    const token = extractToken(req);
     const user = verifyToken(token);
 
     if (!checkPassword(senha, adminPassword) && (!user || !user.isAjudante)) {
@@ -1176,12 +1180,8 @@ app.get('/api/arquivos/pendentes', async (req, res) => {
 
 app.post('/api/arquivos/aprovar', async (req, res) => {
     const { nome, senha, conteudo, restantePendente } = req.body;
-    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
-    const authHeader = req.headers.authorization;
-    let token = authHeader && authHeader.split(' ')[1];
-    if (!token && req.cookies && req.cookies.discord_token) {
-        token = req.cookies.discord_token;
-    }
+    const adminPassword = ADMIN_PASSWORD;
+    const token = extractToken(req);
     const user = verifyToken(token);
 
     if (!checkPassword(senha, adminPassword) && (!user || !user.isAjudante)) {
@@ -1239,12 +1239,8 @@ app.post('/api/arquivos/aprovar', async (req, res) => {
 
 app.post('/api/arquivos/rejeitar', async (req, res) => {
     const { nome, senha } = req.body;
-    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
-    const authHeader = req.headers.authorization;
-    let token = authHeader && authHeader.split(' ')[1];
-    if (!token && req.cookies && req.cookies.discord_token) {
-        token = req.cookies.discord_token;
-    }
+    const adminPassword = ADMIN_PASSWORD;
+    const token = extractToken(req);
     const user = verifyToken(token);
 
     if (!checkPassword(senha, adminPassword) && (!user || !user.isAjudante)) {
@@ -1268,12 +1264,8 @@ app.post('/api/arquivos/rejeitar', async (req, res) => {
 // ==========================================
 app.get('/api/denuncias', async (req, res) => {
     const senha = req.headers['x-admin-password'];
-    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
-    const authHeader = req.headers.authorization;
-    let token = authHeader && authHeader.split(' ')[1];
-    if (!token && req.cookies && req.cookies.discord_token) {
-        token = req.cookies.discord_token;
-    }
+    const adminPassword = ADMIN_PASSWORD;
+    const token = extractToken(req);
     const user = verifyToken(token);
 
     const isAdmin = (checkPassword(senha, adminPassword));
@@ -1298,12 +1290,8 @@ app.get('/api/denuncias', async (req, res) => {
 // ==========================================
 app.delete('/api/denuncias/delete', async (req, res) => {
     const { id, senha } = req.body;
-    const adminPassword = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
-    const authHeader = req.headers.authorization;
-    let token = authHeader && authHeader.split(' ')[1];
-    if (!token && req.cookies && req.cookies.discord_token) {
-        token = req.cookies.discord_token;
-    }
+    const adminPassword = ADMIN_PASSWORD;
+    const token = extractToken(req);
     const user = verifyToken(token);
 
     const isAdmin = (checkPassword(senha, adminPassword));
