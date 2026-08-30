@@ -750,7 +750,8 @@ app.post('/upload', upload.none(), async (req, res) => {
     let finalConteudo = parsedConteudo;
     injectDateIntoStreams(finalConteudo);
 
-    const isPendente = !isAdmin && !isAjudante;
+    const forcePendente = req.query.force_pendente === 'true' || req.body.force_pendente === 'true';
+    const isPendente = (!isAdmin && !isAjudante) || forcePendente;
     const isGenerator = req.query.generator === 'true';
 
     if (isEdit) {

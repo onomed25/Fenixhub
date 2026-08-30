@@ -1756,6 +1756,7 @@ function clearDiscordSession() {
                 showToast("Links ordenados com sucesso!", "success");
             },
             clearFields: () => {
+                window.forcePendenteForEdit = false;
                 gen.currentData = null;
                 const cid = document.getElementById('contentId');
                 if (cid) cid.value = '';
@@ -2033,6 +2034,10 @@ function clearDiscordSession() {
                     const formData = new FormData();
                     formData.append("nome", nomeArquivo);
                     formData.append("conteudo", JSON.stringify(gen.currentData));
+                    
+                    if (window.forcePendenteForEdit) {
+                        formData.append("force_pendente", "true");
+                    }
 
                     const senha = sessionStorage.getItem('fenixflix_senha');
                     if (senha) {
@@ -2058,6 +2063,7 @@ function clearDiscordSession() {
                         if (!keepFields) {
                             gen.clearFields();
                         } else {
+                            window.forcePendenteForEdit = false;
                             gen.currentData = null;
                             const jout = document.getElementById('jsonOutput');
                             if (jout) jout.value = '';
@@ -2593,6 +2599,14 @@ function clearDiscordSession() {
                 if (!isAjudante && !senha) {
                     senha = await getValidPassword("Digite a senha do sistema para editar este item:");
                     if (!senha) return;
+                }
+
+                window.forcePendenteForEdit = false;
+                if (isAjudante) {
+                    const wantPending = confirm("Modo Ajudante: Como deseja salvar esta edição?\n\n[ OK ] = Enviar para Fila de Aprovação (Modo Aprovador)\n[ Cancelar ] = Salvar e Publicar Diretamente");
+                    if (wantPending) {
+                        window.forcePendenteForEdit = true;
+                    }
                 }
 
                 const item = cat.allItems.find(i => i.id === id);
