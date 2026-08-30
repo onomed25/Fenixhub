@@ -772,6 +772,8 @@ app.post('/upload', upload.none(), async (req, res) => {
             const query = `
                 INSERT INTO envios_pendentes (nome_do_json, conteudo) 
                 VALUES ($1, $2)
+                ON CONFLICT (nome_do_json) 
+                DO UPDATE SET conteudo = EXCLUDED.conteudo, criado_em = CURRENT_TIMESTAMP
                 RETURNING *;
             `;
             await pool.query(query, [nome, JSON.stringify(finalConteudo)]);

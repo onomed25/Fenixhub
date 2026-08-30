@@ -2499,7 +2499,13 @@ function clearDiscordSession() {
                 document.getElementById('gridContainer').innerHTML = '';
 
                 try {
-                    const response = await fetch(API_URL + '/api/catalog');
+                    const headers = {};
+                    const discordToken = localStorage.getItem('discord_token');
+                    const adminSenha = sessionStorage.getItem('fenixflix_senha');
+                    if (discordToken) headers['Authorization'] = `Bearer ${discordToken}`;
+                    if (adminSenha) headers['x-admin-password'] = adminSenha;
+
+                    const response = await fetch(API_URL + '/api/catalog', { headers });
                     if (!response.ok) throw new Error("Falha na API");
                     const data = await response.json();
 
@@ -4434,6 +4440,7 @@ function clearDiscordSession() {
             try {
                 const headers = {};
                 if (discordToken) headers['Authorization'] = `Bearer ${discordToken}`;
+                if (adminSenha) headers['x-admin-password'] = adminSenha;
                 
                 const res = await fetch(API_URL + `/api/arquivos/pendentes`, { headers });
                 if (!res.ok) throw new Error("Falha ao carregar pendentes");
