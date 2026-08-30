@@ -586,7 +586,7 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         // Define o token via cookie seguro (evita vazamento)
         res.cookie('discord_token', token, {
             maxAge: 30 * 24 * 60 * 60 * 1000,
-            httpOnly: true,
+            httpOnly: false,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax'
         }); 

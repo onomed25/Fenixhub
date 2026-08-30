@@ -4150,6 +4150,7 @@ function clearDiscordSession() {
             localStorage.removeItem('discord_avatar');
             localStorage.removeItem('discord_id');
             localStorage.removeItem('is_ajudante');
+            document.cookie = "discord_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
             updateDiscordUI();
             showToast("Desconectado com sucesso.", "success");
         }
