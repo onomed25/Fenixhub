@@ -243,7 +243,10 @@ let cachedHtml = '';
 try {
     const rawHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
     const telegramUrl = process.env.TELEGRAM_API_URL || '';
-    cachedHtml = rawHtml.replace('__TELEGRAM_API_URL_PLACEHOLDER__', telegramUrl);
+    let processedHtml = rawHtml.replace('__TELEGRAM_API_URL_PLACEHOLDER__', telegramUrl);
+    // Força o navegador a baixar o app.js novo toda vez que o servidor reiniciar
+    processedHtml = processedHtml.replace(/\/js\/app\.js\?v=\d+/g, '/js/app.js?v=' + Date.now());
+    cachedHtml = processedHtml;
 } catch (err) {
     console.error("Erro ao carregar index.html na inicialização:", err);
 }
