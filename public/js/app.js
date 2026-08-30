@@ -280,8 +280,10 @@ function clearDiscordSession() {
             if (typeof reqProcessor !== 'undefined' && typeof reqProcessor.renderList === 'function') {
                 reqProcessor.renderList();
             }
-            if (typeof updateDiscordUI === 'function') {
+            if (typeof updateDiscordUI === 'function' && !window.isUpdatingUI_Admin) {
+                window.isUpdatingUI_Admin = true;
                 updateDiscordUI();
+                window.isUpdatingUI_Admin = false;
             }
         }
 
@@ -4103,7 +4105,11 @@ function clearDiscordSession() {
                     }
                 }
             }
-            if (typeof updateAdminUI === 'function') updateAdminUI();
+            if (typeof updateAdminUI === 'function' && !window.isUpdatingUI_Discord) {
+                window.isUpdatingUI_Discord = true;
+                updateAdminUI();
+                window.isUpdatingUI_Discord = false;
+            }
         }
 
         async function checkMyPendings() {
