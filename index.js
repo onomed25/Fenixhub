@@ -49,9 +49,14 @@ function generateToken(payload) {
 
 function checkPassword(input, actual) {
     if (!input || !actual) return false;
+    const cleanInput = String(input).trim();
+    const cleanActual = String(actual).trim();
+    if (cleanInput === cleanActual) return true; // Suporte para senha configurada em texto puro no .env
     try {
-        // actual (e.g. ADMIN_PASSWORD from .env) must be a bcrypt hash
-        return bcrypt.compareSync(input, actual);
+        if (cleanActual.startsWith('$2a$') || cleanActual.startsWith('$2b$') || cleanActual.startsWith('$2y$')) {
+            return bcrypt.compareSync(cleanInput, cleanActual);
+        }
+        return false;
     } catch (e) {
         return false;
     }
@@ -76,12 +81,13 @@ app.use(helmet({
 }));
 app.use(compression());
 app.use(cookieParser());
-const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 500, 
-    message: { erro: 'Muitas requisições deste IP, tente novamente mais tarde.' }
-});
-app.use('/api/', limiter);
+// Rate limiter removido conforme solicitado
+// const limiter = rateLimit({
+//     windowMs: 15 * 60 * 1000,
+//     max: 500, 
+//     message: { erro: 'Muitas requisições deste IP, tente novamente mais tarde.' }
+// });
+// app.use('/api/', limiter);
 
 const upload = multer();
 
@@ -213,16 +219,28 @@ const initDB = async () => {
             criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
     `;
+    const queryHfContas = `
+        CREATE TABLE IF NOT EXISTS hf_contas (
+            id SERIAL PRIMARY KEY,
+            nome VARCHAR(100) NOT NULL,
+            token TEXT NOT NULL,
+            repo VARCHAR(255) NOT NULL,
+            tipo VARCHAR(50) DEFAULT 'dataset',
+            criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+    `;
     try {
         await pool.query(query);
         await pool.query(queryPedidos);
         await pool.query(queryDenuncias);
         await pool.query(queryUsuarios);
         await pool.query(queryEnvios);
+        await pool.query(queryHfContas);
         
         // Add new columns if they don't exist (for existing databases)
         try {
             await pool.query('ALTER TABLE usuarios_discord ADD COLUMN IF NOT EXISTS is_ajudante BOOLEAN DEFAULT FALSE;');
+            await pool.query('ALTER TABLE usuarios_discord ADD COLUMN IF NOT EXISTS is_colaborador BOOLEAN DEFAULT FALSE;');
             await pool.query('ALTER TABLE usuarios_discord ADD COLUMN IF NOT EXISTS cargos JSONB DEFAULT \'[]\'::jsonb;');
             await pool.query('ALTER TABLE arquivos_json ADD COLUMN IF NOT EXISTS is_oculto BOOLEAN DEFAULT FALSE;');
             await pool.query('ALTER TABLE arquivos_json ADD COLUMN IF NOT EXISTS is_pendente BOOLEAN DEFAULT FALSE;');
@@ -279,54 +297,9 @@ app.use('/assets', express.static(path.join(__dirname, 'public/assets'), staticO
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const RPDB_BASE_URL = "https://api.ratingposterdb.com/t0-free-rpdb";
 
-async function getTMDBInfo(id) {
+async function getNuviometaInfo(id, type) {
     try {
-        const isBearer = TMDB_API_KEY && TMDB_API_KEY.startsWith('eyJ');
-        let url = `https://api.themoviedb.org/3/find/${id}?external_source=imdb_id&language=pt-BR`;
-        const headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "application/json"
-        };
-        
-        if (isBearer) {
-            headers["Authorization"] = `Bearer ${TMDB_API_KEY}`;
-        } else {
-            url += `&api_key=${TMDB_API_KEY}`;
-        }
-
-        const res = await fetch(url, { headers });
-        if (!res.ok) {
-            console.warn(`⚠️ TMDB recusou o pedido para o ID ${id}. Status: ${res.status}`);
-            return null;
-        }
-        const data = await res.json();
-        
-        if (data.movie_results && data.movie_results.length > 0) {
-            const movie = data.movie_results[0];
-            return {
-                title: movie.title,
-                year: movie.release_date ? movie.release_date.substring(0, 4) : "",
-                release_date: movie.release_date || "",
-                type: "movie"
-            };
-        } else if (data.tv_results && data.tv_results.length > 0) {
-            const show = data.tv_results[0];
-            return {
-                title: show.name,
-                year: show.first_air_date ? show.first_air_date.substring(0, 4) : "",
-                release_date: show.first_air_date || "",
-                type: "series"
-            };
-        }
-    } catch (err) {
-        console.error("❌ Erro ao buscar dados no TMDB para o ID", id, ":", err.message);
-    }
-    return null;
-}
-
-async function getCinemetaInfo(id, type) {
-    try {
-        const url = `https://v3-cinemeta.strem.io/meta/${type}/${id}.json`;
+        const url = `https://nuviometa.wasmer.app/meta/${type}/${id}.json`;
         const res = await fetch(url, {
             headers: {
                 "User-Agent": "Mozilla/5.0"
@@ -336,7 +309,7 @@ async function getCinemetaInfo(id, type) {
         const data = await res.json();
         return data.meta || null;
     } catch (err) {
-        console.error("❌ Erro ao buscar no Cinemeta para o ID", id, ":", err.message);
+        console.error("❌ Erro ao buscar no Nuviometa para o ID", id, ":", err.message);
     }
     return null;
 }
@@ -504,42 +477,7 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         }
         
         const userData = await userResponse.json();
-        
-        let isAjudante = false;
-        let cargos = [];
-
-        const botToken = process.env.DISCORD_BOT_TOKEN;
-        const guildId = process.env.DISCORD_GUILD_ID;
-        const ajudanteRoleId = process.env.DISCORD_AJUDANTE_ROLE_ID; // opcional
-
-        if (botToken && guildId) {
-            try {
-                const memberResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${userData.id}`, {
-                    headers: {
-                        'Authorization': `Bot ${botToken}`,
-                        'User-Agent': 'FenixStudio (https://fenixstudio.com, 1.0.0)'
-                    }
-                });
-                if (memberResponse.ok) {
-                    const memberData = await memberResponse.json();
-                    cargos = memberData.roles || [];
-                    // Verifica se tem a tag de Ajudante
-                    if (ajudanteRoleId) {
-                        isAjudante = cargos.includes(ajudanteRoleId);
-                    } else {
-                        // fallback caso não tenha role_id específico: procurar o cargo "Ajudante" por nome requereria buscar todos os cargos da guild, o que é mais complexo.
-                        // Assumimos que o role_id será fornecido
-                        // Ou podemos permitir qualquer membro do servidor ser "ajudante" pra fins de teste? Não.
-                        // Se não tem role_id configurado, não podemos verificar o nome do cargo sem outra requisição.
-                        console.warn('DISCORD_AJUDANTE_ROLE_ID não configurado. Não foi possível verificar se é ajudante pelo cargo.');
-                    }
-                } else {
-                    console.warn('Usuário não está no servidor ou erro ao buscar member info:', memberResponse.status);
-                }
-            } catch (memberErr) {
-                console.error('Erro ao buscar cargos do membro no servidor:', memberErr.message);
-            }
-        }
+        const { isAjudante, isColaborador, cargos } = await checkDiscordMemberRoles(userData.id);
 
         const payload = {
             id: userData.id,
@@ -547,18 +485,19 @@ app.get('/api/auth/discord/callback', async (req, res) => {
             global_name: userData.global_name || userData.username,
             avatar: userData.avatar,
             isAjudante,
+            isColaborador,
             cargos
         };
         
         // Salva/atualiza o perfil do usuário do Discord no banco de dados local
         try {
             const queryUpsertUser = `
-                INSERT INTO usuarios_discord (discord_id, username, global_name, avatar, is_ajudante, cargos, atualizado_em)
-                VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+                INSERT INTO usuarios_discord (discord_id, username, global_name, avatar, is_ajudante, is_colaborador, cargos, atualizado_em)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
                 ON CONFLICT (discord_id)
-                DO UPDATE SET username = EXCLUDED.username, global_name = EXCLUDED.global_name, avatar = EXCLUDED.avatar, is_ajudante = EXCLUDED.is_ajudante, cargos = EXCLUDED.cargos, atualizado_em = CURRENT_TIMESTAMP;
+                DO UPDATE SET username = EXCLUDED.username, global_name = EXCLUDED.global_name, avatar = EXCLUDED.avatar, is_ajudante = EXCLUDED.is_ajudante, is_colaborador = EXCLUDED.is_colaborador, cargos = EXCLUDED.cargos, atualizado_em = CURRENT_TIMESTAMP;
             `;
-            await pool.query(queryUpsertUser, [userData.id, userData.username, userData.global_name || userData.username, userData.avatar, isAjudante, JSON.stringify(cargos)]);
+            await pool.query(queryUpsertUser, [userData.id, userData.username, userData.global_name || userData.username, userData.avatar, isAjudante, isColaborador, JSON.stringify(cargos)]);
         } catch (dbErr) {
             console.error("Erro ao salvar usuário do Discord no banco de dados:", dbErr.message);
         }
@@ -591,10 +530,317 @@ app.get('/api/auth/discord/callback', async (req, res) => {
             sameSite: 'lax'
         }); 
         
-        res.redirect(`${baseRedirect}${separator}discord_username=${encodeURIComponent(payload.username)}&discord_global_name=${encodeURIComponent(payload.global_name)}&discord_avatar=${encodeURIComponent(payload.avatar || '')}&discord_id=${payload.id}&is_ajudante=${isAjudante}`);
+        res.redirect(`${baseRedirect}${separator}discord_username=${encodeURIComponent(payload.username)}&discord_global_name=${encodeURIComponent(payload.global_name)}&discord_avatar=${encodeURIComponent(payload.avatar || '')}&discord_id=${payload.id}&is_ajudante=${isAjudante}&is_colaborador=${isColaborador}`);
     } catch (err) {
         console.error("Erro no callback do Discord:", err);
         res.status(500).send("Erro interno durante autenticação do Discord.");
+    }
+});
+
+// ==========================================
+// FUNÇÃO AUXILIAR: Verificar Cargos Discord em Tempo Real
+// ==========================================
+async function checkDiscordMemberRoles(userId) {
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+    const guildId = process.env.DISCORD_GUILD_ID;
+    const ajudanteRoleId = process.env.DISCORD_AJUDANTE_ROLE_ID; // opcional
+    const colaboradorRoleId = process.env.DISCORD_COLABORADOR_ROLE_ID; // opcional
+
+    let isAjudante = false;
+    let isColaborador = false;
+    let cargos = [];
+
+    if (botToken && guildId) {
+        try {
+            const memberResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${userId}`, {
+                headers: {
+                    'Authorization': `Bot ${botToken}`,
+                    'User-Agent': 'FenixStudio (https://fenixstudio.com, 1.0.0)'
+                }
+            });
+            if (memberResponse.ok) {
+                const memberData = await memberResponse.json();
+                cargos = memberData.roles || [];
+                
+                if (ajudanteRoleId) {
+                    isAjudante = cargos.includes(ajudanteRoleId);
+                }
+                if (colaboradorRoleId) {
+                    isColaborador = cargos.includes(colaboradorRoleId);
+                }
+
+                // Tenta também buscar nomes de cargos da guilda para match por nome
+                try {
+                    const rolesRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
+                        headers: { 'Authorization': `Bot ${botToken}` }
+                    });
+                    if (rolesRes.ok) {
+                        const allRoles = await rolesRes.json();
+                        const userRoleNames = allRoles
+                            .filter(r => cargos.includes(r.id))
+                            .map(r => r.name.toLowerCase().trim());
+                        
+                        // APENAS cargo com nome 'ajudante' dá permissão de ajudante
+                        if (!isAjudante && userRoleNames.some(name => name.includes('ajudante'))) {
+                            isAjudante = true;
+                        }
+                        // Cargo com nome 'colaborador' ou 'uploader' dá permissão de colaborador
+                        if (!isColaborador && userRoleNames.some(name => name.includes('colaborador') || name.includes('uploader'))) {
+                            isColaborador = true;
+                        }
+                    }
+                } catch (roleErr) {
+                    console.warn('Não foi possível verificar nomes dos cargos:', roleErr.message);
+                }
+            } else {
+                console.warn(`Usuário ${userId} não está no servidor ou erro ao buscar member info: ${memberResponse.status}`);
+            }
+        } catch (memberErr) {
+            console.error('Erro ao buscar cargos do membro no servidor:', memberErr.message);
+        }
+    }
+    return { isAjudante, isColaborador, cargos };
+}
+
+// ==========================================
+// ROTA: Sincronizar Permissões Discord (/api/auth/me)
+// ==========================================
+app.get('/api/auth/me', async (req, res) => {
+    let token = null;
+    const authHeader = req.headers['authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7).trim();
+    } else if (req.cookies && req.cookies.discord_token) {
+        token = req.cookies.discord_token;
+    }
+
+    if (!token) {
+        return res.status(401).json({ autenticado: false, erro: 'Não autenticado' });
+    }
+
+    const user = verifyToken(token);
+    if (!user || !user.id) {
+        return res.status(401).json({ autenticado: false, erro: 'Token inválido ou expirado' });
+    }
+
+    try {
+        const { isAjudante, isColaborador, cargos } = await checkDiscordMemberRoles(user.id);
+        
+        const payload = {
+            id: user.id,
+            username: user.username,
+            global_name: user.global_name || user.username,
+            avatar: user.avatar,
+            isAjudante,
+            isColaborador,
+            cargos
+        };
+
+        // Atualiza banco de dados local
+        try {
+            await pool.query(`
+                INSERT INTO usuarios_discord (discord_id, username, global_name, avatar, is_ajudante, is_colaborador, cargos, atualizado_em)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+                ON CONFLICT (discord_id)
+                DO UPDATE SET username = EXCLUDED.username, global_name = EXCLUDED.global_name, avatar = EXCLUDED.avatar, is_ajudante = EXCLUDED.is_ajudante, is_colaborador = EXCLUDED.is_colaborador, cargos = EXCLUDED.cargos, atualizado_em = CURRENT_TIMESTAMP;
+            `, [user.id, user.username, user.global_name || user.username, user.avatar, isAjudante, isColaborador, JSON.stringify(cargos)]);
+        } catch (dbE) {
+            console.warn("Erro ao atualizar user discord no banco:", dbE.message);
+        }
+
+        const newToken = generateToken(payload);
+        res.cookie('discord_token', newToken, {
+            maxAge: 30 * 24 * 60 * 60 * 1000,
+            httpOnly: false,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax'
+        });
+
+        return res.json({
+            autenticado: true,
+            id: user.id,
+            username: user.username,
+            global_name: user.global_name || user.username,
+            avatar: user.avatar,
+            isAjudante,
+            isColaborador,
+            cargos,
+            token: newToken
+        });
+    } catch (e) {
+        console.error('Erro ao sincronizar permissões Discord:', e);
+        return res.json({
+            autenticado: true,
+            id: user.id,
+            username: user.username,
+            global_name: user.global_name || user.username,
+            avatar: user.avatar,
+            isAjudante: !!user.isAjudante,
+            isColaborador: !!user.isColaborador,
+            token
+        });
+    }
+});
+
+
+// ==========================================
+// ROTA: Gerenciamento e Configuração Hugging Face (Múltiplas Contas)
+// ==========================================
+const HF_DEFAULT_TOKEN = process.env.HF_TOKEN || "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";
+const HF_DEFAULT_REPO_TYPE = process.env.HF_REPO_TYPE || "dataset";
+const HF_DEFAULT_REPO_NAME = process.env.HF_REPO_NAME || "Fenixflix/videos";
+const HF_REPO_PLURAL = HF_DEFAULT_REPO_TYPE.endsWith('s') ? HF_DEFAULT_REPO_TYPE : (HF_DEFAULT_REPO_TYPE + 's');
+
+const getHfAccountsList = async () => {
+    const list = [{
+        id: 'default',
+        name: `Conta Principal (${HF_DEFAULT_REPO_NAME})`,
+        token: HF_DEFAULT_TOKEN,
+        repo: HF_DEFAULT_REPO_NAME,
+        type: HF_DEFAULT_REPO_TYPE,
+        plural: HF_REPO_PLURAL
+    }];
+
+    if (process.env.HF_ACCOUNTS) {
+        try {
+            const extra = JSON.parse(process.env.HF_ACCOUNTS);
+            if (Array.isArray(extra)) {
+                extra.forEach((acc, i) => {
+                    const accType = acc.type || 'dataset';
+                    list.push({
+                        id: acc.id || `env_${i + 1}`,
+                        name: acc.name || `Conta Extra ${i + 1} (${acc.repo})`,
+                        token: acc.token,
+                        repo: acc.repo,
+                        type: accType,
+                        plural: accType.endsWith('s') ? accType : (accType + 's')
+                    });
+                });
+            }
+        } catch (e) {
+            console.warn('Erro ao parsear HF_ACCOUNTS do .env:', e.message);
+        }
+    }
+
+    try {
+        const dbRes = await pool.query('SELECT * FROM hf_contas ORDER BY id ASC');
+        dbRes.rows.forEach(r => {
+            const accType = r.tipo || 'dataset';
+            list.push({
+                id: `db_${r.id}`,
+                name: `${r.nome} (${r.repo})`,
+                token: r.token,
+                repo: r.repo,
+                type: accType,
+                plural: accType.endsWith('s') ? accType : (accType + 's')
+            });
+        });
+    } catch (e) {}
+
+    return list;
+};
+
+app.get('/api/hf/config', async (req, res) => {
+    try {
+        const accounts = await getHfAccountsList();
+        const requestedId = req.query.account_id;
+        const active = accounts.find(a => a.id === requestedId) || accounts[0];
+
+        res.json({
+            token: active.token,
+            repo: active.repo,
+            type: active.type,
+            plural: active.plural,
+            accountId: active.id,
+            accounts: accounts.map(a => ({
+                id: a.id,
+                name: a.name,
+                token: a.token,
+                repo: a.repo,
+                type: a.type,
+                plural: a.plural,
+                isDefault: a.id === 'default',
+                isEnv: a.id.startsWith('env_'),
+                isDb: a.id.startsWith('db_')
+            }))
+        });
+    } catch (err) {
+        res.status(500).json({ erro: err.message });
+    }
+});
+
+// Adicionar nova conta do Hugging Face (Admin ou Ajudante)
+app.post('/api/hf/accounts', async (req, res) => {
+    const adminSenha = req.headers['x-admin-password'] || req.body.senha;
+    const authHeader = req.headers['authorization'];
+    const discordToken = authHeader ? authHeader.replace('Bearer ', '') : req.cookies?.discord_token;
+    const user = verifyToken(discordToken);
+
+    if (!checkPassword(adminSenha) && (!user || !user.isAjudante)) {
+        return res.status(401).json({ erro: 'Não autorizado. Senha de administrador necessária.' });
+    }
+    const { nome, token, repo, tipo } = req.body;
+    if (!token || !repo) {
+        return res.status(400).json({ erro: 'Token e Repositório são obrigatórios.' });
+    }
+    try {
+        const query = 'INSERT INTO hf_contas (nome, token, repo, tipo) VALUES ($1, $2, $3, $4) RETURNING *';
+        const result = await pool.query(query, [nome || repo, token.trim(), repo.trim(), tipo || 'dataset']);
+        return res.json({ sucesso: true, conta: result.rows[0] });
+    } catch (e) {
+        return res.status(500).json({ erro: e.message });
+    }
+});
+
+// Excluir conta adicional do Hugging Face (Admin ou Ajudante)
+app.delete('/api/hf/accounts/:id', async (req, res) => {
+    const adminSenha = req.headers['x-admin-password'] || req.query.senha;
+    const authHeader = req.headers['authorization'];
+    const discordToken = authHeader ? authHeader.replace('Bearer ', '') : req.cookies?.discord_token;
+    const user = verifyToken(discordToken);
+
+    if (!checkPassword(adminSenha) && (!user || !user.isAjudante)) {
+        return res.status(401).json({ erro: 'Não autorizado. Senha de administrador necessária.' });
+    }
+    const id = req.params.id.replace('db_', '');
+    try {
+        await pool.query('DELETE FROM hf_contas WHERE id = $1', [id]);
+        return res.json({ sucesso: true });
+    } catch (e) {
+        return res.status(500).json({ erro: e.message });
+    }
+});
+
+// ==========================================
+// ROTA: Redirecionamento Mascarado (Opção 1: 302 Redirect - 0% CPU e 0% RAM)
+// Suporta /v/:filename ou /v/:accountId/:filename
+// ==========================================
+app.get(['/v/:arg1/:arg2', '/v/:arg1', '/api/stream/hf/:arg1/:arg2', '/api/stream/hf/:arg1'], async (req, res) => {
+    try {
+        let accountId = null;
+        let filename = req.params.arg1;
+
+        if (req.params.arg2) {
+            accountId = req.params.arg1;
+            filename = req.params.arg2;
+        }
+
+        const accounts = await getHfAccountsList();
+        let targetAccount = accounts[0];
+
+        if (accountId) {
+            const found = accounts.find(a => a.id === accountId || a.repo.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() === accountId.toLowerCase());
+            if (found) targetAccount = found;
+        }
+
+        const directUrl = `https://huggingface.co/${targetAccount.plural}/${targetAccount.repo}/resolve/main/${encodeURIComponent(filename)}`;
+
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        return res.redirect(302, directUrl);
+    } catch (err) {
+        console.error('[Stream Redirect] Erro no redirecionamento:', err);
+        return res.status(500).send('Erro ao redirecionar vídeo.');
     }
 });
 
@@ -704,7 +950,7 @@ app.post('/upload', upload.none(), async (req, res) => {
     }
 
     // ==========================================
-    // ENRIQUECIMENTO TMDB/CINEMETA/RPDB
+    // ENRIQUECIMENTO NUVIOMETA
     // ==========================================
     try {
         let imdbID = "";
@@ -715,29 +961,18 @@ app.post('/upload', upload.none(), async (req, res) => {
         }
 
         if (imdbID) {
-            const tmdbData = await getTMDBInfo(imdbID);
-            if (tmdbData) {
-                parsedConteudo.title = tmdbData.title;
-                if (!parsedConteudo.type) {
-                    parsedConteudo.type = tmdbData.type;
-                }
-            }
-
             const cType = parsedConteudo.type || "movie";
-            const cinemetaData = await getCinemetaInfo(imdbID, cType);
-            if (cinemetaData) {
-                if (cinemetaData.videos) {
-                    parsedConteudo.cinemetaVideos = cinemetaData.videos;
+            const nuviometaData = await getNuviometaInfo(imdbID, cType);
+            
+            if (nuviometaData) {
+                if (nuviometaData.name && !parsedConteudo.title) {
+                    parsedConteudo.title = nuviometaData.name;
                 }
-            }
-
-            if (!parsedConteudo.poster || parsedConteudo.poster.includes('ratingposterdb')) {
-                if (cinemetaData && cinemetaData.poster) {
-                    parsedConteudo.poster = cinemetaData.poster;
-                } else if (tmdbData && tmdbData.poster_path) {
-                    parsedConteudo.poster = `https://image.tmdb.org/t/p/w500${tmdbData.poster_path}`;
-                } else {
-                    parsedConteudo.poster = `${RPDB_BASE_URL}/imdb/poster-default/${imdbID}.jpg`;
+                if (nuviometaData.videos) {
+                    parsedConteudo.nuviometaVideos = nuviometaData.videos;
+                }
+                if (nuviometaData.poster && (!parsedConteudo.poster || parsedConteudo.poster.includes('ratingposterdb') || parsedConteudo.poster.includes('tmdb'))) {
+                    parsedConteudo.poster = nuviometaData.poster;
                 }
             }
 
@@ -1007,12 +1242,13 @@ app.post('/api/pedidos', async (req, res) => {
     }
 
     try {
-        // Verificar se já foi lançado no TMDB
-        const tmdbData = await getTMDBInfo(id);
-        if (tmdbData && tmdbData.release_date) {
+        // Verificar se já foi lançado
+        const nuviometaData = await getNuviometaInfo(id, type);
+        if (nuviometaData && nuviometaData.released) {
+            const releaseDate = nuviometaData.released.split('T')[0];
             const today = new Date().toISOString().split('T')[0];
-            if (tmdbData.release_date > today) {
-                return res.status(400).json({ erro: `Conteúdo não lançado ainda (Lançamento: ${tmdbData.release_date}).` });
+            if (releaseDate > today) {
+                return res.status(400).json({ erro: `Conteúdo não lançado ainda (Lançamento: ${releaseDate}).` });
             }
         }
 
@@ -1503,7 +1739,7 @@ initDB().then(() => {
 app.get('/api/tmdb/*path', async (req, res) => {
     try {
         const tmdbPath = Array.isArray(req.params.path) ? req.params.path.join('/') : req.params.path;
-        const tmdbKey = process.env.TMDB_KEY;
+        const tmdbKey = process.env.TMDB_KEY || process.env.TMDB_API_KEY || "ee0f32f769374a93a24fcbc721de8634";
         if (!tmdbKey) {
             return res.status(500).json({ erro: "TMDB key is missing" });
         }
@@ -1513,13 +1749,20 @@ app.get('/api/tmdb/*path', async (req, res) => {
         for (const [key, value] of Object.entries(req.query)) {
             urlObj.searchParams.append(key, value);
         }
+
+        const headers = {};
+        // Se a chave for v4 (JWT longo iniciando com eyJ), usa Bearer. Se for v3 (hex), usa api_key como query param
+        if (tmdbKey.startsWith('eyJ')) {
+            headers["Authorization"] = `Bearer ${tmdbKey}`;
+        } else {
+            urlObj.searchParams.set('api_key', tmdbKey);
+        }
         
-        const response = await fetch(urlObj.toString(), {
-            headers: { "Authorization": `Bearer ${tmdbKey}` }
-        });
+        const response = await fetch(urlObj.toString(), { headers });
         const data = await response.json();
         res.json(data);
     } catch (e) {
-        res.status(500).json({ erro: "TMDB error" });
+        console.error("Erro no proxy do TMDB:", e);
+        res.status(500).json({ erro: "TMDB error: " + e.message });
     }
 });

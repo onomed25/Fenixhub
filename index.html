@@ -215,7 +215,7 @@
             <i class="fa-solid fa-triangle-exclamation text-sm"></i> <span class="hidden sm:inline">Denúncias</span>
         </button>
         <button onclick="switchView('approvals'); loadApprovalsList();" id="btn-approvals" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
-            <i class="fa-solid fa-clipboard-check text-sm"></i> <span class="hidden sm:inline">Aprovar Envios</span>
+            <i class="fa-solid fa-clipboard-check text-sm"></i> <span class="hidden sm:inline">Aprovar</span>
         </button>
     </nav>
 
@@ -242,10 +242,6 @@
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
                             <h2 class="text-xl font-semibold text-white font-display tracking-wide">Detalhes do Conteúdo</h2>
                             <div class="flex gap-2 w-full sm:w-auto">
-                                <label class="cursor-pointer bg-white/5 hover:bg-white/10 text-zinc-300 px-4 py-2 rounded-xl text-xs font-medium transition-colors border border-white/5 flex-1 sm:flex-none text-center">
-                                    Importar JSON
-                                    <input type="file" accept=".json" class="hidden" onchange="gen.loadExistingJson(this)">
-                                </label>
                                 <button onclick="gen.reset()" class="text-xs font-medium bg-transparent hover:bg-red-500/10 text-zinc-400 hover:text-red-400 border border-white/5 hover:border-red-500/20 px-4 py-2 rounded-xl transition-colors flex-1 sm:flex-none">
                                     Limpar
                                 </button>
@@ -327,27 +323,27 @@
 
                         <input type="hidden" id="uploaderNick">
 
-                        <!-- Caixa de Info do Cinemeta -->
-                        <div id="cinemetaInfoBox" class="hidden bg-zinc-950/40 border border-zinc-800/80 rounded-xl p-4 mb-6 flex flex-col gap-3">
+                        <!-- Caixa de Info do Nuviometa -->
+                        <div id="nuviometaInfoBox" class="hidden bg-zinc-950/40 border border-zinc-800/80 rounded-xl p-4 mb-6 flex flex-col gap-3">
                             <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
                                 <div>
-                                    <span id="cinemetaInfoType" class="text-[9px] uppercase tracking-wider text-indigo-400 font-semibold border border-indigo-500/30 px-1.5 py-0.5 rounded">SÉRIE</span>
-                                    <h4 id="cinemetaInfoTitle" class="font-medium text-white text-sm mt-1.5">-</h4>
+                                    <span id="nuviometaInfoType" class="text-[9px] uppercase tracking-wider text-indigo-400 font-semibold border border-indigo-500/30 px-1.5 py-0.5 rounded">SÉRIE</span>
+                                    <h4 id="nuviometaInfoTitle" class="font-medium text-white text-sm mt-1.5">-</h4>
                                 </div>
                             </div>
-                            <div id="cinemetaInfoSeriesDetails" class="grid grid-cols-2 gap-3 mt-1 text-xs">
+                            <div id="nuviometaInfoSeriesDetails" class="grid grid-cols-2 gap-3 mt-1 text-xs">
                                 <div class="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800/40">
                                     <span class="text-zinc-500 block text-[10px] uppercase">Temporada Máxima</span>
-                                    <span id="cinemetaInfoMaxSeason" class="text-zinc-200 font-semibold text-sm">-</span>
+                                    <span id="nuviometaInfoMaxSeason" class="text-zinc-200 font-semibold text-sm">-</span>
                                 </div>
                                 <div class="bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800/40">
                                     <span class="text-zinc-500 block text-[10px] uppercase">Total de Episódios</span>
-                                    <span id="cinemetaInfoTotalEps" class="text-zinc-200 font-semibold text-sm">-</span>
+                                    <span id="nuviometaInfoTotalEps" class="text-zinc-200 font-semibold text-sm">-</span>
                                 </div>
                             </div>
-                            <div id="cinemetaInfoEpsBreakdown" class="text-[11px] text-zinc-400 border-t border-zinc-850 pt-2 flex flex-col gap-1">
+                            <div id="nuviometaInfoEpsBreakdown" class="text-[11px] text-zinc-400 border-t border-zinc-850 pt-2 flex flex-col gap-1">
                                 <span class="text-zinc-500 font-medium">Episódios por Temporada:</span>
-                                <div id="cinemetaInfoEpsList" class="flex flex-wrap gap-1.5 mt-1">
+                                <div id="nuviometaInfoEpsList" class="flex flex-wrap gap-1.5 mt-1">
                                     <!-- Badges of seasons and their episode counts -->
                                 </div>
                             </div>
@@ -376,135 +372,183 @@
                             <textarea id="manualLinks" rows="6" class="input-unified w-full p-4 rounded-xl text-xs font-mono custom-scrollbar" placeholder="Cole os links de vídeo diretos aqui (um por linha)..."></textarea>
                         </div>
 
-                        <!-- Enviar para Telegram -->
+                        <!-- Painel Unificado de Upload (Bot vs Teste) -->
                         <div class="mt-5 bg-zinc-950/40 border border-zinc-800/80 rounded-xl p-4">
-                            <h4 class="text-xs font-semibold text-zinc-400 mb-3 flex items-center justify-between">
-                                <span class="flex items-center gap-1.5">
-                                    <i class="fa-brands fa-telegram text-sky-400"></i> Upload para o Telegram
-                                </span>
-                                <div class="flex items-center gap-2">
+                            <!-- Seletor Tipo de Upload: Bot vs Teste -->
+                            <div id="uploadProviderSwitcher" class="flex items-center justify-between border-b border-zinc-800/60 pb-3 mb-4">
+                                <div class="flex gap-6" id="uploadProviderRadios">
+                                    <label id="labelUploadBot" class="flex items-center gap-2.5 cursor-pointer group">
+                                        <div class="relative flex items-center justify-center">
+                                            <input type="radio" name="uploadProvider" value="bot" checked onchange="toggleUploadProvider('bot')" class="peer appearance-none w-4 h-4 border-2 border-zinc-600 rounded-full checked:border-sky-400 focus:outline-none transition-colors">
+                                            <div class="absolute w-2 h-2 rounded-full bg-sky-400 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
+                                        </div>
+                                        <span class="font-medium text-xs text-zinc-400 group-hover:text-zinc-200 peer-checked:text-white transition flex items-center gap-1.5">
+                                            <i class="fa-brands fa-telegram text-sky-400 text-sm"></i> Bot
+                                        </span>
+                                    </label>
+                                    <label id="labelUploadTeste" class="hidden items-center gap-2.5 cursor-pointer group">
+                                        <div class="relative flex items-center justify-center">
+                                            <input type="radio" name="uploadProvider" value="teste" onchange="toggleUploadProvider('teste')" class="peer appearance-none w-4 h-4 border-2 border-zinc-600 rounded-full checked:border-amber-400 focus:outline-none transition-colors">
+                                            <div class="absolute w-2 h-2 rounded-full bg-amber-400 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
+                                        </div>
+                                        <span class="font-medium text-xs text-zinc-400 group-hover:text-zinc-200 peer-checked:text-white transition flex items-center gap-1.5">
+                                            <i class="fa-solid fa-flask text-amber-400 text-sm"></i> Teste
+                                        </span>
+                                    </label>
+                                </div>
+                                <div id="uploadProviderBadge">
                                     <span id="tgStatusBadge" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-500">Verificando...</span>
-                                    <button onclick="tg.toggleConnection()" id="btnTgConnectToggle" class="text-[9px] font-semibold text-indigo-400 hover:underline">Conectar</button>
+                                    <button onclick="tg.toggleConnection()" id="btnTgConnectToggle" class="text-[9px] font-semibold text-indigo-400 hover:underline ml-1">Conectar</button>
                                 </div>
-                            </h4>
+                            </div>
 
-                            <!-- Painel de Login/Conexão do Telegram -->
-                            <div id="tgLoginPanel" class="hidden mb-4 p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 space-y-3">
-                                <p class="text-[10px] text-zinc-400">Conecte sua conta do Telegram para poder converter vídeos usando sua própria conta:</p>
-                                
-                                <!-- Passo 1: Telefone -->
-                                <div id="tgLoginPhoneStep" class="flex gap-2">
-                                    <input type="text" id="tgPhoneInput" class="input-unified flex-grow p-2 rounded-lg text-xs" placeholder="Telefone, ex: +5511999999999">
-                                    <button onclick="tg.sendPhone()" id="btnTgSendPhone" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-medium transition shrink-0">
-                                        Enviar Código
-                                    </button>
-                                </div>
-
-                                <!-- Passo 2: Código e 2FA -->
-                                <div id="tgLoginCodeStep" class="hidden space-y-3">
-                                    <input type="hidden" id="tgLoginId">
-                                    <div class="flex gap-2">
-                                        <input type="text" id="tgCodeInput" class="input-unified flex-grow p-2 rounded-lg text-xs" placeholder="Código do Telegram">
-                                        <button onclick="tg.verifyCode()" id="btnTgVerifyCode" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-medium transition shrink-0">
-                                            Confirmar
+                            <!-- SEÇÃO 1: MODO BOT (TELEGRAM) -->
+                            <div id="uploadSectionBot" class="space-y-3">
+                                <!-- Painel de Login/Conexão do Telegram -->
+                                <div id="tgLoginPanel" class="hidden mb-4 p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 space-y-3">
+                                    <p class="text-[10px] text-zinc-400">Conecte sua conta do Telegram para poder converter vídeos usando sua própria conta:</p>
+                                    
+                                    <!-- Passo 1: Telefone -->
+                                    <div id="tgLoginPhoneStep" class="flex gap-2">
+                                        <input type="text" id="tgPhoneInput" class="input-unified flex-grow p-2 rounded-lg text-xs" placeholder="Telefone, ex: +5511999999999">
+                                        <button onclick="tg.sendPhone()" id="btnTgSendPhone" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-medium transition shrink-0">
+                                            Enviar Código
                                         </button>
                                     </div>
-                                    <div id="tg2faContainer" class="hidden">
-                                        <label class="block text-[9px] text-zinc-500 mb-1">Senha de 2 etapas (2FA) necessária:</label>
-                                        <input type="password" id="tg2faInput" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Sua senha de duas etapas">
+
+                                    <!-- Passo 2: Código e 2FA -->
+                                    <div id="tgLoginCodeStep" class="hidden space-y-3">
+                                        <input type="hidden" id="tgLoginId">
+                                        <div class="flex gap-2">
+                                            <input type="text" id="tgCodeInput" class="input-unified flex-grow p-2 rounded-lg text-xs" placeholder="Código do Telegram">
+                                            <button onclick="tg.verifyCode()" id="btnTgVerifyCode" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-medium transition shrink-0">
+                                                Confirmar
+                                            </button>
+                                        </div>
+                                        <div id="tg2faContainer" class="hidden">
+                                            <label class="block text-[9px] text-zinc-500 mb-1">Senha de 2 etapas (2FA) necessária:</label>
+                                            <input type="password" id="tg2faInput" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Sua senha de duas etapas">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-3">
+                                    <!-- Opção de Envio: Navegador vs Local -->
+                                    <div class="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/60 pb-2 text-[11px]">
+                                        <div class="flex gap-4 hidden">
+                                            <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
+                                                <input type="radio" name="tgMode" value="browser" checked onchange="tg.switchMode('browser')" class="text-sky-500 bg-zinc-900 border-zinc-800 focus:ring-sky-500 w-3 h-3">
+                                                <span>Pelo Navegador</span>
+                                            </label>
+                                            <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
+                                                <input type="radio" name="tgMode" value="local" onchange="tg.switchMode('local')" class="text-sky-500 bg-zinc-900 border-zinc-800 focus:ring-sky-500 w-3 h-3">
+                                                <span>Caminho Local (PC)</span>
+                                            </label>
+                                        </div>
+                                        <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
+                                            <input type="checkbox" id="tgAutoSave" checked class="rounded border-zinc-800 bg-zinc-900 text-sky-500 focus:ring-sky-500 w-3 h-3 cursor-pointer">
+                                            <span>Auto-salvar no banco</span>
+                                        </label>
+                                    </div>
+
+                                    <!-- Upload pelo Navegador -->
+                                    <div id="tgBrowserSection" class="flex flex-col sm:flex-row gap-2">
+                                        <input type="file" id="tgFile" class="hidden" multiple accept="video/*,.mkv,.mp4,.avi,.webm,.ts,.mov,.flv,.3gp,.mpeg,.m4v" onchange="tg.handleFileChange(this)">
+                                        <label for="tgFile" class="input-unified flex-grow p-3 rounded-lg text-xs cursor-pointer flex items-center justify-center sm:justify-start gap-2 hover:bg-zinc-800 transition-colors border-dashed border-zinc-700 hover:border-sky-500 group">
+                                            <i class="fa-solid fa-cloud-arrow-up text-zinc-500 group-hover:text-sky-400 transition-colors"></i>
+                                            <span id="tgFileName" class="text-zinc-400 font-medium group-hover:text-zinc-200 transition-colors">Selecionar Vídeos...</span>
+                                        </label>
+                                        <button onclick="tg.sendBrowser()" id="btnTgBrowserSend" class="bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-lg text-xs font-medium transition-all shadow-sm flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
+                                            Fazer Upload
+                                        </button>
+                                    </div>
+
+                                    <!-- Upload por Caminho Local -->
+                                    <div id="tgLocalSection" class="hidden flex gap-2">
+                                        <input type="text" id="tgLocalPath" class="input-unified flex-grow p-2.5 rounded-lg text-xs" placeholder="Ex: /home/user/Videos/filme.mp4">
+                                        <button onclick="tg.sendLocal()" id="btnTgLocalSend" class="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2.5 rounded-lg text-xs font-medium transition flex items-center gap-1 shrink-0">
+                                            <i class="fa-solid fa-paper-plane"></i> Enviar
+                                        </button>
+                                    </div>
+
+                                    <!-- Configurações Avançadas (Canal & Bot) -->
+                                    <div class="mt-2 p-3 bg-zinc-950/40 rounded-xl border border-zinc-800/80 space-y-2.5">
+                                        <div class="flex justify-between items-center cursor-pointer select-none" onclick="tg.toggleAdvanced()">
+                                            <span class="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                <i class="fa-solid fa-sliders text-indigo-400"></i> Configurações Avançadas (Canal & Bot)
+                                            </span>
+                                            <i id="tgAdvancedIcon" class="fa-solid fa-chevron-down text-zinc-500 text-[10px] transition-transform duration-300"></i>
+                                        </div>
+                                        <div id="tgAdvancedContent" class="hidden space-y-2.5 pt-2 border-t border-zinc-800/40">
+                                            <div>
+                                                <label class="block text-[9px] text-zinc-500 mb-1">Token de Bot Próprio (Opcional):</label>
+                                                <input type="text" id="tgBotToken" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: token1, token2 (separe por vírgula para múltiplos)">
+                                            </div>
+                                            <div>
+                                                <label class="block text-[9px] text-zinc-500 mb-1">Username ou ID do Canal de Backup (Opcional):</label>
+                                                <input type="text" id="tgChannelId" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: @meucanal ou -100123456789">
+                                            </div>
+                                            <p class="text-[9px] text-zinc-500 leading-relaxed">
+                                                * Ao preencher ambos, o upload será dividido em paralelo entre seus Bots e sua Conta de Usuário (concorrência = número de bots + 1), postando no canal e encaminhando de lá para o bot de streaming.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Progresso e Status -->
+                                    <div id="tgProgressBox" class="hidden space-y-3 mt-4">
+                                        <div class="space-y-1.5">
+                                            <div class="flex justify-between text-[10px] font-medium text-zinc-400">
+                                                <span id="tgProgressState">Enviando arquivos...</span>
+                                                <span id="tgPercent" class="text-sky-400">0%</span>
+                                            </div>
+                                            <div class="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden border border-zinc-800/80">
+                                                <div id="tgProgressBar" class="bg-sky-500 h-full w-0 transition-all duration-300"></div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Fila de Arquivos (Novo Design) -->
+                                        <div id="tgFileQueue" class="flex flex-col gap-1.5 mt-2 max-h-48 overflow-y-auto custom-scrollbar pr-1"></div>
+                                    </div>
+
+                                    <div id="tgFeedback" class="text-[10px] text-zinc-500 flex items-center gap-1">
+                                        <i class="fa-solid fa-info-circle"></i>
+                                        <span id="tgFeedbackText">O vídeo será enviado para @fenix_flixbot e o link gerado será adicionado aos Links de Transmissão.</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="space-y-3">
-                                <!-- Opção de Envio: Navegador vs Local -->
-                                <div class="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/60 pb-2 text-[11px]">
-                                    <div class="flex gap-4 hidden">
-                                        <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
-                                            <input type="radio" name="tgMode" value="browser" checked onchange="tg.switchMode('browser')" class="text-sky-500 bg-zinc-900 border-zinc-800 focus:ring-sky-500 w-3 h-3">
-                                            <span>Pelo Navegador</span>
-                                        </label>
-                                        <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
-                                            <input type="radio" name="tgMode" value="local" onchange="tg.switchMode('local')" class="text-sky-500 bg-zinc-900 border-zinc-800 focus:ring-sky-500 w-3 h-3">
-                                            <span>Caminho Local (PC)</span>
-                                        </label>
-                                    </div>
-                                    <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
-                                        <input type="checkbox" id="tgAutoSave" checked class="rounded border-zinc-800 bg-zinc-900 text-sky-500 focus:ring-sky-500 w-3 h-3 cursor-pointer">
-                                        <span>Auto-salvar no banco</span>
+                            <!-- SEÇÃO 2: MODO TESTE (UPLOAD DIRETO) -->
+                            <div id="uploadSectionTeste" class="hidden space-y-3">
+                                <div class="flex flex-col sm:flex-row gap-2">
+                                    <input type="file" id="hfFile" class="hidden" multiple accept="video/*,.mkv,.mp4,.avi,.webm,.ts,.mov,.flv,.3gp,.mpeg,.m4v" onchange="hfUpload.handleFileChange(this)">
+                                    <label for="hfFile" class="input-unified flex-grow p-3 rounded-lg text-xs cursor-pointer flex items-center justify-center sm:justify-start gap-2 hover:bg-zinc-800 transition-colors border-dashed border-zinc-700 hover:border-amber-500 group">
+                                        <i class="fa-solid fa-cloud-arrow-up text-zinc-500 group-hover:text-amber-400 transition-colors"></i>
+                                        <span id="hfFileName" class="text-zinc-400 font-medium group-hover:text-zinc-200 transition-colors">Selecionar Vídeo do Celular/PC...</span>
                                     </label>
-                                </div>
-
-                                <!-- Upload pelo Navegador -->
-                                <div id="tgBrowserSection" class="flex flex-col sm:flex-row gap-2">
-                                    <input type="file" id="tgFile" class="hidden" multiple accept="video/*,.mkv,.mp4,.avi,.webm,.ts,.mov,.flv,.3gp,.mpeg,.m4v" onchange="tg.handleFileChange(this)">
-                                    <label for="tgFile" class="input-unified flex-grow p-3 rounded-lg text-xs cursor-pointer flex items-center justify-center sm:justify-start gap-2 hover:bg-zinc-800 transition-colors border-dashed border-zinc-700 hover:border-sky-500 group">
-                                        <i class="fa-solid fa-cloud-arrow-up text-zinc-500 group-hover:text-sky-400 transition-colors"></i>
-                                        <span id="tgFileName" class="text-zinc-400 font-medium group-hover:text-zinc-200 transition-colors">Selecionar Vídeos...</span>
-                                    </label>
-                                    <button onclick="tg.sendBrowser()" id="btnTgBrowserSend" class="bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-lg text-xs font-medium transition-all shadow-sm flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
-                                        Fazer Upload
+                                    <button onclick="hfUpload.startUpload()" id="btnHfUpload" class="bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white px-6 py-3 rounded-lg text-xs font-medium transition-all shadow-sm flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
+                                        <i class="fa-solid fa-bolt"></i> Enviar Direto
                                     </button>
                                 </div>
 
-                                <!-- Upload por Caminho Local -->
-                                <div id="tgLocalSection" class="hidden flex gap-2">
-                                    <input type="text" id="tgLocalPath" class="input-unified flex-grow p-2.5 rounded-lg text-xs" placeholder="Ex: /home/user/Videos/filme.mp4">
-                                    <button onclick="tg.sendLocal()" id="btnTgLocalSend" class="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2.5 rounded-lg text-xs font-medium transition flex items-center gap-1 shrink-0">
-                                        <i class="fa-solid fa-paper-plane"></i> Enviar
-                                    </button>
-                                </div>
-
-                                <!-- Configurações Avançadas (Canal & Bot) -->
-                                <div class="mt-2 p-3 bg-zinc-950/40 rounded-xl border border-zinc-800/80 space-y-2.5">
-                                    <div class="flex justify-between items-center cursor-pointer select-none" onclick="tg.toggleAdvanced()">
-                                        <span class="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                                            <i class="fa-solid fa-sliders text-indigo-400"></i> Configurações Avançadas (Canal & Bot)
-                                        </span>
-                                        <i id="tgAdvancedIcon" class="fa-solid fa-chevron-down text-zinc-500 text-[10px] transition-transform duration-300"></i>
-                                    </div>
-                                    <div id="tgAdvancedContent" class="hidden space-y-2.5 pt-2 border-t border-zinc-800/40">
-                                        <div>
-                                            <label class="block text-[9px] text-zinc-500 mb-1">Token de Bot Próprio (Opcional):</label>
-                                            <input type="text" id="tgBotToken" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: token1, token2 (separe por vírgula para múltiplos)">
-                                        </div>
-                                        <div>
-                                            <label class="block text-[9px] text-zinc-500 mb-1">Username ou ID do Canal de Backup (Opcional):</label>
-                                            <input type="text" id="tgChannelId" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: @meucanal ou -100123456789">
-                                        </div>
-                                        <p class="text-[9px] text-zinc-500 leading-relaxed">
-                                            * Ao preencher ambos, o upload será dividido em paralelo entre seus Bots e sua Conta de Usuário (concorrência = número de bots + 1), postando no canal e encaminhando de lá para o bot de streaming.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <!-- Progresso e Status -->
-                                <div id="tgProgressBox" class="hidden space-y-3 mt-4">
+                                <!-- Progresso e Status Teste -->
+                                <div id="hfProgressBox" class="hidden space-y-3 mt-4">
                                     <div class="space-y-1.5">
                                         <div class="flex justify-between text-[10px] font-medium text-zinc-400">
-                                            <span id="tgProgressState">Enviando arquivos...</span>
-                                            <span id="tgPercent" class="text-sky-400">0%</span>
+                                            <span id="hfProgressState">Enviando vídeo diretamente...</span>
+                                            <span id="hfPercent" class="text-amber-400">0%</span>
                                         </div>
                                         <div class="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden border border-zinc-800/80">
-                                            <div id="tgProgressBar" class="bg-sky-500 h-full w-0 transition-all duration-300"></div>
+                                            <div id="hfProgressBar" class="bg-amber-500 h-full w-0 transition-all duration-300"></div>
                                         </div>
                                     </div>
-                                    
-                                    <!-- Fila de Arquivos (Novo Design) -->
-                                    <div id="tgFileQueue" class="flex flex-col gap-1.5 mt-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-                                        <!-- Arquivos aparecerão aqui -->
-                                    </div>
-                                </div>
 
-                                <div id="tgFeedback" class="text-[10px] text-zinc-500 flex items-center gap-1">
-                                    <i class="fa-solid fa-info-circle"></i>
-                                    <span id="tgFeedbackText">O vídeo será enviado para @fenix_flixbot e o link gerado será adicionado aos Links de Transmissão.</span>
+                                    <div id="hfFileQueue" class="flex flex-col gap-1.5 mt-2 max-h-48 overflow-y-auto custom-scrollbar pr-1"></div>
                                 </div>
                             </div>
                         </div>
 
-                        <button onclick="gen.process()" class="mt-6 w-full bg-primary hover:bg-primary-hover text-white font-display font-medium py-4 rounded-xl transition-all shadow-md flex justify-center items-center gap-2 tracking-wide uppercase text-sm">
-                            Processar Conteúdo
+                        <button onclick="gen.processAndSave()" id="btnProcessAndSave" class="mt-6 w-full bg-primary hover:bg-primary-hover active:bg-primary-hover/90 text-white font-display font-medium py-4 rounded-xl transition-all shadow-md flex justify-center items-center gap-2 tracking-wide uppercase text-sm">
+                            <i class="fa-solid fa-paper-plane"></i> Enviar Conteúdo
                         </button>
                     </div>
                 </div>
@@ -601,8 +645,8 @@
                         <i class="fa-solid fa-rotate"></i> Atualizar
                     </button>
 
-                    <!-- Botão de Upload em Lote -->
-                    <label class="cursor-pointer bg-primary hover:bg-primary-hover text-white px-5 py-3 rounded-2xl text-xs font-medium whitespace-nowrap transition-all flex items-center gap-2 mr-2 shadow-md" title="Enviar vários ficheiros .json para o banco">
+                    <!-- Botão de Upload em Lote (Apenas Admin) -->
+                    <label id="btnUploadLote" class="cursor-pointer bg-primary hover:bg-primary-hover text-white px-5 py-3 rounded-2xl text-xs font-medium whitespace-nowrap transition-all items-center gap-2 mr-2 shadow-md hidden" title="Enviar vários ficheiros .json para o banco">
                         <i class="fa-solid fa-cloud-arrow-up"></i> Upload Lote
                         <input type="file" accept=".json" multiple class="hidden" onchange="cat.uploadEmMassa(this)">
                     </label>
@@ -853,6 +897,26 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Datasets Hugging Face (Armazenamento de Vídeos / Rotação Automática) -->
+                <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6 md:p-8">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <div>
+                            <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-server text-amber-500"></i> Datasets Hugging Face (Vídeos)
+                            </h2>
+                            <p class="text-xs text-zinc-400 mt-1">O próprio site alterna e faz rotação automática entre as contas conectadas quando uma encher ou atingir limites.</p>
+                        </div>
+                        <button onclick="hfStorage.openAddModal()" class="bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 shrink-0">
+                            <i class="fa-solid fa-plus"></i> Conectar Nova Conta
+                        </button>
+                    </div>
+
+                    <!-- Lista de Contas HF Conectadas -->
+                    <div id="hfAccountsContainer" class="space-y-3">
+                        <div class="text-center py-6 text-zinc-500 text-xs">Carregando contas conectadas...</div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -965,63 +1029,50 @@
         </div>
     </div>
 
-    <!-- Modal do Gestor Visual de Links -->
-    <div id="visualEditorModal" class="fixed inset-0 bg-black/90 backdrop-blur-sm hidden flex items-center justify-center z-[150] p-2 sm:p-4">
-        <div class="bg-zinc-900 w-full max-w-4xl rounded-2xl shadow-2xl border border-zinc-800 flex flex-col max-h-[92vh] sm:max-h-[85vh] overflow-hidden">
-            <div class="p-4 sm:p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-900">
-                <div>
-                    <h3 class="text-sm sm:text-lg font-semibold text-white">Gestor de Links</h3>
-                    <p class="text-[10px] sm:text-xs text-zinc-500 mt-1">Altere nomes ou remova URLs do arquivo gerado.</p>
-                </div>
-                <button onclick="gen.closeVisualEditor()" class="text-zinc-500 hover:text-white bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 w-8 h-8 sm:w-9 sm:h-9 rounded-full transition flex items-center justify-center"><i class="fa-solid fa-xmark text-sm"></i></button>
+    <!-- Modal do Gestor Visual de Links (Baseado em test.html) -->
+    <div id="visualEditorModal" class="fixed inset-0 bg-black/90 backdrop-blur-md hidden flex items-center justify-center z-[9999] p-2 sm:p-4 md:p-6">
+        <div class="bg-[#0f0f11] border border-zinc-800/80 rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+            <!-- Header do Modal -->
+            <div class="px-6 py-4 border-b border-zinc-800/80 flex justify-between items-center bg-zinc-900/50">
+                <h3 class="text-lg md:text-xl font-bold text-white flex items-center gap-2 tracking-tight">
+                    <i class="fa-solid fa-code-merge text-indigo-500"></i> <span id="visualEditorTitle">Editar Conteúdo</span>
+                    <span id="visualEditorSubtitle" class="text-xs md:text-sm font-normal text-zinc-500 ml-2"></span>
+                </h3>
+                <button onclick="gen.closeVisualEditor()" class="text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors w-10 h-10 rounded-full flex items-center justify-center">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
             </div>
             
-            <!-- Painel de Edição em Massa -->
-            <div id="bulkEditContainer" class="bg-zinc-900/90 border-b border-zinc-800 p-3 sm:p-4 space-y-2 sm:space-y-3">
-                <div class="flex items-center justify-between gap-2">
-                    <button onclick="gen.toggleBulkPanel()" class="text-[11px] sm:text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5 hover:text-white transition">
-                        <i class="fa-solid fa-layer-group text-ember-400 animate-pulse"></i> Edição em Massa
-                        <i id="bulkToggleChevron" class="fa-solid fa-chevron-down text-[9px] transition-transform duration-200"></i>
-                    </button>
-                    <div class="flex gap-1.5">
-                        <button onclick="gen.selectAllBulk(true)" class="text-[9px] sm:text-[10px] bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-2 sm:px-3 py-1.5 rounded-lg transition font-medium">Tudo</button>
-                        <button onclick="gen.selectAllBulk(false)" class="text-[9px] sm:text-[10px] bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-2 sm:px-3 py-1.5 rounded-lg transition font-medium">Limpar</button>
+            <!-- Painel 2 Colunas: Player + Edição de Links -->
+            <div class="flex flex-col md:flex-row flex-1 overflow-hidden">
+                <!-- Lado Esquerdo: Player de Teste -->
+                <div class="w-full md:w-[45%] p-4 md:p-6 bg-black border-b md:border-b-0 md:border-r border-zinc-800/80 flex flex-col justify-center items-center relative group shrink-0">
+                    <video id="visualEditorPlayer" controls class="w-full h-auto max-h-60 md:max-h-full rounded-xl shadow-lg ring-1 ring-white/10 hidden bg-black"></video>
+                    <div id="visualEditorEmptyState" class="text-zinc-600 text-sm flex flex-col items-center gap-3">
+                        <div class="w-16 h-16 rounded-full bg-zinc-900 flex items-center justify-center">
+                            <i class="fa-solid fa-film text-2xl text-zinc-700"></i>
+                        </div>
+                        <p class="font-medium text-xs md:text-sm">Selecione um link para testar</p>
                     </div>
                 </div>
-                <div id="bulkEditControls" class="hidden grid grid-cols-1 sm:grid-cols-4 gap-3 bg-zinc-950/40 p-3 rounded-xl border border-white/5 transition-all">
-                    <div>
-                        <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1.5">Alterar Áudio / Idioma</label>
-                        <select id="bulkAudio" class="input-unified w-full p-2.5 rounded-lg text-xs appearance-none">
-                            <option value="">(Manter original)</option>
-                            <option value="Dublado">Dublado</option>
-                            <option value="Português (PT-BR)">Português (PT-BR)</option>
-                            <option value="English">English</option>
-                            <option value="Legendado">Legendado</option>
-                            <option value="Dual Áudio">Dual Áudio</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1.5">Alterar Qualidade</label>
-                        <select id="bulkQuality" class="input-unified w-full p-2.5 rounded-lg text-xs appearance-none">
-                            <!-- Preenchido via JS -->
-                        </select>
-                    </div>
-                    <div id="bulkSeasonCol">
-                        <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1.5">Mover p/ Temporada</label>
-                        <input type="number" id="bulkSeason" class="input-unified w-full p-2.5 rounded-lg text-xs text-ember-400 bg-zinc-950 border border-zinc-800" placeholder="Ex: 2" min="1">
-                    </div>
-                    <div class="flex items-end">
-                        <button onclick="gen.applyBulkEdit()" class="w-full bg-white hover:bg-zinc-200 text-zinc-950 py-2.5 rounded-lg transition text-xs font-bold font-display uppercase tracking-wide">
-                            Aplicar
-                        </button>
-                    </div>
+                
+                <!-- Lado Direito: Lista e Edição de Streams -->
+                <div id="visualEditorContent" class="w-full md:w-[55%] p-4 md:p-6 overflow-y-auto custom-scrollbar bg-[#0f0f11] space-y-4">
                 </div>
             </div>
-
-            <div id="visualEditorContent" class="p-3 sm:p-6 overflow-y-auto space-y-3 bg-zinc-950 flex-grow custom-scrollbar"></div>
-            <div class="p-4 sm:p-5 bg-zinc-900 border-t border-zinc-800 flex justify-end gap-3">
-                <button onclick="gen.closeVisualEditor()" class="px-5 py-2.5 bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 text-xs font-medium rounded-xl transition">Descartar</button>
-                <button onclick="gen.saveVisualEditor()" class="px-6 py-2.5 bg-white hover:bg-zinc-200 text-zinc-900 text-xs font-medium rounded-xl transition">Salvar Mudanças</button>
+            
+            <!-- Rodapé do Modal -->
+            <div class="px-6 py-4 border-t border-zinc-800/80 bg-zinc-900/50 flex flex-col md:flex-row justify-between items-center gap-4">
+                <span class="text-xs text-zinc-400 flex items-center gap-2 hidden md:flex">
+                    <i class="fa-solid fa-circle-info text-indigo-500/70"></i> 
+                    Altere temporadas, episódios, áudio ou qualidade e clique em salvar.
+                </span>
+                <div class="flex gap-3 w-full md:w-auto">
+                    <button onclick="gen.closeVisualEditor()" class="flex-1 md:flex-none px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-colors text-xs md:text-sm font-semibold">Cancelar</button>
+                    <button onclick="gen.saveVisualEditor()" class="flex-1 md:flex-none px-6 py-2.5 bg-emerald-500 text-zinc-950 hover:bg-emerald-400 rounded-xl transition-colors text-xs md:text-sm font-extrabold shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-check"></i> Salvar Mudanças
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -1117,10 +1168,40 @@
         </div>
     </div>
 
+    <!-- Modal Adicionar Conta Hugging Face -->
+    <div id="hfAddAccountModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
+                <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-server text-amber-500"></i> Conectar Conta Hugging Face
+                </h3>
+                <button onclick="hfStorage.closeAddModal()" class="text-zinc-500 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-zinc-400 mb-1 font-medium">Nome Identificador:</label>
+                    <input type="text" id="hfNewName" class="input-unified w-full p-2.5 rounded-lg text-xs" placeholder="Ex: Conta Secundária 02">
+                </div>
+                <div>
+                    <label class="block text-zinc-400 mb-1 font-medium">Token de Acesso (Write):</label>
+                    <input type="password" id="hfNewToken" class="input-unified w-full p-2.5 rounded-lg text-xs font-mono" placeholder="hf_...">
+                </div>
+                <div>
+                    <label class="block text-zinc-400 mb-1 font-medium">Repositório do Dataset:</label>
+                    <input type="text" id="hfNewRepo" class="input-unified w-full p-2.5 rounded-lg text-xs" placeholder="Ex: Usuario/videos2">
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-3 border-t border-zinc-800">
+                <button onclick="hfStorage.closeAddModal()" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-medium transition">Cancelar</button>
+                <button onclick="hfStorage.saveAccount()" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold transition">Salvar Conta</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         window.TELEGRAM_API_URL = '__TELEGRAM_API_URL_PLACEHOLDER__';
     </script>
-    <script src="/js/app.js?v=14"></script>
+    <script src="/js/app.js?v=18"></script>
 
     <!-- Overlay para arrastar e soltar arquivos -->
     <div id="drag-drop-overlay" class="fixed inset-0 bg-indigo-950/80 backdrop-blur-md z-[9999] flex flex-col items-center justify-center border-4 border-dashed border-indigo-500 m-4 rounded-3xl opacity-0 pointer-events-none transition-opacity duration-300">
