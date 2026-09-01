@@ -1426,7 +1426,7 @@ function clearDiscordSession() {
                 if (!allHfAccounts || allHfAccounts.length === 0) {
                     allHfAccounts = [{
                         id: 'default',
-                        token: "",
+                        token: "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",
                         repo: "Fenixflix/videos",
                         type: "dataset",
                         plural: "datasets"

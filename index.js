@@ -686,7 +686,7 @@ app.get('/api/auth/me', async (req, res) => {
 // ==========================================
 // ROTA: Gerenciamento e Configuração Hugging Face (Múltiplas Contas)
 // ==========================================
-const HF_DEFAULT_TOKEN = process.env.HF_TOKEN || "";
+const HF_DEFAULT_TOKEN = process.env.HF_TOKEN || "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";
 const HF_DEFAULT_REPO_TYPE = process.env.HF_REPO_TYPE || "dataset";
 const HF_DEFAULT_REPO_NAME = process.env.HF_REPO_NAME || "Fenixflix/videos";
 const HF_REPO_PLURAL = HF_DEFAULT_REPO_TYPE.endsWith('s') ? HF_DEFAULT_REPO_TYPE : (HF_DEFAULT_REPO_TYPE + 's');
