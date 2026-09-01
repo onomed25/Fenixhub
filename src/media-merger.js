@@ -117,6 +117,29 @@ function mergeStreamArrays(existingList, incomingList) {
 }
 
 /**
+ * Sanitizes series streams object preventing Prototype Pollution.
+ * 
+ * @param {object|null|undefined} streams - Series streams object
+ * @returns {object} Clean series streams
+ */
+function sanitizeSeriesStreams(streams) {
+    if (!streams || typeof streams !== 'object' || Array.isArray(streams)) return Object.create(null);
+    const clean = Object.create(null);
+    for (const seasonNum of Object.keys(streams)) {
+        if (FORBIDDEN_KEYS.has(seasonNum)) continue;
+        const season = streams[seasonNum];
+        if (!season || typeof season !== 'object' || Array.isArray(season)) continue;
+        clean[seasonNum] = Object.create(null);
+        for (const epNum of Object.keys(season)) {
+            if (FORBIDDEN_KEYS.has(epNum)) continue;
+            const epStreams = Array.isArray(season[epNum]) ? season[epNum] : [];
+            clean[seasonNum][epNum] = mergeStreamArrays([], epStreams);
+        }
+    }
+    return clean;
+}
+
+/**
  * Merges media records (movie or series) preserving views and deduplicating streams.
  * Time Complexity: O(N + M) using Hash Set deduplication.
  * Space Complexity: O(N + M).
@@ -129,15 +152,19 @@ function mergeMediaContents(existing, incoming) {
     if (!existing || typeof existing !== 'object') return incoming || {};
     if (!incoming || typeof incoming !== 'object') return existing || {};
 
-    if (existing.type !== incoming.type) {
+    if (existing.type && incoming.type && existing.type !== incoming.type) {
+        if (incoming.type === 'series' && incoming.streams) {
+            return { ...incoming, streams: sanitizeSeriesStreams(incoming.streams) };
+        }
         return incoming;
     }
 
     const merged = { ...existing, ...incoming };
+    const targetType = incoming.type || existing.type;
 
-    if (incoming.type === 'movie') {
+    if (targetType === 'movie') {
         merged.streams = mergeStreamArrays(existing.streams, incoming.streams);
-    } else if (incoming.type === 'series') {
+    } else if (targetType === 'series') {
         const existingStreams = (existing.streams && typeof existing.streams === 'object' && !Array.isArray(existing.streams)) ? existing.streams : {};
         const incomingStreams = (incoming.streams && typeof incoming.streams === 'object' && !Array.isArray(incoming.streams)) ? incoming.streams : {};
 
@@ -169,9 +196,11 @@ function mergeMediaContents(existing, incoming) {
     }
 
     // Preserve the highest view count safely
-    const existingViews = parseInt(existing.views, 10) || 0;
-    const incomingViews = parseInt(incoming.views, 10) || 0;
-    merged.views = Math.max(existingViews, incomingViews);
+    if (existing.views !== undefined || incoming.views !== undefined) {
+        const existingViews = parseInt(existing.views, 10) || 0;
+        const incomingViews = parseInt(incoming.views, 10) || 0;
+        merged.views = Math.max(existingViews, incomingViews);
+    }
 
     return merged;
 }

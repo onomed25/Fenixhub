@@ -47,6 +47,7 @@ if (!process.env.JWT_SECRET) {
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const JWT_SECRET = process.env.JWT_SECRET;
+const HTTP_TIMEOUT_MS = 8000;
 
 const app = express();
 app.set('trust proxy', 1); // Render.com (e outros proxies) encaminham X-Forwarded-For
@@ -113,15 +114,46 @@ const diskUpload = multer({
     limits: { fileSize: 2.5 * 1024 * 1024 * 1024 } // limite de 2.5GB para arquivos de vídeo
 });
 
-// Rastreamento de progresso de downloads/uploads para exibição dinâmica e limpa no terminal (sem inundação de console)
-const activeProcesses = new Map();
+/**
+ * Gerenciador de processos em memória com TTL e auto-evicção para evitar memory leaks (CWE-400 / CWE-770).
+ */
+class ProcessTracker {
+    constructor(ttlMs = 300000) {
+        /** @type {Map<string, { name: string, percent: string, updatedAt: number }>} */
+        this.processes = new Map();
+        this.ttlMs = ttlMs;
+        setInterval(() => this.cleanupExpired(), 60000).unref();
+    }
+    update(key, name, progress) {
+        const percent = (progress * 100).toFixed(1);
+        if (percent === '100.0') {
+            this.processes.delete(key);
+        } else {
+            this.processes.set(key, { name, percent, updatedAt: Date.now() });
+        }
+    }
+    remove(key) {
+        this.processes.delete(key);
+    }
+    get(key) {
+        return this.processes.get(key);
+    }
+    cleanupExpired() {
+        const now = Date.now();
+        for (const [key, item] of this.processes.entries()) {
+            if (now - item.updatedAt > this.ttlMs) {
+                this.processes.delete(key);
+            }
+        }
+    }
+}
+const processTracker = new ProcessTracker();
 
 function logProcessProgress(key, name, progress) {
-    const percent = (progress * 100).toFixed(1);
-    activeProcesses.set(key, { name, percent });
+    processTracker.update(key, name, progress);
 
     const parts = [];
-    for (const [k, val] of activeProcesses.entries()) {
+    for (const [k, val] of processTracker.processes.entries()) {
         const shortName = val.name.length > 20 ? val.name.substring(0, 17) + '...' : val.name;
         const label = k.startsWith('download') ? '\x1b[35m[Download]\x1b[0m' : '\x1b[36m[Upload Telegram]\x1b[0m';
         parts.push(`${label} \x1b[33m${shortName}\x1b[0m: \x1b[32m${val.percent}%\x1b[0m`);
@@ -130,11 +162,8 @@ function logProcessProgress(key, name, progress) {
     // Limpa a linha anterior (\x1b[K) e retorna o cursor ao início (\r)
     process.stdout.write(`\r${parts.join(' | ')}\x1b[K`);
 
-    if (percent === '100.0') {
-        activeProcesses.delete(key);
-        if (activeProcesses.size === 0) {
-            process.stdout.write('\n'); // Quebra de linha limpa ao concluir tudo
-        }
+    if (processTracker.processes.size === 0) {
+        process.stdout.write('\n'); // Quebra de linha limpa ao concluir tudo
     }
 }
 
@@ -319,16 +348,16 @@ async function getNuviometaInfo(id, type) {
         const url = `https://nuviometa.wasmer.app/meta/${sanitized.type}/${sanitized.id}.json`;
         const res = await fetch(url, {
             headers: {
-                "User-Agent": "Mozilla/5.0"
-            }
+                "User-Agent": "FenixStudio/1.0"
+            },
+            signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
         });
         if (!res.ok) return null;
         const data = await res.json();
         return data.meta || null;
     } catch (err) {
-        console.error("❌ Erro ao buscar no Nuviometa para o ID", id, ":", err.message);
+        return null;
     }
-    return null;
 }
 
 // ==========================================
@@ -369,18 +398,17 @@ app.get('/api/auth/discord/callback', async (req, res) => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'application/json, text/plain, */*',
-                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Connection': 'keep-alive'
+                'User-Agent': 'FenixStudio/1.0',
+                'Accept': 'application/json, text/plain, */*'
             },
             body: new URLSearchParams({
                 client_id: clientId,
                 client_secret: clientSecret,
                 grant_type: 'authorization_code',
-                code: code,
+                code: String(code),
                 redirect_uri: redirectUri
-            }).toString()
+            }).toString(),
+            signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
         });
         
         if (!tokenResponse.ok) {
@@ -395,11 +423,10 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         const userResponse = await fetch('https://discord.com/api/v10/users/@me', {
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'application/json, text/plain, */*',
-                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Connection': 'keep-alive'
-            }
+                'User-Agent': 'FenixStudio/1.0',
+                'Accept': 'application/json, text/plain, */*'
+            },
+            signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
         });
         
         if (!userResponse.ok) {
@@ -469,8 +496,9 @@ async function checkDiscordMemberRoles(userId) {
             const memberResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${userId}`, {
                 headers: {
                     'Authorization': `Bot ${botToken}`,
-                    'User-Agent': 'FenixStudio (https://fenixstudio.com, 1.0.0)'
-                }
+                    'User-Agent': 'FenixStudio/1.0'
+                },
+                signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
             });
             if (memberResponse.ok) {
                 const memberData = await memberResponse.json();
@@ -486,7 +514,8 @@ async function checkDiscordMemberRoles(userId) {
                 // Tenta também buscar nomes de cargos da guilda para match por nome
                 try {
                     const rolesRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
-                        headers: { 'Authorization': `Bot ${botToken}` }
+                        headers: { 'Authorization': `Bot ${botToken}`, 'User-Agent': 'FenixStudio/1.0' },
+                        signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
                     });
                     if (rolesRes.ok) {
                         const allRoles = await rolesRes.json();
@@ -672,11 +701,16 @@ const getHfAccountsList = async () => {
 app.get('/api/hf/config', async (req, res) => {
     try {
         const accounts = await getHfAccountsList();
+        if (accounts.length === 0) return res.status(404).json({ erro: 'Nenhuma conta configurada.' });
+        const token = extractToken(req);
+        const user = verifyToken(token);
+        const adminSenha = req.headers['x-admin-password'];
+        const isPrivileged = checkPassword(adminSenha, ADMIN_PASSWORD) || (user && user.isAjudante);
         const requestedId = req.query.account_id;
         const active = accounts.find(a => a.id === requestedId) || accounts[0];
 
         res.json({
-            token: active.token,
+            token: isPrivileged ? active.token : 'hf_***MASKED***',
             repo: active.repo,
             type: active.type,
             plural: active.plural,
@@ -684,7 +718,7 @@ app.get('/api/hf/config', async (req, res) => {
             accounts: accounts.map(a => ({
                 id: a.id,
                 name: a.name,
-                token: a.token,
+                token: isPrivileged ? a.token : 'hf_***MASKED***',
                 repo: a.repo,
                 type: a.type,
                 plural: a.plural,
@@ -693,8 +727,8 @@ app.get('/api/hf/config', async (req, res) => {
                 isDb: a.id.startsWith('db_')
             }))
         });
-    } catch (err) {
-        res.status(500).json({ erro: err.message });
+    } catch {
+        res.status(500).json({ erro: 'Falha ao buscar configurações HF.' });
     }
 });
 
@@ -716,8 +750,8 @@ app.post('/api/hf/accounts', mutationLimiter, async (req, res) => {
         const query = 'INSERT INTO hf_contas (nome, token, repo, tipo) VALUES ($1, $2, $3, $4) RETURNING *';
         const result = await pool.query(query, [nome || repo, token.trim(), repo.trim(), tipo || 'dataset']);
         return res.json({ sucesso: true, conta: result.rows[0] });
-    } catch (e) {
-        return res.status(500).json({ erro: e.message });
+    } catch {
+        return res.status(500).json({ erro: 'Erro ao cadastrar conta HF no banco de dados.' });
     }
 });
 
@@ -735,8 +769,8 @@ app.delete('/api/hf/accounts/:id', mutationLimiter, async (req, res) => {
     try {
         await pool.query('DELETE FROM hf_contas WHERE id = $1', [id]);
         return res.json({ sucesso: true });
-    } catch (e) {
-        return res.status(500).json({ erro: e.message });
+    } catch {
+        return res.status(500).json({ erro: 'Erro ao remover conta HF do banco de dados.' });
     }
 });
 
@@ -824,43 +858,28 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
         return res.status(401).json({ erro: 'Você precisa estar logado com o Discord para salvar links.' });
     }
 
-    // ==========================================
-    // VERIFICAR EXISTÊNCIA DO ARQUIVO PARA LÓGICA DE EDIÇÃO/AUTORIA
-    // ==========================================
-    let isEdit = false;
-    let existingContent = null;
-    try {
-        const checkQuery = 'SELECT conteudo FROM arquivos_json WHERE nome_do_json = $1;';
-        const checkRes = await pool.query(checkQuery, [nome]);
-        if (checkRes.rows.length > 0) {
-            isEdit = true;
-            existingContent = typeof checkRes.rows[0].conteudo === 'string'
-                ? JSON.parse(checkRes.rows[0].conteudo)
-                : checkRes.rows[0].conteudo;
-        }
-    } catch (checkErr) {
-        console.error("⚠️ Erro ao buscar dados existentes:", checkErr.message);
-    }
-
-    const isAjudante = user && user.isAjudante;
-    const canOverwrite = isAdmin || isAjudante;
+    const isAjudante = Boolean(user && user.isAjudante);
+    const forcePendente = req.query.force_pendente === 'true' || req.body.force_pendente === 'true';
+    const isPendente = (!isAdmin && !isAjudante) || forcePendente;
+    const isGenerator = req.query.generator === 'true';
 
     // Se estiver logado via Discord, forçar a autoria das streams e registrar o cargo
     if (user && !isAdmin) {
         const discordName = user.global_name || user.username;
         const roleStr = isAjudante ? 'ajudante' : 'membro';
         
-        // Preserve o colaborador fornecido no JSON, mas faça fallback para o discordName
         parsedConteudo.colaborador = parsedConteudo.colaborador || discordName;
         parsedConteudo.colaborador_role = parsedConteudo.colaborador_role || roleStr;
         parsedConteudo.colaborador_id = parsedConteudo.colaborador_id || user.id;
         parsedConteudo.colaborador_avatar = parsedConteudo.colaborador_avatar || user.avatar;
         
         const injectColaboradorIntoStream = (s) => {
-            s.colaborador = s.colaborador || discordName;
-            s.colaborador_role = s.colaborador_role || roleStr;
-            s.colaborador_id = s.colaborador_id || user.id;
-            s.colaborador_avatar = s.colaborador_avatar || user.avatar;
+            if (s && typeof s === 'object') {
+                s.colaborador = s.colaborador || discordName;
+                s.colaborador_role = s.colaborador_role || roleStr;
+                s.colaborador_id = s.colaborador_id || user.id;
+                s.colaborador_avatar = s.colaborador_avatar || user.avatar;
+            }
         };
 
         if (parsedConteudo.type === 'movie' && Array.isArray(parsedConteudo.streams)) {
@@ -885,8 +904,8 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
         let imdbID = "";
         if (typeof parsedConteudo.id === 'string' && parsedConteudo.id.startsWith('tt')) {
             imdbID = parsedConteudo.id;
-        } else if (nome && nome.startsWith('tt')) {
-            imdbID = nome;
+        } else if (nome && String(nome).startsWith('tt')) {
+            imdbID = String(nome);
         }
 
         if (imdbID) {
@@ -912,63 +931,60 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
     } catch (enrichErr) {
         console.error("⚠️ Falha ao enriquecer metadados do JSON:", enrichErr.message);
     }
-    // ==========================================
 
     let finalConteudo = parsedConteudo;
     injectDateIntoStreams(finalConteudo);
 
-    const forcePendente = req.query.force_pendente === 'true' || req.body.force_pendente === 'true';
-    const isPendente = (!isAdmin && !isAjudante) || forcePendente;
-    const isGenerator = req.query.generator === 'true';
-
-    if (isEdit) {
-        if (!isAdmin && !isGenerator) {
-            finalConteudo = mergeMediaContents(existingContent, parsedConteudo);
-            console.log(`[Upload] Mesclando conteúdo existente para '${nome}'`);
-        } else {
-            console.log(`[Upload] Sobrescrevendo conteúdo para '${nome}' (isAdmin=${isAdmin}, isGenerator=${isGenerator})`);
-        }
-    }
-
+    const client = await pool.connect();
     try {
+        await client.query('BEGIN');
+
+        const checkRes = await client.query('SELECT conteudo FROM arquivos_json WHERE nome_do_json = $1 FOR UPDATE;', [nome]);
+        if (checkRes.rows.length > 0) {
+            const existing = typeof checkRes.rows[0].conteudo === 'string'
+                ? JSON.parse(checkRes.rows[0].conteudo)
+                : checkRes.rows[0].conteudo;
+
+            if (!isAdmin && !isGenerator) {
+                finalConteudo = mergeMediaContents(existing, parsedConteudo);
+            }
+        }
+
         if (isPendente) {
-            // Em vez de alterar o JSON principal para pendente (tirando a série toda do ar), salvamos numa fila separada
-            const query = `
+            const pendenteQuery = `
                 INSERT INTO envios_pendentes (nome_do_json, conteudo) 
                 VALUES ($1, $2)
                 ON CONFLICT (nome_do_json) 
-                DO UPDATE SET conteudo = EXCLUDED.conteudo, criado_em = CURRENT_TIMESTAMP
-                RETURNING *;
+                DO UPDATE SET conteudo = EXCLUDED.conteudo, criado_em = CURRENT_TIMESTAMP;
             `;
-            await pool.query(query, [nome, JSON.stringify(finalConteudo)]);
-            res.status(201).json({ mensagem: `Seu envio para '${nome}' foi recebido e aguarda aprovação da moderação.` });
+            await client.query(pendenteQuery, [nome, JSON.stringify(finalConteudo)]);
+            await client.query('COMMIT');
+            return res.status(201).json({ mensagem: `Seu envio para '${nome}' foi recebido e aguarda aprovação da moderação.` });
         } else {
-            // Se for admin/ajudante, salva e publica imediatamente (ou atualiza)
-            const query = `
+            const publishQuery = `
                 INSERT INTO arquivos_json (nome_do_json, conteudo, is_pendente) 
                 VALUES ($1, $2, FALSE)
                 ON CONFLICT (nome_do_json) 
-                DO UPDATE SET conteudo = EXCLUDED.conteudo, is_pendente = FALSE, criado_em = CURRENT_TIMESTAMP
-                RETURNING *;
+                DO UPDATE SET conteudo = EXCLUDED.conteudo, is_pendente = FALSE, criado_em = CURRENT_TIMESTAMP;
             `;
-            await pool.query(query, [nome, JSON.stringify(finalConteudo)]);
-            res.status(201).json({ mensagem: `JSON '${nome}' publicado com sucesso!` });
+            await client.query(publishQuery, [nome, JSON.stringify(finalConteudo)]);
+            await client.query('COMMIT');
+            return res.status(201).json({ mensagem: `JSON '${nome}' publicado com sucesso!` });
         }
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ erro: 'Erro interno ao salvar no banco de dados.' });
+        await client.query('ROLLBACK');
+        console.error('[Upload Transaction Error]:', err);
+        return res.status(500).json({ erro: 'Falha ao salvar dados no banco de dados.' });
+    } finally {
+        client.release();
     }
 });
 
 // ==========================================
 // ROTA 2: Listar todos os JSONs (/api/all)
 // ==========================================
-app.get('/api/all', async (req, res) => {
-    res.setHeader('Location', '/api/catalog');
-    res.status(302).json({ 
-        message: 'Redirecting to /api/catalog',
-        redirect: '/api/catalog'
-    });
+app.get('/api/all', (_req, res) => {
+    res.redirect(301, '/api/catalog');
 });
 /*
     const token = extractToken(req);
@@ -1359,21 +1375,27 @@ app.post('/api/arquivos/aprovar', mutationLimiter, async (req, res) => {
         return res.status(401).json({ erro: 'Não autorizado.' });
     }
 
+    const client = await pool.connect();
     try {
-        // 1. Busca da fila
-        const getPending = await pool.query('SELECT conteudo FROM envios_pendentes WHERE nome_do_json = $1 ORDER BY id DESC LIMIT 1;', [nome]);
-        if (getPending.rowCount === 0) return res.status(404).json({ erro: 'Arquivo pendente não encontrado.' });
-        
-        const conteudoToSave = conteudo || getPending.rows[0].conteudo;
+        await client.query('BEGIN');
 
-        // 2. Mescla e Pública
+        // 1. Busca da fila com lock pessimista
+        const pendingRes = await client.query('SELECT conteudo FROM envios_pendentes WHERE nome_do_json = $1 FOR UPDATE;', [nome]);
+        if (pendingRes.rowCount === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ erro: 'Envio pendente não encontrado.' });
+        }
+        
+        const conteudoToSave = conteudo || pendingRes.rows[0].conteudo;
+
+        // 2. Mescla e Publica
         const upsertQuery = `
             INSERT INTO arquivos_json (nome_do_json, conteudo, is_pendente) 
             VALUES ($1, $2, FALSE)
             ON CONFLICT (nome_do_json) 
             DO UPDATE SET conteudo = EXCLUDED.conteudo, is_pendente = FALSE, criado_em = CURRENT_TIMESTAMP;
         `;
-        await pool.query(upsertQuery, [nome, JSON.stringify(conteudoToSave)]);
+        await client.query(upsertQuery, [nome, JSON.stringify(conteudoToSave)]);
         
         // 3. Gerencia a fila
         if (restantePendente) {
@@ -1381,8 +1403,8 @@ app.post('/api/arquivos/aprovar', mutationLimiter, async (req, res) => {
             if (restantePendente.type === 'movie' && restantePendente.streams && restantePendente.streams.length > 0) {
                 temRestante = true;
             } else if (restantePendente.type === 'series' && restantePendente.streams) {
-                for (let s in restantePendente.streams) {
-                    for (let e in restantePendente.streams[s]) {
+                for (const s in restantePendente.streams) {
+                    for (const e in restantePendente.streams[s]) {
                         if (restantePendente.streams[s][e].length > 0) {
                             temRestante = true;
                             break;
@@ -1393,18 +1415,22 @@ app.post('/api/arquivos/aprovar', mutationLimiter, async (req, res) => {
             }
 
             if (temRestante) {
-                await pool.query('UPDATE envios_pendentes SET conteudo = $1 WHERE nome_do_json = $2', [JSON.stringify(restantePendente), nome]);
+                await client.query('UPDATE envios_pendentes SET conteudo = $1 WHERE nome_do_json = $2;', [JSON.stringify(restantePendente), nome]);
             } else {
-                await pool.query('DELETE FROM envios_pendentes WHERE nome_do_json = $1;', [nome]);
+                await client.query('DELETE FROM envios_pendentes WHERE nome_do_json = $1;', [nome]);
             }
         } else {
-            await pool.query('DELETE FROM envios_pendentes WHERE nome_do_json = $1;', [nome]);
+            await client.query('DELETE FROM envios_pendentes WHERE nome_do_json = $1;', [nome]);
         }
         
-        res.json({ sucesso: true, mensagem: 'Arquivo aprovado e publicado com sucesso!' });
+        await client.query('COMMIT');
+        res.json({ sucesso: true, mensagem: 'Item aprovado e publicado com sucesso.' });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ erro: 'Erro ao aprovar.' });
+        await client.query('ROLLBACK');
+        console.error('[Aprovar Error]:', err);
+        res.status(500).json({ erro: 'Erro ao processar aprovação.' });
+    } finally {
+        client.release();
     }
 });
 
@@ -1703,16 +1729,19 @@ app.get('/api/tmdb/*path', async (req, res) => {
         } else {
             urlObj.searchParams.set('api_key', tmdbKey);
         }
-        
-        const response = await fetch(urlObj.toString(), { headers });
+
+        const response = await fetch(urlObj.toString(), {
+            headers,
+            signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
+        });
         if (!response.ok) {
-            const errorText = await response.text();
-            return res.status(response.status).json({ erro: "Erro na API TMDB: " + response.statusText, detalhe: errorText });
+            return res.status(response.status).json({ erro: 'Falha na resposta do TMDB.' });
         }
         const data = await response.json();
         res.json(data);
-    } catch (e) {
-        console.error("Erro no proxy do TMDB:", e);
-        res.status(500).json({ erro: "TMDB error: " + e.message });
+    } catch {
+        res.status(500).json({ erro: 'Falha na comunicação com TMDB.' });
     }
 });
+
+module.exports = { app, pool, processTracker };
