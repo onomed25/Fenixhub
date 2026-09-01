@@ -245,10 +245,10 @@ function clearDiscordSession() {
                 }
             }
 
-            // Botão de Upload em Lote no Catálogo (Apenas Admin)
+            // Botão de Upload em Lote no Catálogo (Apenas Admin e Colaboradores/Ajudantes)
             const btnUploadLote = document.getElementById('btnUploadLote');
             if (btnUploadLote) {
-                if (isLogged) {
+                if (isLogged || isAjudante || isColaborador) {
                     btnUploadLote.classList.remove('hidden');
                     btnUploadLote.classList.add('flex');
                 } else {
@@ -1424,13 +1424,8 @@ function clearDiscordSession() {
                 } catch (e) {}
 
                 if (!allHfAccounts || allHfAccounts.length === 0) {
-                    allHfAccounts = [{
-                        id: 'default',
-                        token: "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",
-                        repo: "Fenixflix/videos",
-                        type: "dataset",
-                        plural: "datasets"
-                    }];
+                    showToast("Nenhuma conta Hugging Face configurada no servidor.", "error");
+                    return;
                 }
 
                 let hubModule = null;
@@ -1938,9 +1933,10 @@ function clearDiscordSession() {
                 let meta = null;
                 let foundType = '';
                 
+                const safeId = encodeURIComponent(String(id).trim());
                 if (type === 'series') {
                     try {
-                        const res = await fetch(`https://nuviometa.wasmer.app/meta/series/${id}.json`);
+                        const res = await fetch(`https://nuviometa.wasmer.app/meta/series/${safeId}.json`);
                         if (res.ok) {
                             const data = await res.json();
                             if (data && data.meta) {
@@ -1953,7 +1949,7 @@ function clearDiscordSession() {
                     }
                 } else {
                     try {
-                        const res = await fetch(`https://nuviometa.wasmer.app/meta/movie/${id}.json`);
+                        const res = await fetch(`https://nuviometa.wasmer.app/meta/movie/${safeId}.json`);
                         if (res.ok) {
                             const data = await res.json();
                             if (data && data.meta) {
@@ -3421,7 +3417,9 @@ function clearDiscordSession() {
                     await Promise.all(batch.map(async (item) => {
                         item._fetchingMeta = true;
                         try {
-                            const res = await fetch(`https://nuviometa.wasmer.app/meta/${item.type}/${item.id}.json`);
+                            const safeType = encodeURIComponent(String(item.type || 'series').trim());
+                            const safeId = encodeURIComponent(String(item.id || '').trim());
+                            const res = await fetch(`https://nuviometa.wasmer.app/meta/${safeType}/${safeId}.json`);
                             if (res.ok) {
                                 const data = await res.json();
                                 if (data && data.meta) {
@@ -4582,37 +4580,48 @@ function clearDiscordSession() {
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
-        function handleDiscordAuth() {
+        async function handleDiscordAuth() {
             const loginBtn = document.getElementById('discordLoginBtn');
             if (loginBtn) {
                 const currentOrigin = window.location.origin + window.location.pathname;
                 loginBtn.href = `${API_URL || window.location.origin}/api/auth/discord?state=${encodeURIComponent(currentOrigin)}`;
             }
 
-            const params = new URLSearchParams(window.location.search);
-            let token = params.get('discord_token');
-            if (!token) {
-                const cookieMatch = document.cookie.match(/(?:^|;\s*)discord_token=([^;]*)/);
-                if (cookieMatch) token = cookieMatch[1];
+            // Limpa parâmetros da URL por segurança
+            if (window.location.search) {
+                const params = new URLSearchParams(window.location.search);
+                if (params.has('discord_token') || params.has('discord_username') || params.has('discord_id') || params.has('state')) {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
             }
-            const username = params.get('discord_username');
-            const globalName = params.get('discord_global_name');
-            const avatar = params.get('discord_avatar');
-            const id = params.get('discord_id');
-            const isAjudante = params.get('is_ajudante');
-            const isColaborador = params.get('is_colaborador');
-            
-            if (token || username) {
-                if (token) localStorage.setItem('discord_token', token);
-                if (username) localStorage.setItem('discord_username', username);
-                if (globalName) localStorage.setItem('discord_global_name', globalName);
-                if (avatar) localStorage.setItem('discord_avatar', avatar);
-                if (id) localStorage.setItem('discord_id', id);
-                if (isAjudante) localStorage.setItem('is_ajudante', isAjudante === 'true' ? 'true' : 'false');
-                if (isColaborador) localStorage.setItem('is_colaborador', isColaborador === 'true' ? 'true' : 'false');
-                
-                // Clean URL parameters
-                window.history.replaceState({}, document.title, window.location.pathname);
+
+            // Sincroniza sessão do Discord via cookie HttpOnly seguro chamando /api/auth/me
+            try {
+                const token = localStorage.getItem('discord_token');
+                const headers = {};
+                if (token && token !== 'null' && token !== 'undefined') {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+                const res = await fetch('/api/auth/me', {
+                    headers,
+                    credentials: 'include'
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.autenticado) {
+                        if (data.token) localStorage.setItem('discord_token', data.token);
+                        if (data.username) localStorage.setItem('discord_username', data.username);
+                        if (data.global_name) localStorage.setItem('discord_global_name', data.global_name);
+                        if (data.avatar) localStorage.setItem('discord_avatar', data.avatar);
+                        if (data.id) localStorage.setItem('discord_id', data.id);
+                        localStorage.setItem('is_ajudante', data.isAjudante ? 'true' : 'false');
+                        localStorage.setItem('is_colaborador', data.isColaborador ? 'true' : 'false');
+                    }
+                } else if (res.status === 401) {
+                    clearDiscordSession();
+                }
+            } catch (e) {
+                console.warn('Erro ao sincronizar sessão Discord:', e.message);
             }
             
             updateDiscordUI();
@@ -4741,9 +4750,11 @@ function clearDiscordSession() {
             if (badge) badge.remove();
         }
 
-        function discordLogout() {
+        async function discordLogout() {
             clearDiscordSession();
-            document.cookie = "discord_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+            try {
+                await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+            } catch (e) {}
             updateDiscordUI();
             updateAdminUI();
             showToast("Desconectado com sucesso.", "success");
@@ -4792,8 +4803,9 @@ function clearDiscordSession() {
         const overlay = document.getElementById('drag-drop-overlay');
         
         window.addEventListener('dragenter', (e) => {
-            const isLogged = sessionStorage.getItem('fenixflix_senha') !== null;
-            if (!isLogged) return;
+            const isAdmin = sessionStorage.getItem('fenixflix_senha') !== null;
+            const isHelper = localStorage.getItem('is_ajudante') === 'true' || localStorage.getItem('is_colaborador') === 'true';
+            if (!isAdmin && !isHelper) return;
             e.preventDefault();
             if (overlay) {
                 overlay.classList.remove('opacity-0', 'pointer-events-none');
@@ -4817,9 +4829,10 @@ function clearDiscordSession() {
                 overlay.classList.remove('opacity-100');
                 overlay.classList.add('opacity-0', 'pointer-events-none');
                 
-                const isLogged = sessionStorage.getItem('fenixflix_senha') !== null;
-                if (!isLogged) {
-                    return showToast("Apenas administradores podem importar arquivos JSON.", "error");
+                const isAdmin = sessionStorage.getItem('fenixflix_senha') !== null;
+                const isHelper = localStorage.getItem('is_ajudante') === 'true' || localStorage.getItem('is_colaborador') === 'true';
+                if (!isAdmin && !isHelper) {
+                    return showToast("Apenas administradores ou ajudantes podem importar arquivos JSON.", "error");
                 }
                 
                 const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.json'));

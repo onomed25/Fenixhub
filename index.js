@@ -16,7 +16,25 @@ const compression = require('compression');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 
-// Validar variáveis de ambiente críticas
+const {
+    timingSafeCompare,
+    checkPassword,
+    checkPasswordAsync,
+    extractToken,
+    generateToken,
+    verifyToken,
+    sanitizeRedirectUrl,
+    validateTmdbPath,
+    sanitizeNuviometaParams,
+    getDatabaseSslConfig
+} = require('./src/security');
+
+const {
+    injectDateIntoStreams,
+    mergeMediaContents
+} = require('./src/media-merger');
+
+// Validar variáveis de ambiente críticas (SEC-01)
 if (!process.env.ADMIN_PASSWORD) {
     console.error("ERRO FATAL: ADMIN_PASSWORD não configurada no .env");
     process.exit(1);
@@ -27,50 +45,8 @@ if (!process.env.JWT_SECRET) {
     process.exit(1);
 }
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "sua_senha_padrao_aqui";
-
-function extractToken(req) {
-    const authHeader = req.headers.authorization;
-    let token = authHeader && authHeader.split(' ')[1];
-    if (!token && req.cookies && req.cookies.discord_token) {
-        token = req.cookies.discord_token;
-    }
-    return token;
-}
-
-
-// Configuração JWT para Discord
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const JWT_SECRET = process.env.JWT_SECRET;
-
-function generateToken(payload) {
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: '30d' });
-}
-
-
-function checkPassword(input, actual) {
-    if (!input || !actual) return false;
-    const cleanInput = String(input).trim();
-    const cleanActual = String(actual).trim();
-    if (cleanInput === cleanActual) return true; // Suporte para senha configurada em texto puro no .env
-    try {
-        if (cleanActual.startsWith('$2a$') || cleanActual.startsWith('$2b$') || cleanActual.startsWith('$2y$')) {
-            return bcrypt.compareSync(cleanInput, cleanActual);
-        }
-        return false;
-    } catch (e) {
-        return false;
-    }
-}
-
-function verifyToken(token) {
-    if (!token) return null;
-    try {
-        return jwt.verify(token, JWT_SECRET);
-    } catch (err) {
-        return null;
-    }
-}
-
 
 const app = express();
 app.set('trust proxy', 1); // Render.com (e outros proxies) encaminham X-Forwarded-For
@@ -81,13 +57,49 @@ app.use(helmet({
 }));
 app.use(compression());
 app.use(cookieParser());
-// Rate limiter removido conforme solicitado
-// const limiter = rateLimit({
-//     windowMs: 15 * 60 * 1000,
-//     max: 500, 
-//     message: { erro: 'Muitas requisições deste IP, tente novamente mais tarde.' }
-// });
-// app.use('/api/', limiter);
+
+// Rate Limiters especializados para proteção contra DDoS e Força Bruta (SEC-05)
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 500,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { erro: 'Muitas requisições deste IP, tente novamente mais tarde.' }
+});
+
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 15, // 15 tentativas a cada 15 minutos
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { erro: 'Muitas tentativas de autenticação. Tente novamente mais tarde.' }
+});
+
+const uploadLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { erro: 'Limite de uploads atingido temporariamente. Tente novamente mais tarde.' }
+});
+
+const mutationLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 40,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { erro: 'Muitas requisições de exclusão/modificação. Tente novamente mais tarde.' }
+});
+
+const submissionLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 25,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { erro: 'Muitos envios/pedidos realizados. Tente novamente mais tarde.' }
+});
+
+app.use('/api/', apiLimiter);
 
 const upload = multer();
 
@@ -141,11 +153,11 @@ app.get('/health', (req, res) => {
 
 
 const net = require('net');
-// Configuração do banco de dados (Pool pequeno para economizar memória)
+// Configuração do banco de dados (SEC-06: SSL Seguro)
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     max: 5, // Limita as conexões simultâneas
-    ssl: { rejectUnauthorized: false }, // Necessário para serviços gerenciados como Render/Supabase
+    ssl: getDatabaseSslConfig(),
     // Força a conexão a utilizar apenas IPv4 interceptando o método connect do socket
     stream: (config) => {
         const socket = new net.Socket();
@@ -299,7 +311,12 @@ const RPDB_BASE_URL = "https://api.ratingposterdb.com/t0-free-rpdb";
 
 async function getNuviometaInfo(id, type) {
     try {
-        const url = `https://nuviometa.wasmer.app/meta/${type}/${id}.json`;
+        const sanitized = sanitizeNuviometaParams(id, type);
+        if (!sanitized) {
+            console.warn("⚠️ Parâmetros inválidos para Nuviometa:", { id, type });
+            return null;
+        }
+        const url = `https://nuviometa.wasmer.app/meta/${sanitized.type}/${sanitized.id}.json`;
         const res = await fetch(url, {
             headers: {
                 "User-Agent": "Mozilla/5.0"
@@ -312,93 +329,6 @@ async function getNuviometaInfo(id, type) {
         console.error("❌ Erro ao buscar no Nuviometa para o ID", id, ":", err.message);
     }
     return null;
-}
-
-// Função para mesclar os streams existentes com as novas fontes de forma inteligente
-
-function injectDateIntoStreams(conteudo) {
-    const now = new Date().toISOString();
-    if (conteudo.type === 'movie' && Array.isArray(conteudo.streams)) {
-        conteudo.streams.forEach(s => {
-            if (!s.criado_em) s.criado_em = now;
-        });
-    } else if (conteudo.type === 'series' && conteudo.streams && typeof conteudo.streams === 'object') {
-        Object.keys(conteudo.streams).forEach(seasonNum => {
-            const season = conteudo.streams[seasonNum] || {};
-            Object.keys(season).forEach(epNum => {
-                const epStreams = season[epNum] || [];
-                if (Array.isArray(epStreams)) {
-                    epStreams.forEach(s => {
-                        if (!s.criado_em) s.criado_em = now;
-                    });
-                }
-            });
-        });
-    }
-}
-
-function mergeMediaContents(existing, incoming) {
-    if (!existing) return incoming;
-    if (existing.type !== incoming.type) {
-        return incoming;
-    }
-
-    const merged = { ...existing, ...incoming };
-
-    if (incoming.type === 'movie') {
-        const existingStreams = Array.isArray(existing.streams) ? existing.streams : [];
-        const incomingStreams = Array.isArray(incoming.streams) ? incoming.streams : [];
-
-        const combinedStreams = [...existingStreams];
-        
-        incomingStreams.forEach(inStream => {
-            const exists = combinedStreams.some(exStream => 
-                exStream.url === inStream.url || 
-                (exStream.name === inStream.name && exStream.url === inStream.url)
-            );
-            if (!exists) {
-                combinedStreams.push(inStream);
-            }
-        });
-        merged.streams = combinedStreams;
-    } else if (incoming.type === 'series') {
-        const existingStreams = (existing.streams && typeof existing.streams === 'object' && !Array.isArray(existing.streams)) ? existing.streams : {};
-        const incomingStreams = (incoming.streams && typeof incoming.streams === 'object' && !Array.isArray(incoming.streams)) ? incoming.streams : {};
-
-        const mergedStreams = JSON.parse(JSON.stringify(existingStreams)); // Clone profundo
-
-        Object.keys(incomingStreams).forEach(seasonNum => {
-            if (!mergedStreams[seasonNum]) {
-                mergedStreams[seasonNum] = {};
-            }
-            const incomingSeason = incomingStreams[seasonNum] || {};
-            const mergedSeason = mergedStreams[seasonNum];
-
-            Object.keys(incomingSeason).forEach(epNum => {
-                if (!mergedSeason[epNum]) {
-                    mergedSeason[epNum] = [];
-                }
-                const incomingEpStreams = Array.isArray(incomingSeason[epNum]) ? incomingSeason[epNum] : [];
-                const mergedEpStreams = mergedSeason[epNum];
-
-                incomingEpStreams.forEach(inStream => {
-                    const exists = mergedEpStreams.some(exStream => 
-                        exStream.url === inStream.url ||
-                        (exStream.name === inStream.name && exStream.url === inStream.url)
-                    );
-                    if (!exists) {
-                        mergedEpStreams.push(inStream);
-                    }
-                });
-            });
-        });
-        merged.streams = mergedStreams;
-    }
-
-    // views: manter a maior contagem de visualizações
-    merged.views = Math.max(parseInt(existing.views || 0, 10), parseInt(incoming.views || 0, 10));
-
-    return merged;
 }
 
 // ==========================================
@@ -503,34 +433,18 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         }
         
         const token = generateToken(payload);
+        const safeRedirect = sanitizeRedirectUrl(state, '/');
         
-        let baseRedirect = '/';
-        const stateStr = String(state || '').trim();
-        
-        if (stateStr) {
-            try {
-                // Previne completamente Open Redirect forçando apenas o path e search
-                const parsed = new URL(stateStr, 'http://localhost');
-                baseRedirect = parsed.pathname + parsed.search;
-            } catch (e) {
-                console.error("Erro ao validar state redirect URI:", e.message);
-                baseRedirect = '/';
-            }
-        }
-        
-        // Garante rigidamente o tipo String para evitar falhas de Type Validation apontadas pelo Snyk
-        baseRedirect = String(baseRedirect);
-        const separator = baseRedirect.includes('?') ? '&' : '?';
-        
-        // Define o token via cookie seguro (evita vazamento)
+        // Define o token via cookie httpOnly seguro (evita roubo de sessão via XSS - SEC-04)
         res.cookie('discord_token', token, {
             maxAge: 30 * 24 * 60 * 60 * 1000,
-            httpOnly: false,
+            httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax'
+            sameSite: 'lax',
+            path: '/'
         }); 
         
-        res.redirect(`${baseRedirect}${separator}discord_username=${encodeURIComponent(payload.username)}&discord_global_name=${encodeURIComponent(payload.global_name)}&discord_avatar=${encodeURIComponent(payload.avatar || '')}&discord_id=${payload.id}&is_ajudante=${isAjudante}&is_colaborador=${isColaborador}`);
+        res.redirect(safeRedirect);
     } catch (err) {
         console.error("Erro no callback do Discord:", err);
         res.status(500).send("Erro interno durante autenticação do Discord.");
@@ -651,9 +565,10 @@ app.get('/api/auth/me', async (req, res) => {
         const newToken = generateToken(payload);
         res.cookie('discord_token', newToken, {
             maxAge: 30 * 24 * 60 * 60 * 1000,
-            httpOnly: false,
+            httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax'
+            sameSite: 'lax',
+            path: '/'
         });
 
         return res.json({
@@ -682,24 +597,38 @@ app.get('/api/auth/me', async (req, res) => {
     }
 });
 
+// ROTA: Logout Discord seguro
+app.post('/api/auth/logout', (req, res) => {
+    res.clearCookie('discord_token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/'
+    });
+    res.json({ sucesso: true, mensagem: 'Desconectado com sucesso.' });
+});
+
 
 // ==========================================
 // ROTA: Gerenciamento e Configuração Hugging Face (Múltiplas Contas)
 // ==========================================
-const HF_DEFAULT_TOKEN = process.env.HF_TOKEN || "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";
+const HF_DEFAULT_TOKEN = process.env.HF_TOKEN || "";
 const HF_DEFAULT_REPO_TYPE = process.env.HF_REPO_TYPE || "dataset";
 const HF_DEFAULT_REPO_NAME = process.env.HF_REPO_NAME || "Fenixflix/videos";
 const HF_REPO_PLURAL = HF_DEFAULT_REPO_TYPE.endsWith('s') ? HF_DEFAULT_REPO_TYPE : (HF_DEFAULT_REPO_TYPE + 's');
 
 const getHfAccountsList = async () => {
-    const list = [{
-        id: 'default',
-        name: `Conta Principal (${HF_DEFAULT_REPO_NAME})`,
-        token: HF_DEFAULT_TOKEN,
-        repo: HF_DEFAULT_REPO_NAME,
-        type: HF_DEFAULT_REPO_TYPE,
-        plural: HF_REPO_PLURAL
-    }];
+    const list = [];
+    if (HF_DEFAULT_TOKEN) {
+        list.push({
+            id: 'default',
+            name: `Conta Principal (${HF_DEFAULT_REPO_NAME})`,
+            token: HF_DEFAULT_TOKEN,
+            repo: HF_DEFAULT_REPO_NAME,
+            type: HF_DEFAULT_REPO_TYPE,
+            plural: HF_REPO_PLURAL
+        });
+    }
 
     if (process.env.HF_ACCOUNTS) {
         try {
@@ -770,13 +699,13 @@ app.get('/api/hf/config', async (req, res) => {
 });
 
 // Adicionar nova conta do Hugging Face (Admin ou Ajudante)
-app.post('/api/hf/accounts', async (req, res) => {
+app.post('/api/hf/accounts', mutationLimiter, async (req, res) => {
     const adminSenha = req.headers['x-admin-password'] || req.body.senha;
     const authHeader = req.headers['authorization'];
     const discordToken = authHeader ? authHeader.replace('Bearer ', '') : req.cookies?.discord_token;
     const user = verifyToken(discordToken);
 
-    if (!checkPassword(adminSenha) && (!user || !user.isAjudante)) {
+    if (!checkPassword(adminSenha, ADMIN_PASSWORD) && (!user || !user.isAjudante)) {
         return res.status(401).json({ erro: 'Não autorizado. Senha de administrador necessária.' });
     }
     const { nome, token, repo, tipo } = req.body;
@@ -793,13 +722,13 @@ app.post('/api/hf/accounts', async (req, res) => {
 });
 
 // Excluir conta adicional do Hugging Face (Admin ou Ajudante)
-app.delete('/api/hf/accounts/:id', async (req, res) => {
+app.delete('/api/hf/accounts/:id', mutationLimiter, async (req, res) => {
     const adminSenha = req.headers['x-admin-password'] || req.query.senha;
     const authHeader = req.headers['authorization'];
     const discordToken = authHeader ? authHeader.replace('Bearer ', '') : req.cookies?.discord_token;
     const user = verifyToken(discordToken);
 
-    if (!checkPassword(adminSenha) && (!user || !user.isAjudante)) {
+    if (!checkPassword(adminSenha, ADMIN_PASSWORD) && (!user || !user.isAjudante)) {
         return res.status(401).json({ erro: 'Não autorizado. Senha de administrador necessária.' });
     }
     const id = req.params.id.replace('db_', '');
@@ -848,7 +777,7 @@ app.get(['/v/:arg1/:arg2', '/v/:arg1', '/api/stream/hf/:arg1/:arg2', '/api/strea
 // ==========================================
 // ROTA 1: Enviar JSON (Pública - Sem senha)
 // ==========================================
-app.post('/upload', upload.none(), async (req, res) => {
+app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
     const { nome, conteudo, senha } = req.body;
 
     if (!nome || !conteudo) {
@@ -1082,7 +1011,7 @@ app.get('/api/catalog', async (req, res) => {
 // ==========================================
 // ROTA 2c: Apagar JSON (/api/delete)
 // ==========================================
-app.delete('/api/delete', async (req, res) => {
+app.delete('/api/delete', mutationLimiter, async (req, res) => {
     const { id, senha } = req.body;
     const adminPassword = ADMIN_PASSWORD;
 
@@ -1221,7 +1150,7 @@ app.get('/api/stats', async (req, res) => {
 // ==========================================
 // ROTA 6: Verificar Senha (/api/verify)
 // ==========================================
-app.post('/api/verify', (req, res) => {
+app.post('/api/verify', authLimiter, (req, res) => {
     const { senha } = req.body;
     const adminPassword = ADMIN_PASSWORD;
 
@@ -1234,7 +1163,7 @@ app.post('/api/verify', (req, res) => {
 // ==========================================
 // ROTA 7: Adicionar Pedido (/api/pedidos)
 // ==========================================
-app.post('/api/pedidos', async (req, res) => {
+app.post('/api/pedidos', submissionLimiter, async (req, res) => {
     const { id, type, episode } = req.body;
 
     if (!id || !type) {
@@ -1296,7 +1225,7 @@ app.get('/api/pedidos', async (req, res) => {
 // ==========================================
 // ROTA 9: Apagar Pedido (/api/pedidos/delete)
 // ==========================================
-app.post('/api/pedidos/delete', async (req, res) => {
+app.post('/api/pedidos/delete', mutationLimiter, async (req, res) => {
     const { id, senha } = req.body;
     const adminPassword = ADMIN_PASSWORD;
 
@@ -1321,7 +1250,7 @@ app.post('/api/pedidos/delete', async (req, res) => {
 // ==========================================
 // ROTA 9x: Ocultar/Desocultar Arquivo (/api/arquivos/ocultar)
 // ==========================================
-app.post('/api/arquivos/ocultar', async (req, res) => {
+app.post('/api/arquivos/ocultar', mutationLimiter, async (req, res) => {
     const { nome, is_oculto, senha } = req.body;
     
     const adminPassword = ADMIN_PASSWORD;
@@ -1358,7 +1287,7 @@ app.post('/api/arquivos/ocultar', async (req, res) => {
 // ==========================================
 // ROTA 9b: Denunciar Conteúdo (/api/denunciar)
 // ==========================================
-app.post('/api/denunciar', async (req, res) => {
+app.post('/api/denunciar', submissionLimiter, async (req, res) => {
     const { nome, titulo, motivo, detalhes } = req.body;
 
     if (!nome || !titulo || !motivo) {
@@ -1420,7 +1349,7 @@ app.get('/api/arquivos/pendentes', async (req, res) => {
     }
 });
 
-app.post('/api/arquivos/aprovar', async (req, res) => {
+app.post('/api/arquivos/aprovar', mutationLimiter, async (req, res) => {
     const { nome, senha, conteudo, restantePendente } = req.body;
     const adminPassword = ADMIN_PASSWORD;
     const token = extractToken(req);
@@ -1479,7 +1408,7 @@ app.post('/api/arquivos/aprovar', async (req, res) => {
     }
 });
 
-app.post('/api/arquivos/rejeitar', async (req, res) => {
+app.post('/api/arquivos/rejeitar', mutationLimiter, async (req, res) => {
     const { nome, senha } = req.body;
     const adminPassword = ADMIN_PASSWORD;
     const token = extractToken(req);
@@ -1530,7 +1459,7 @@ app.get('/api/denuncias', async (req, res) => {
 // ==========================================
 // ROTA 9d: Resolver/Apagar Denúncia (/api/denuncias/delete) - Admin ou Ajudante
 // ==========================================
-app.delete('/api/denuncias/delete', async (req, res) => {
+app.delete('/api/denuncias/delete', mutationLimiter, async (req, res) => {
     const { id, senha } = req.body;
     const adminPassword = ADMIN_PASSWORD;
     const token = extractToken(req);
@@ -1735,22 +1664,39 @@ initDB().then(() => {
 
 // Desativa o timeout padrão de 5 minutos do Node.js para uploads grandes
 
-// TMDB Proxy Route
+// TMDB Proxy Route (SEC-01: Sem credenciais hardcoded | SEC-03: Proteção contra SSRF e Path Traversal)
 app.get('/api/tmdb/*path', async (req, res) => {
     try {
-        const tmdbPath = Array.isArray(req.params.path) ? req.params.path.join('/') : req.params.path;
-        const tmdbKey = process.env.TMDB_KEY || process.env.TMDB_API_KEY || "ee0f32f769374a93a24fcbc721de8634";
-        if (!tmdbKey) {
-            return res.status(500).json({ erro: "TMDB key is missing" });
-        }
-        let url = `https://api.themoviedb.org/3/${tmdbPath}`;
-        
-        const urlObj = new URL(url);
-        for (const [key, value] of Object.entries(req.query)) {
-            urlObj.searchParams.append(key, value);
+        const validatedPath = validateTmdbPath(req.params.path);
+        if (!validatedPath) {
+            return res.status(400).json({ erro: "Caminho TMDB inválido ou não autorizado." });
         }
 
-        const headers = {};
+        const tmdbKey = process.env.TMDB_KEY || process.env.TMDB_API_KEY;
+        if (!tmdbKey) {
+            return res.status(500).json({ erro: "TMDB API Key não configurada no servidor." });
+        }
+
+        const urlObj = new URL(`https://api.themoviedb.org/3/${validatedPath}`);
+
+        // Whitelist de query parameters permitidos
+        const allowedParams = [
+            'query', 'language', 'page', 'external_source', 'append_to_response',
+            'include_adult', 'year', 'primary_release_year', 'sort_by', 'with_genres',
+            'region', 'include_video', 'with_keywords'
+        ];
+
+        for (const [key, value] of Object.entries(req.query)) {
+            if (allowedParams.includes(key) && typeof value === 'string') {
+                urlObj.searchParams.set(key, value.trim());
+            }
+        }
+
+        const headers = {
+            'Accept': 'application/json',
+            'User-Agent': 'FenixStudio/1.0'
+        };
+
         // Se a chave for v4 (JWT longo iniciando com eyJ), usa Bearer. Se for v3 (hex), usa api_key como query param
         if (tmdbKey.startsWith('eyJ')) {
             headers["Authorization"] = `Bearer ${tmdbKey}`;
@@ -1759,6 +1705,10 @@ app.get('/api/tmdb/*path', async (req, res) => {
         }
         
         const response = await fetch(urlObj.toString(), { headers });
+        if (!response.ok) {
+            const errorText = await response.text();
+            return res.status(response.status).json({ erro: "Erro na API TMDB: " + response.statusText, detalhe: errorText });
+        }
         const data = await response.json();
         res.json(data);
     } catch (e) {

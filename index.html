@@ -241,7 +241,11 @@
                         
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
                             <h2 class="text-xl font-semibold text-white font-display tracking-wide">Detalhes do Conteúdo</h2>
-                            <div class="flex gap-2 w-full sm:w-auto">
+                            <div class="flex flex-wrap gap-2 w-full sm:w-auto">
+                                <label class="cursor-pointer text-xs font-medium bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 hover:border-indigo-500/40 px-4 py-2 rounded-xl transition-colors flex-1 sm:flex-none flex items-center justify-center">
+                                    <i class="fa-solid fa-cloud-arrow-up mr-1.5"></i> Lote
+                                    <input type="file" accept=".json" multiple class="hidden" onchange="cat.uploadEmMassa(this)">
+                                </label>
                                 <button onclick="gen.reset()" class="text-xs font-medium bg-transparent hover:bg-red-500/10 text-zinc-400 hover:text-red-400 border border-white/5 hover:border-red-500/20 px-4 py-2 rounded-xl transition-colors flex-1 sm:flex-none">
                                     Limpar
                                 </button>
