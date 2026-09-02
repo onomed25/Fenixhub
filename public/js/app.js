@@ -1473,30 +1473,51 @@ self.onmessage = async (e) => {
                             if (progressState) {
                                 progressState.innerText = `Enviando ${file.name} para o servidor teste (${targetAcc.repo}) em segundo plano...`;
                             }
-                            progressValues[index] = 0.5;
+                            progressValues[index] = 0.05;
                             updateGlobalProgress();
 
-                            await new Promise((resolve, reject) => {
-                                const worker = new Worker(workerUrl, { type: 'module' });
-                                worker.onmessage = (e) => {
-                                    if (e.data.success) {
-                                        resolve();
-                                    } else {
-                                        reject(new Error(e.data.error));
+                            // Estimativa de tempo baseada no tamanho do arquivo (assumindo ~2MB/s de upload)
+                            const estimatedSeconds = Math.max(10, file.size / (2 * 1024 * 1024));
+                            const progressIncrement = (0.95 - 0.05) / estimatedSeconds;
+                            let currentProgress = 0.05;
+
+                            const progressTimer = setInterval(() => {
+                                if (currentProgress < 0.95) {
+                                    currentProgress += progressIncrement;
+                                    progressValues[index] = currentProgress;
+                                    if (statusEl) {
+                                        const pct = Math.round(currentProgress * 100);
+                                        statusEl.innerHTML = `<span class="text-amber-400 font-semibold">Enviando (${pct}%)... aguarde</span>`;
                                     }
-                                    worker.terminate();
-                                };
-                                worker.onerror = (err) => {
-                                    reject(err);
-                                    worker.terminate();
-                                };
-                                worker.postMessage({
-                                    file: file,
-                                    repo: { type: targetAcc.type || 'dataset', name: targetAcc.repo },
-                                    token: targetAcc.token,
-                                    safeFileName: safeFileName
+                                    updateGlobalProgress();
+                                }
+                            }, 1000);
+
+                            try {
+                                await new Promise((resolve, reject) => {
+                                    const worker = new Worker(workerUrl, { type: 'module' });
+                                    worker.onmessage = (e) => {
+                                        if (e.data.success) {
+                                            resolve();
+                                        } else {
+                                            reject(new Error(e.data.error));
+                                        }
+                                        worker.terminate();
+                                    };
+                                    worker.onerror = (err) => {
+                                        reject(err);
+                                        worker.terminate();
+                                    };
+                                    worker.postMessage({
+                                        file: file,
+                                        repo: { type: targetAcc.type || 'dataset', name: targetAcc.repo },
+                                        token: targetAcc.token,
+                                        safeFileName: safeFileName
+                                    });
                                 });
-                            });
+                            } finally {
+                                clearInterval(progressTimer);
+                            }
 
                                 const host = window.location.host;
                                 const protocol = window.location.protocol;
