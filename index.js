@@ -1739,7 +1739,8 @@ app.get('/api/tmdb/*path', async (req, res) => {
         }
         const data = await response.json();
         res.json(data);
-    } catch {
+    } catch (err) {
+        console.error("TMDB Route Error:", err);
         res.status(500).json({ erro: 'Falha na comunicação com TMDB.' });
     }
 });

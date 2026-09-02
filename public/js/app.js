@@ -1424,16 +1424,29 @@ function clearDiscordSession() {
                 } catch (e) {}
 
                 if (!allHfAccounts || allHfAccounts.length === 0) {
-                    showToast("Nenhuma conta Hugging Face configurada no servidor.", "error");
+                    showToast("Nenhuma conta do servidor teste configurada no servidor.", "error");
                     return;
                 }
 
-                let hubModule = null;
-                try {
-                    hubModule = await import('https://esm.sh/@huggingface/hub@0.21.0');
-                } catch (e) {
-                    console.warn("Falha ao carregar @huggingface/hub via CDN:", e);
-                }
+                // Criação do Worker para evitar travamento da aba principal (Main Thread Freeze)
+                const workerCode = `
+import { uploadFile } from 'https://esm.sh/@huggingface/hub@0.21.0';
+self.onmessage = async (e) => {
+    const { file, repo, token, safeFileName } = e.data;
+    try {
+        await uploadFile({
+            repo,
+            credentials: { accessToken: token },
+            file: { path: safeFileName, content: file }
+        });
+        self.postMessage({ success: true });
+    } catch (err) {
+        self.postMessage({ success: false, error: err.message || err.toString() });
+    }
+};
+`;
+                const workerBlob = new Blob([workerCode], { type: 'application/javascript' });
+                const workerUrl = URL.createObjectURL(workerBlob);
 
                 const uploadSingle = async (file, index) => {
                     const statusEl = document.getElementById(`hf-queue-status-${index}`);
@@ -1455,23 +1468,35 @@ function clearDiscordSession() {
                         const targetAcc = allHfAccounts[accIdx];
                         try {
                             if (statusEl) {
-                                statusEl.innerHTML = `<span class="text-amber-400 font-semibold">Enviando (${targetAcc.name || targetAcc.repo})...</span>`;
+                                statusEl.innerHTML = `<span class="text-amber-400 font-semibold">Processando e Enviando (${targetAcc.name || targetAcc.repo})...</span>`;
                             }
                             if (progressState) {
-                                progressState.innerText = `Enviando ${file.name} para o Hugging Face (${targetAcc.repo})...`;
+                                progressState.innerText = `Enviando ${file.name} para o servidor teste (${targetAcc.repo}) em segundo plano...`;
                             }
                             progressValues[index] = 0.5;
                             updateGlobalProgress();
 
-                            if (hubModule && hubModule.uploadFile) {
-                                await hubModule.uploadFile({
-                                    repo: { type: targetAcc.type || 'dataset', name: targetAcc.repo },
-                                    credentials: { accessToken: targetAcc.token },
-                                    file: {
-                                        path: safeFileName,
-                                        content: file
+                            await new Promise((resolve, reject) => {
+                                const worker = new Worker(workerUrl, { type: 'module' });
+                                worker.onmessage = (e) => {
+                                    if (e.data.success) {
+                                        resolve();
+                                    } else {
+                                        reject(new Error(e.data.error));
                                     }
+                                    worker.terminate();
+                                };
+                                worker.onerror = (err) => {
+                                    reject(err);
+                                    worker.terminate();
+                                };
+                                worker.postMessage({
+                                    file: file,
+                                    repo: { type: targetAcc.type || 'dataset', name: targetAcc.repo },
+                                    token: targetAcc.token,
+                                    safeFileName: safeFileName
                                 });
+                            });
 
                                 const host = window.location.host;
                                 const protocol = window.location.protocol;
@@ -1495,7 +1520,6 @@ function clearDiscordSession() {
                                 updateGlobalProgress();
                                 uploaded = true;
                                 break; // Concluído com sucesso na conta atual!
-                            }
                         } catch (err) {
                             console.warn(`[Auto-Rotation] Erro ao enviar para ${targetAcc.repo}, tentando próxima conta do pool:`, err);
                             lastError = err;
@@ -1641,7 +1665,7 @@ function clearDiscordSession() {
 
                     const data = await res.json();
                     if (res.ok && data.sucesso) {
-                        showToast("Conta Hugging Face adicionada com sucesso!", "success");
+                        showToast("Conta do servidor teste adicionada com sucesso!", "success");
                         hfStorage.closeAddModal();
                         hfStorage.loadAccounts();
                     } else {
@@ -1653,7 +1677,7 @@ function clearDiscordSession() {
             },
 
             deleteAccount: async (id) => {
-                if (!confirm("Deseja realmente remover essa conta Hugging Face?")) return;
+                if (!confirm("Deseja realmente remover essa conta do servidor teste?")) return;
 
                 const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
                 const discordToken = localStorage.getItem('discord_token');
