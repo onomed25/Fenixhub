@@ -8,9 +8,7 @@ const path = require('path');
 const multer = require('multer');
 const { Pool } = require('pg');
 const fs = require('fs');
-const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
+const net = require('net');
 const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const helmet = require('helmet');
@@ -34,13 +32,27 @@ const {
     mergeMediaContents
 } = require('./src/media-merger');
 
-// Validar variáveis de ambiente críticas (SEC-01)
-if (!process.env.ADMIN_PASSWORD) {
+const {
+    getHfDbConfig,
+    clearHfCache,
+    testHfDatabaseConnection,
+    fetchCatalogFromHf,
+    getContentFromHf,
+    getCountFromHf,
+    saveContentToHf
+} = require('./src/hfDatabase');
+
+// ============================================================================
+// VALIDAÇÃO DE AMBIENTE CRÍTICA (SEC-01)
+// ============================================================================
+const isTestEnv = process.env.NODE_ENV === 'test';
+
+if (!process.env.ADMIN_PASSWORD && !isTestEnv) {
     console.error("ERRO FATAL: ADMIN_PASSWORD não configurada no .env");
     process.exit(1);
 }
 
-if (!process.env.JWT_SECRET) {
+if (!process.env.JWT_SECRET && !isTestEnv) {
     console.error("ERRO FATAL: JWT_SECRET não configurada no .env");
     process.exit(1);
 }
@@ -49,20 +61,43 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const JWT_SECRET = process.env.JWT_SECRET;
 const HTTP_TIMEOUT_MS = 8000;
 
+// ============================================================================
+// CONFIGURAÇÃO EXPRESS & SEGURANÇA BÁSICA
+// ============================================================================
 const app = express();
-app.set('trust proxy', 1); // Render.com (e outros proxies) encaminham X-Forwarded-For
+app.set('trust proxy', 1); // Suporte para X-Forwarded-For em proxies reversos (Render/Cloudflare)
 app.disable('x-powered-by');
+
 app.use(helmet({
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false
 }));
 app.use(compression());
 app.use(cookieParser());
+app.use(express.json({ limit: '10mb' }));
 
-// Rate Limiters especializados para proteção contra DDoS e Força Bruta (SEC-05)
+// CORS Seguro com suporte a múltiplas origens sanitizadas
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+    : ['http://localhost:3000'];
+
+app.use(cors({
+    origin: (origin, callback) => {
+        // Permite requisições sem origin (como mobile apps, curl, server-to-server) ou na whitelist
+        if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+            return callback(null, true);
+        }
+        return callback(null, false);
+    },
+    credentials: true
+}));
+
+// ============================================================================
+// RATE LIMITERS ESPECIALIZADOS (SEC-05)
+// ============================================================================
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 500,
+    max: 600,
     standardHeaders: true,
     legacyHeaders: false,
     message: { erro: 'Muitas requisições deste IP, tente novamente mais tarde.' }
@@ -70,7 +105,7 @@ const apiLimiter = rateLimit({
 
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 15, // 15 tentativas a cada 15 minutos
+    max: 15,
     standardHeaders: true,
     legacyHeaders: false,
     message: { erro: 'Muitas tentativas de autenticação. Tente novamente mais tarde.' }
@@ -94,46 +129,53 @@ const mutationLimiter = rateLimit({
 
 const submissionLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 25,
+    max: 30,
     standardHeaders: true,
     legacyHeaders: false,
     message: { erro: 'Muitos envios/pedidos realizados. Tente novamente mais tarde.' }
 });
 
 app.use('/api/', apiLimiter);
+app.use('/count', apiLimiter);
 
+// Multer para payloads de formulário (apenas multipart textual sem arquivos)
 const upload = multer();
 
-// Configuração do Multer com armazenamento em disco para uploads grandes (Telegram)
-const tempUploadsDir = path.join(__dirname, 'temp_uploads');
-if (!fs.existsSync(tempUploadsDir)) {
-    fs.mkdirSync(tempUploadsDir, { recursive: true });
-}
-const diskUpload = multer({ 
-    dest: tempUploadsDir,
-    limits: { fileSize: 2.5 * 1024 * 1024 * 1024 } // limite de 2.5GB para arquivos de vídeo
-});
-
-/**
- * Gerenciador de processos em memória com TTL e auto-evicção para evitar memory leaks (CWE-400 / CWE-770).
- */
+// ============================================================================
+// GERENCIADOR DE PROCESSOS EM MEMÓRIA (TTL & EVICTION - SOB DEMANDA)
+// ============================================================================
 class ProcessTracker {
     constructor(ttlMs = 300000) {
         /** @type {Map<string, { name: string, percent: string, updatedAt: number }>} */
         this.processes = new Map();
         this.ttlMs = ttlMs;
-        setInterval(() => this.cleanupExpired(), 60000).unref();
+        this.timer = null;
+    }
+    _ensureTimer() {
+        if (!this.timer && this.processes.size > 0) {
+            this.timer = setInterval(() => this.cleanupExpired(), 60000);
+            this.timer.unref();
+        }
     }
     update(key, name, progress) {
         const percent = (progress * 100).toFixed(1);
         if (percent === '100.0') {
             this.processes.delete(key);
+            if (this.processes.size === 0 && this.timer) {
+                clearInterval(this.timer);
+                this.timer = null;
+            }
         } else {
             this.processes.set(key, { name, percent, updatedAt: Date.now() });
+            this._ensureTimer();
         }
     }
     remove(key) {
         this.processes.delete(key);
+        if (this.processes.size === 0 && this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
     }
     get(key) {
         return this.processes.get(key);
@@ -145,233 +187,361 @@ class ProcessTracker {
                 this.processes.delete(key);
             }
         }
+        if (this.processes.size === 0 && this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+    }
+    destroy() {
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+        this.processes.clear();
     }
 }
 const processTracker = new ProcessTracker();
 
-function logProcessProgress(key, name, progress) {
-    processTracker.update(key, name, progress);
-
-    const parts = [];
-    for (const [k, val] of processTracker.processes.entries()) {
-        const shortName = val.name.length > 20 ? val.name.substring(0, 17) + '...' : val.name;
-        const label = k.startsWith('download') ? '\x1b[35m[Download]\x1b[0m' : '\x1b[36m[Upload Telegram]\x1b[0m';
-        parts.push(`${label} \x1b[33m${shortName}\x1b[0m: \x1b[32m${val.percent}%\x1b[0m`);
+// ============================================================================
+// HELPERS DE AUTENTICAÇÃO E AUTORIZAÇÃO (DRY & CLEAN CODE)
+// ============================================================================
+function getAdminPassword(req) {
+    const headerPass = req.headers && req.headers['x-admin-password'];
+    if (typeof headerPass === 'string' && headerPass.trim()) {
+        return headerPass.trim();
     }
-
-    // Limpa a linha anterior (\x1b[K) e retorna o cursor ao início (\r)
-    process.stdout.write(`\r${parts.join(' | ')}\x1b[K`);
-
-    if (processTracker.processes.size === 0) {
-        process.stdout.write('\n'); // Quebra de linha limpa ao concluir tudo
+    if (req.body && typeof req.body.senha === 'string' && req.body.senha.trim()) {
+        return req.body.senha.trim();
     }
+    if (req.query && typeof req.query.senha === 'string' && req.query.senha.trim()) {
+        return req.query.senha.trim();
+    }
+    return null;
 }
 
+function isAdmin(req) {
+    const pass = getAdminPassword(req);
+    return Boolean(pass && checkPassword(pass, ADMIN_PASSWORD));
+}
 
+function getAuthUser(req) {
+    const token = extractToken(req);
+    return token ? verifyToken(token) : null;
+}
 
-// Limita o tamanho do JSON recebido via POST (ajustado para 10MB conforme solicitado)
-app.use(express.json({ limit: '10mb' })); 
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000'],
-  credentials: true
-}));
+function isAjudante(user) {
+    return Boolean(user && user.isAjudante);
+}
 
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date() });
-});
+function isPrivileged(req) {
+    if (isAdmin(req)) return true;
+    const user = getAuthUser(req);
+    return isAjudante(user);
+}
 
+function requireAdmin(req, res, next) {
+    if (isAdmin(req)) {
+        return next();
+    }
+    return res.status(401).json({ erro: 'Acesso não autorizado. Senha de administrador necessária.' });
+}
 
-const net = require('net');
-// Configuração do banco de dados (SEC-06: SSL Seguro)
+function requireAdminOrAjudante(req, res, next) {
+    if (isPrivileged(req)) {
+        return next();
+    }
+    return res.status(401).json({ erro: 'Acesso não autorizado. Permissão de administrador ou moderador necessária.' });
+}
+
+// ============================================================================
+// BANCO DE DADOS POSTGRESQL (SEC-06: SSL Seguro + IPv4 Interceptor)
+// ============================================================================
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    max: 5, // Limita as conexões simultâneas
+    max: process.env.DB_POOL_MAX ? parseInt(process.env.DB_POOL_MAX, 10) : 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
     ssl: getDatabaseSslConfig(),
-    // Força a conexão a utilizar apenas IPv4 interceptando o método connect do socket
-    stream: (config) => {
+    stream: () => {
         const socket = new net.Socket();
         const originalConnect = socket.connect;
-        
         socket.connect = function(port, host, cb) {
             if (typeof port === 'object') {
                 const opts = Object.assign({}, port, { family: 4 });
                 return originalConnect.call(this, opts, cb);
             } else {
-                const opts = {
-                    port: port,
-                    host: host,
-                    family: 4
-                };
+                const opts = { port, host, family: 4 };
                 return originalConnect.call(this, opts, cb);
             }
         };
-        
         return socket;
     }
 });
 
-// Criação automática da tabela caso não exista
+pool.on('error', (err) => {
+    console.error('[PostgreSQL Pool Unexpected Error]:', err.message);
+});
+
+// Inicialização e migrações idempotentes de tabelas
 const initDB = async () => {
-    const query = `
-        CREATE TABLE IF NOT EXISTS arquivos_json (
+    if (process.env.DATABASE_SOURCE === 'huggingface') {
+        console.log('ℹ️ DATABASE_SOURCE=huggingface ativado: Conexão DDL PostgreSQL ignorada.');
+        return;
+    }
+    const ddlQueries = [
+        `CREATE TABLE IF NOT EXISTS arquivos_json (
             id SERIAL PRIMARY KEY,
             nome_do_json VARCHAR(255) UNIQUE NOT NULL,
             conteudo JSONB NOT NULL,
             is_oculto BOOLEAN DEFAULT FALSE,
             is_pendente BOOLEAN DEFAULT FALSE,
             criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-    `;
-    const queryPedidos = `
-        CREATE TABLE IF NOT EXISTS pedidos_sugeridos (
+        );`,
+        `CREATE TABLE IF NOT EXISTS pedidos_sugeridos (
             id SERIAL PRIMARY KEY,
             imdb_id VARCHAR(50) NOT NULL,
             tipo VARCHAR(20) NOT NULL,
             episodio VARCHAR(50),
             criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-    `;
-    const queryDenuncias = `
-        CREATE TABLE IF NOT EXISTS denuncias_conteudo (
+        );`,
+        `CREATE TABLE IF NOT EXISTS denuncias_conteudo (
             id SERIAL PRIMARY KEY,
             nome_do_json VARCHAR(255) NOT NULL,
             titulo VARCHAR(255) NOT NULL,
             motivo VARCHAR(255) NOT NULL,
             detalhes TEXT,
             criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-    `;
-    const queryUsuarios = `
-        CREATE TABLE IF NOT EXISTS usuarios_discord (
+        );`,
+        `CREATE TABLE IF NOT EXISTS usuarios_discord (
             discord_id VARCHAR(50) PRIMARY KEY,
             username VARCHAR(100) NOT NULL,
             global_name VARCHAR(100),
             avatar VARCHAR(100),
             is_ajudante BOOLEAN DEFAULT FALSE,
+            is_colaborador BOOLEAN DEFAULT FALSE,
             cargos JSONB DEFAULT '[]'::jsonb,
             atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-    `;
-    const queryEnvios = `
-        CREATE TABLE IF NOT EXISTS envios_pendentes (
+        );`,
+        `CREATE TABLE IF NOT EXISTS envios_pendentes (
             id SERIAL PRIMARY KEY,
             nome_do_json VARCHAR(255) UNIQUE NOT NULL,
             conteudo JSONB NOT NULL,
             criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-    `;
-    const queryHfContas = `
-        CREATE TABLE IF NOT EXISTS hf_contas (
+        );`,
+        `CREATE TABLE IF NOT EXISTS hf_contas (
             id SERIAL PRIMARY KEY,
             nome VARCHAR(100) NOT NULL,
             token TEXT NOT NULL,
             repo VARCHAR(255) NOT NULL,
             tipo VARCHAR(50) DEFAULT 'dataset',
             criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-    `;
+        );`,
+        `CREATE TABLE IF NOT EXISTS agenda_tarefas (
+            chave VARCHAR(50) PRIMARY KEY,
+            ultimo_executado TIMESTAMP WITH TIME ZONE NOT NULL
+        );`
+    ];
+
     try {
-        await pool.query(query);
-        await pool.query(queryPedidos);
-        await pool.query(queryDenuncias);
-        await pool.query(queryUsuarios);
-        await pool.query(queryEnvios);
-        await pool.query(queryHfContas);
-        
-        // Add new columns if they don't exist (for existing databases)
-        try {
-            await pool.query('ALTER TABLE usuarios_discord ADD COLUMN IF NOT EXISTS is_ajudante BOOLEAN DEFAULT FALSE;');
-            await pool.query('ALTER TABLE usuarios_discord ADD COLUMN IF NOT EXISTS is_colaborador BOOLEAN DEFAULT FALSE;');
-            await pool.query('ALTER TABLE usuarios_discord ADD COLUMN IF NOT EXISTS cargos JSONB DEFAULT \'[]\'::jsonb;');
-            await pool.query('ALTER TABLE arquivos_json ADD COLUMN IF NOT EXISTS is_oculto BOOLEAN DEFAULT FALSE;');
-            await pool.query('ALTER TABLE arquivos_json ADD COLUMN IF NOT EXISTS is_pendente BOOLEAN DEFAULT FALSE;');
-        } catch (e) {
-            console.error('Erro ao adicionar novas colunas:', e.message);
+        for (const query of ddlQueries) {
+            await pool.query(query);
+        }
+
+        // Migrações incrementais de colunas
+        const alterQueries = [
+            'ALTER TABLE usuarios_discord ADD COLUMN IF NOT EXISTS is_ajudante BOOLEAN DEFAULT FALSE;',
+            'ALTER TABLE usuarios_discord ADD COLUMN IF NOT EXISTS is_colaborador BOOLEAN DEFAULT FALSE;',
+            'ALTER TABLE usuarios_discord ADD COLUMN IF NOT EXISTS cargos JSONB DEFAULT \'[]\'::jsonb;',
+            'ALTER TABLE arquivos_json ADD COLUMN IF NOT EXISTS is_oculto BOOLEAN DEFAULT FALSE;',
+            'ALTER TABLE arquivos_json ADD COLUMN IF NOT EXISTS is_pendente BOOLEAN DEFAULT FALSE;'
+        ];
+
+        for (const alter of alterQueries) {
+            try {
+                await pool.query(alter);
+            } catch (e) {
+                // Silencia aviso de coluna já existente
+            }
         }
 
         console.log('Tabelas de banco de dados verificadas/criadas com sucesso.');
     } catch (err) {
-        console.error('Erro ao criar tabelas:', err);
+        console.error('Erro ao verificar/criar tabelas:', err.message);
     }
 };
 
-// ==========================================
-// ROTA 0: Servir o Frontend (index.html)
-// ==========================================
-let cachedHtml = '';
-try {
-    const rawHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
-    const telegramUrl = process.env.TELEGRAM_API_URL || '';
-    let processedHtml = rawHtml.replace('__TELEGRAM_API_URL_PLACEHOLDER__', telegramUrl);
-    // Força o navegador a baixar o app.js novo toda vez que o servidor reiniciar
-    processedHtml = processedHtml.replace(/\/js\/app\.js\?v=\d+/g, '/js/app.js?v=' + Date.now());
-    cachedHtml = processedHtml;
-} catch (err) {
-    console.error("Erro ao carregar index.html na inicialização:", err);
+// ============================================================================
+// CARREGAMENTO E CACHE DO FRONTEND (INDEX.HTML & FRONT.HTML)
+// ============================================================================
+function loadCachedHtmlFile(fileName) {
+    try {
+        const filePath = path.join(__dirname, fileName);
+        if (!fs.existsSync(filePath)) {
+            console.error(`Arquivo ${fileName} não encontrado no caminho:`, filePath);
+            return `<!DOCTYPE html><html><body><h1>Interface ${fileName} não encontrada</h1></body></html>`;
+        }
+        const rawHtml = fs.readFileSync(filePath, 'utf8');
+        const telegramUrl = process.env.TELEGRAM_API_URL || '';
+        let processedHtml = rawHtml.replace('__TELEGRAM_API_URL_PLACEHOLDER__', () => telegramUrl);
+        processedHtml = processedHtml.replace(/\/js\/app\.js\?v=\d+/g, () => '/js/app.js?v=' + Date.now());
+        return processedHtml;
+    } catch (err) {
+        console.error(`Erro ao carregar ${fileName} na inicialização:`, err.message);
+        return `<!DOCTYPE html><html><body><h1>Erro ao carregar interface ${fileName}</h1></body></html>`;
+    }
 }
 
-app.get('/', (req, res) => {
-    // Usa o HTML pré-processado e em cache para máxima performance
+let cachedHtml = loadCachedHtmlFile('index.html');
+let cachedFrontHtml = loadCachedHtmlFile('front.html');
+
+function refreshHtmlCache() {
+    cachedHtml = loadCachedHtmlFile('index.html');
+    cachedFrontHtml = loadCachedHtmlFile('front.html');
+}
+
+app.get('/', (_req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(cachedHtml);
 });
 
-// ==========================================
-// ROTA 0b: Servir o CDN (pasta cdn)
-// ==========================================
+app.get(['/front', '/front.html'], (_req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(cachedFrontHtml);
+});
+
+// Arquivos Estáticos com Cache Eficiente
 const staticOptions = {
-    maxAge: '1d', // Cache for 1 day
+    maxAge: '1d',
     setHeaders: (res, pathStr) => {
         if (path.extname(pathStr).toLowerCase() === '.html') {
-            res.setHeader('Cache-Control', 'public, max-age=0'); // Don't cache HTML
+            res.setHeader('Cache-Control', 'public, max-age=0');
         }
     }
 };
+
 app.use('/cdn', express.static(path.join(__dirname, 'cdn'), staticOptions));
 app.use('/js', express.static(path.join(__dirname, 'public/js'), staticOptions));
 app.use('/css', express.static(path.join(__dirname, 'public/css'), staticOptions));
 app.use('/assets', express.static(path.join(__dirname, 'public/assets'), staticOptions));
 
+// Healthcheck
+app.get('/health', (_req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
-// ==========================================
-// CONFIGURAÇÕES TMDB E RPDB
-// ==========================================
-const TMDB_API_KEY = process.env.TMDB_API_KEY;
-const RPDB_BASE_URL = "https://api.ratingposterdb.com/t0-free-rpdb";
-
+// ============================================================================
+// SERVIÇOS AUXILIARES: TMDB, RPDB, NUVIOMETA & DISCORD
+// ============================================================================
 async function getNuviometaInfo(id, type) {
     try {
         const sanitized = sanitizeNuviometaParams(id, type);
         if (!sanitized) {
-            console.warn("⚠️ Parâmetros inválidos para Nuviometa:", { id, type });
             return null;
         }
         const url = `https://nuviometa.wasmer.app/meta/${sanitized.type}/${sanitized.id}.json`;
         const res = await fetch(url, {
-            headers: {
-                "User-Agent": "FenixStudio/1.0"
-            },
+            headers: { 'User-Agent': 'FenixStudio/1.0' },
             signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
         });
         if (!res.ok) return null;
         const data = await res.json();
         return data.meta || null;
-    } catch (err) {
+    } catch {
         return null;
     }
 }
 
-// ==========================================
+// Cache em memória para cargos da guilda do Discord (evita gargalo de N+1 e rate limit 429)
+let cachedDiscordRoles = {
+    roles: null,
+    timestamp: 0
+};
+const DISCORD_ROLES_CACHE_TTL = 5 * 60 * 1000;
+
+async function checkDiscordMemberRoles(userId) {
+    const botToken = process.env.DISCORD_BOT_TOKEN;
+    const guildId = process.env.DISCORD_GUILD_ID;
+    const ajudanteRoleId = process.env.DISCORD_AJUDANTE_ROLE_ID;
+    const colaboradorRoleId = process.env.DISCORD_COLABORADOR_ROLE_ID;
+
+    let isAjudanteUser = false;
+    let isColaboradorUser = false;
+    let cargos = [];
+
+    if (!botToken || !guildId || !userId) {
+        return { isAjudante: false, isColaborador: false, cargos: [] };
+    }
+
+    try {
+        const memberResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${userId}`, {
+            headers: {
+                'Authorization': `Bot ${botToken}`,
+                'User-Agent': 'FenixStudio/1.0'
+            },
+            signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
+        });
+
+        if (memberResponse.ok) {
+            const memberData = await memberResponse.json();
+            cargos = Array.isArray(memberData.roles) ? memberData.roles : [];
+
+            if (ajudanteRoleId && cargos.includes(ajudanteRoleId)) {
+                isAjudanteUser = true;
+            }
+            if (colaboradorRoleId && cargos.includes(colaboradorRoleId)) {
+                isColaboradorUser = true;
+            }
+
+            // Consulta com cache para nomes de cargos da guilda
+            const now = Date.now();
+            let allRoles = cachedDiscordRoles.roles;
+            if (!allRoles || (now - cachedDiscordRoles.timestamp) > DISCORD_ROLES_CACHE_TTL) {
+                try {
+                    const rolesRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
+                        headers: { 'Authorization': `Bot ${botToken}`, 'User-Agent': 'FenixStudio/1.0' },
+                        signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
+                    });
+                    if (rolesRes.ok) {
+                        allRoles = await rolesRes.json();
+                        cachedDiscordRoles = { roles: allRoles, timestamp: now };
+                    }
+                } catch (roleErr) {
+                    console.warn('Falha ao atualizar cache de cargos Discord:', roleErr.message);
+                }
+            }
+
+            if (Array.isArray(allRoles)) {
+                const userRoleNames = allRoles
+                    .filter(r => cargos.includes(r.id))
+                    .map(r => (typeof r.name === 'string' ? r.name.toLowerCase().trim() : ''));
+
+                if (!isAjudanteUser && userRoleNames.some(name => name.includes('ajudante'))) {
+                    isAjudanteUser = true;
+                }
+                if (!isColaboradorUser && userRoleNames.some(name => name.includes('colaborador') || name.includes('uploader'))) {
+                    isColaboradorUser = true;
+                }
+            }
+        }
+    } catch (memberErr) {
+        console.error('Erro ao verificar cargos do membro Discord:', memberErr.message);
+    }
+
+    return { isAjudante: isAjudanteUser, isColaborador: isColaboradorUser, cargos };
+}
+
+// ============================================================================
 // ROTAS DE AUTENTICAÇÃO DO DISCORD
-// ==========================================
+// ============================================================================
 app.get('/api/auth/discord', (req, res) => {
     const clientId = process.env.DISCORD_CLIENT_ID;
     const redirectUri = process.env.DISCORD_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/auth/discord/callback`;
-    const state = req.query.state || '';
-    
+    const state = typeof req.query.state === 'string' ? req.query.state : '';
+
     if (!clientId) {
         return res.status(500).send("DISCORD_CLIENT_ID não configurado no servidor.");
     }
-    
+
     let discordAuthUrl = `https://discord.com/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify`;
     if (state) {
         discordAuthUrl += `&state=${encodeURIComponent(state)}`;
@@ -381,25 +551,25 @@ app.get('/api/auth/discord', (req, res) => {
 
 app.get('/api/auth/discord/callback', async (req, res) => {
     const { code, state } = req.query;
-    if (!code) {
+    if (!code || typeof code !== 'string') {
         return res.status(400).send("Código de autorização ausente.");
     }
-    
+
     const clientId = process.env.DISCORD_CLIENT_ID;
     const clientSecret = process.env.DISCORD_CLIENT_SECRET;
     const redirectUri = process.env.DISCORD_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/auth/discord/callback`;
-    
+
     if (!clientId || !clientSecret) {
         return res.status(500).send("Configurações do Discord ausentes no servidor.");
     }
-    
+
     try {
         const tokenResponse = await fetch('https://discord.com/api/v10/oauth2/token', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'User-Agent': 'FenixStudio/1.0',
-                'Accept': 'application/json, text/plain, */*'
+                'Accept': 'application/json'
             },
             body: new URLSearchParams({
                 client_id: clientId,
@@ -410,153 +580,91 @@ app.get('/api/auth/discord/callback', async (req, res) => {
             }).toString(),
             signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
         });
-        
+
         if (!tokenResponse.ok) {
             const errorData = await tokenResponse.text();
             console.error("Erro ao obter token do Discord:", errorData);
             return res.status(500).send("Falha ao autenticar com o Discord.");
         }
-        
+
         const tokenData = await tokenResponse.json();
         const accessToken = tokenData.access_token;
-        
+
         const userResponse = await fetch('https://discord.com/api/v10/users/@me', {
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
                 'User-Agent': 'FenixStudio/1.0',
-                'Accept': 'application/json, text/plain, */*'
+                'Accept': 'application/json'
             },
             signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
         });
-        
+
         if (!userResponse.ok) {
             return res.status(500).send("Falha ao obter dados do usuário do Discord.");
         }
-        
+
         const userData = await userResponse.json();
-        const { isAjudante, isColaborador, cargos } = await checkDiscordMemberRoles(userData.id);
+        const { isAjudante: isAj, isColaborador: isCol, cargos } = await checkDiscordMemberRoles(userData.id);
 
         const payload = {
             id: userData.id,
             username: userData.username,
             global_name: userData.global_name || userData.username,
             avatar: userData.avatar,
-            isAjudante,
-            isColaborador,
+            isAjudante: isAj,
+            isColaborador: isCol,
             cargos
         };
-        
-        // Salva/atualiza o perfil do usuário do Discord no banco de dados local
-        try {
-            const queryUpsertUser = `
-                INSERT INTO usuarios_discord (discord_id, username, global_name, avatar, is_ajudante, is_colaborador, cargos, atualizado_em)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
-                ON CONFLICT (discord_id)
-                DO UPDATE SET username = EXCLUDED.username, global_name = EXCLUDED.global_name, avatar = EXCLUDED.avatar, is_ajudante = EXCLUDED.is_ajudante, is_colaborador = EXCLUDED.is_colaborador, cargos = EXCLUDED.cargos, atualizado_em = CURRENT_TIMESTAMP;
-            `;
-            await pool.query(queryUpsertUser, [userData.id, userData.username, userData.global_name || userData.username, userData.avatar, isAjudante, isColaborador, JSON.stringify(cargos)]);
-        } catch (dbErr) {
-            console.error("Erro ao salvar usuário do Discord no banco de dados:", dbErr.message);
+
+        if (process.env.DATABASE_SOURCE !== 'huggingface') {
+            try {
+                const queryUpsertUser = `
+                    INSERT INTO usuarios_discord (discord_id, username, global_name, avatar, is_ajudante, is_colaborador, cargos, atualizado_em)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+                    ON CONFLICT (discord_id)
+                    DO UPDATE SET 
+                        username = EXCLUDED.username, 
+                        global_name = EXCLUDED.global_name, 
+                        avatar = EXCLUDED.avatar, 
+                        is_ajudante = EXCLUDED.is_ajudante, 
+                        is_colaborador = EXCLUDED.is_colaborador, 
+                        cargos = EXCLUDED.cargos, 
+                        atualizado_em = CURRENT_TIMESTAMP;
+                `;
+                await pool.query(queryUpsertUser, [
+                    userData.id,
+                    userData.username,
+                    userData.global_name || userData.username,
+                    userData.avatar,
+                    isAj,
+                    isCol,
+                    JSON.stringify(cargos)
+                ]);
+            } catch (dbErr) {
+                console.error("Erro ao salvar usuário Discord no banco:", dbErr.message);
+            }
         }
-        
+
         const token = generateToken(payload);
         const safeRedirect = sanitizeRedirectUrl(state, '/');
-        
-        // Define o token via cookie httpOnly seguro (evita roubo de sessão via XSS - SEC-04)
+
         res.cookie('discord_token', token, {
             maxAge: 30 * 24 * 60 * 60 * 1000,
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
             path: '/'
-        }); 
-        
+        });
+
         res.redirect(safeRedirect);
     } catch (err) {
-        console.error("Erro no callback do Discord:", err);
+        console.error("Erro no callback do Discord:", err.message);
         res.status(500).send("Erro interno durante autenticação do Discord.");
     }
 });
 
-// ==========================================
-// FUNÇÃO AUXILIAR: Verificar Cargos Discord em Tempo Real
-// ==========================================
-async function checkDiscordMemberRoles(userId) {
-    const botToken = process.env.DISCORD_BOT_TOKEN;
-    const guildId = process.env.DISCORD_GUILD_ID;
-    const ajudanteRoleId = process.env.DISCORD_AJUDANTE_ROLE_ID; // opcional
-    const colaboradorRoleId = process.env.DISCORD_COLABORADOR_ROLE_ID; // opcional
-
-    let isAjudante = false;
-    let isColaborador = false;
-    let cargos = [];
-
-    if (botToken && guildId) {
-        try {
-            const memberResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${userId}`, {
-                headers: {
-                    'Authorization': `Bot ${botToken}`,
-                    'User-Agent': 'FenixStudio/1.0'
-                },
-                signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
-            });
-            if (memberResponse.ok) {
-                const memberData = await memberResponse.json();
-                cargos = memberData.roles || [];
-                
-                if (ajudanteRoleId) {
-                    isAjudante = cargos.includes(ajudanteRoleId);
-                }
-                if (colaboradorRoleId) {
-                    isColaborador = cargos.includes(colaboradorRoleId);
-                }
-
-                // Tenta também buscar nomes de cargos da guilda para match por nome
-                try {
-                    const rolesRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
-                        headers: { 'Authorization': `Bot ${botToken}`, 'User-Agent': 'FenixStudio/1.0' },
-                        signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
-                    });
-                    if (rolesRes.ok) {
-                        const allRoles = await rolesRes.json();
-                        const userRoleNames = allRoles
-                            .filter(r => cargos.includes(r.id))
-                            .map(r => r.name.toLowerCase().trim());
-                        
-                        // APENAS cargo com nome 'ajudante' dá permissão de ajudante
-                        if (!isAjudante && userRoleNames.some(name => name.includes('ajudante'))) {
-                            isAjudante = true;
-                        }
-                        // Cargo com nome 'colaborador' ou 'uploader' dá permissão de colaborador
-                        if (!isColaborador && userRoleNames.some(name => name.includes('colaborador') || name.includes('uploader'))) {
-                            isColaborador = true;
-                        }
-                    }
-                } catch (roleErr) {
-                    console.warn('Não foi possível verificar nomes dos cargos:', roleErr.message);
-                }
-            } else {
-                console.warn(`Usuário ${userId} não está no servidor ou erro ao buscar member info: ${memberResponse.status}`);
-            }
-        } catch (memberErr) {
-            console.error('Erro ao buscar cargos do membro no servidor:', memberErr.message);
-        }
-    }
-    return { isAjudante, isColaborador, cargos };
-}
-
-// ==========================================
-// ROTA: Sincronizar Permissões Discord (/api/auth/me)
-// ==========================================
 app.get('/api/auth/me', async (req, res) => {
-    let token = null;
-    const authHeader = req.headers['authorization'];
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-        token = authHeader.substring(7).trim();
-    } else if (req.cookies && req.cookies.discord_token) {
-        token = req.cookies.discord_token;
-    }
-
+    const token = extractToken(req);
     if (!token) {
         return res.status(401).json({ autenticado: false, erro: 'Não autenticado' });
     }
@@ -567,28 +675,36 @@ app.get('/api/auth/me', async (req, res) => {
     }
 
     try {
-        const { isAjudante, isColaborador, cargos } = await checkDiscordMemberRoles(user.id);
-        
+        const { isAjudante: isAj, isColaborador: isCol, cargos } = await checkDiscordMemberRoles(user.id);
+
         const payload = {
             id: user.id,
             username: user.username,
             global_name: user.global_name || user.username,
             avatar: user.avatar,
-            isAjudante,
-            isColaborador,
+            isAjudante: isAj,
+            isColaborador: isCol,
             cargos
         };
 
-        // Atualiza banco de dados local
-        try {
-            await pool.query(`
-                INSERT INTO usuarios_discord (discord_id, username, global_name, avatar, is_ajudante, is_colaborador, cargos, atualizado_em)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
-                ON CONFLICT (discord_id)
-                DO UPDATE SET username = EXCLUDED.username, global_name = EXCLUDED.global_name, avatar = EXCLUDED.avatar, is_ajudante = EXCLUDED.is_ajudante, is_colaborador = EXCLUDED.is_colaborador, cargos = EXCLUDED.cargos, atualizado_em = CURRENT_TIMESTAMP;
-            `, [user.id, user.username, user.global_name || user.username, user.avatar, isAjudante, isColaborador, JSON.stringify(cargos)]);
-        } catch (dbE) {
-            console.warn("Erro ao atualizar user discord no banco:", dbE.message);
+        if (process.env.DATABASE_SOURCE !== 'huggingface') {
+            try {
+                await pool.query(`
+                    INSERT INTO usuarios_discord (discord_id, username, global_name, avatar, is_ajudante, is_colaborador, cargos, atualizado_em)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+                    ON CONFLICT (discord_id)
+                    DO UPDATE SET 
+                        username = EXCLUDED.username, 
+                        global_name = EXCLUDED.global_name, 
+                        avatar = EXCLUDED.avatar, 
+                        is_ajudante = EXCLUDED.is_ajudante, 
+                        is_colaborador = EXCLUDED.is_colaborador, 
+                        cargos = EXCLUDED.cargos, 
+                        atualizado_em = CURRENT_TIMESTAMP;
+                `, [user.id, user.username, user.global_name || user.username, user.avatar, isAj, isCol, JSON.stringify(cargos)]);
+            } catch (dbE) {
+                console.warn("Erro ao sincronizar user discord no banco:", dbE.message);
+            }
         }
 
         const newToken = generateToken(payload);
@@ -606,28 +722,27 @@ app.get('/api/auth/me', async (req, res) => {
             username: user.username,
             global_name: user.global_name || user.username,
             avatar: user.avatar,
-            isAjudante,
-            isColaborador,
+            isAjudante: isAj,
+            isColaborador: isCol,
             cargos,
             token: newToken
         });
     } catch (e) {
-        console.error('Erro ao sincronizar permissões Discord:', e);
+        console.error('Erro ao sincronizar permissões Discord:', e.message);
         return res.json({
             autenticado: true,
             id: user.id,
             username: user.username,
             global_name: user.global_name || user.username,
             avatar: user.avatar,
-            isAjudante: !!user.isAjudante,
-            isColaborador: !!user.isColaborador,
+            isAjudante: Boolean(user.isAjudante),
+            isColaborador: Boolean(user.isColaborador),
             token
         });
     }
 });
 
-// ROTA: Logout Discord seguro
-app.post('/api/auth/logout', (req, res) => {
+app.post('/api/auth/logout', (_req, res) => {
     res.clearCookie('discord_token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
@@ -637,10 +752,9 @@ app.post('/api/auth/logout', (req, res) => {
     res.json({ sucesso: true, mensagem: 'Desconectado com sucesso.' });
 });
 
-
-// ==========================================
-// ROTA: Gerenciamento e Configuração Hugging Face (Múltiplas Contas)
-// ==========================================
+// ============================================================================
+// GERENCIAMENTO HUGGING FACE (MÚLTIPLAS CONTAS & ROTAS DE STREAM)
+// ============================================================================
 const HF_DEFAULT_TOKEN = process.env.HF_TOKEN || "";
 const HF_DEFAULT_REPO_TYPE = process.env.HF_REPO_TYPE || "dataset";
 const HF_DEFAULT_REPO_NAME = process.env.HF_REPO_NAME || "Fenixflix/videos";
@@ -676,24 +790,30 @@ const getHfAccountsList = async () => {
                 });
             }
         } catch (e) {
-            console.warn('Erro ao parsear HF_ACCOUNTS do .env:', e.message);
+            console.warn('Erro ao parsear HF_ACCOUNTS:', e.message);
         }
     }
 
-    try {
-        const dbRes = await pool.query('SELECT * FROM hf_contas ORDER BY id ASC');
-        dbRes.rows.forEach(r => {
-            const accType = r.tipo || 'dataset';
-            list.push({
-                id: `db_${r.id}`,
-                name: `${r.nome} (${r.repo})`,
-                token: r.token,
-                repo: r.repo,
-                type: accType,
-                plural: accType.endsWith('s') ? accType : (accType + 's')
+    if (process.env.DATABASE_SOURCE !== 'huggingface') {
+        try {
+            const dbPromise = pool.query('SELECT * FROM hf_contas ORDER BY id ASC');
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000));
+            const dbRes = await Promise.race([dbPromise, timeoutPromise]);
+            dbRes.rows.forEach(r => {
+                const accType = r.tipo || 'dataset';
+                list.push({
+                    id: `db_${r.id}`,
+                    name: `${r.nome} (${r.repo})`,
+                    token: r.token,
+                    repo: r.repo,
+                    type: accType,
+                    plural: accType.endsWith('s') ? accType : (accType + 's')
+                });
             });
-        });
-    } catch (e) {}
+        } catch (e) {
+            // Ignora silenciosamente se o Postgres estiver offline
+        }
+    }
 
     return list;
 };
@@ -701,16 +821,15 @@ const getHfAccountsList = async () => {
 app.get('/api/hf/config', async (req, res) => {
     try {
         const accounts = await getHfAccountsList();
-        if (accounts.length === 0) return res.status(404).json({ erro: 'Nenhuma conta configurada.' });
-        const token = extractToken(req);
-        const user = verifyToken(token);
-        const adminSenha = req.headers['x-admin-password'];
-        const isPrivileged = checkPassword(adminSenha, ADMIN_PASSWORD) || (user && user.isAjudante);
+        if (accounts.length === 0) {
+            return res.status(404).json({ erro: 'Nenhuma conta Hugging Face configurada.' });
+        }
+        const privileged = isPrivileged(req);
         const requestedId = req.query.account_id;
         const active = accounts.find(a => a.id === requestedId) || accounts[0];
 
         res.json({
-            token: isPrivileged ? active.token : 'hf_***MASKED***',
+            token: privileged ? active.token : 'hf_***MASKED***',
             repo: active.repo,
             type: active.type,
             plural: active.plural,
@@ -718,7 +837,7 @@ app.get('/api/hf/config', async (req, res) => {
             accounts: accounts.map(a => ({
                 id: a.id,
                 name: a.name,
-                token: isPrivileged ? a.token : 'hf_***MASKED***',
+                token: privileged ? a.token : 'hf_***MASKED***',
                 repo: a.repo,
                 type: a.type,
                 plural: a.plural,
@@ -727,57 +846,51 @@ app.get('/api/hf/config', async (req, res) => {
                 isDb: a.id.startsWith('db_')
             }))
         });
-    } catch {
+    } catch (err) {
+        console.error('Falha ao obter config HF:', err.message);
         res.status(500).json({ erro: 'Falha ao buscar configurações HF.' });
     }
 });
 
-// Adicionar nova conta do Hugging Face (Admin ou Ajudante)
-app.post('/api/hf/accounts', mutationLimiter, async (req, res) => {
-    const adminSenha = req.headers['x-admin-password'] || req.body.senha;
-    const authHeader = req.headers['authorization'];
-    const discordToken = authHeader ? authHeader.replace('Bearer ', '') : req.cookies?.discord_token;
-    const user = verifyToken(discordToken);
-
-    if (!checkPassword(adminSenha, ADMIN_PASSWORD) && (!user || !user.isAjudante)) {
-        return res.status(401).json({ erro: 'Não autorizado. Senha de administrador necessária.' });
-    }
+app.post('/api/hf/accounts', mutationLimiter, requireAdminOrAjudante, async (req, res) => {
     const { nome, token, repo, tipo } = req.body;
-    if (!token || !repo) {
-        return res.status(400).json({ erro: 'Token e Repositório são obrigatórios.' });
+    if (typeof token !== 'string' || !token.trim() || typeof repo !== 'string' || !repo.trim()) {
+        return res.status(400).json({ erro: 'Token e Repositório válidos são obrigatórios.' });
     }
     try {
         const query = 'INSERT INTO hf_contas (nome, token, repo, tipo) VALUES ($1, $2, $3, $4) RETURNING *';
-        const result = await pool.query(query, [nome || repo, token.trim(), repo.trim(), tipo || 'dataset']);
-        return res.json({ sucesso: true, conta: result.rows[0] });
-    } catch {
+        const result = await pool.query(query, [
+            (nome && String(nome).trim()) || repo.trim(),
+            token.trim(),
+            repo.trim(),
+            (tipo && String(tipo).trim()) || 'dataset'
+        ]);
+        return res.status(201).json({ sucesso: true, conta: result.rows[0] });
+    } catch (err) {
+        console.error('Erro ao adicionar conta HF:', err.message);
         return res.status(500).json({ erro: 'Erro ao cadastrar conta HF no banco de dados.' });
     }
 });
 
-// Excluir conta adicional do Hugging Face (Admin ou Ajudante)
-app.delete('/api/hf/accounts/:id', mutationLimiter, async (req, res) => {
-    const adminSenha = req.headers['x-admin-password'] || req.query.senha;
-    const authHeader = req.headers['authorization'];
-    const discordToken = authHeader ? authHeader.replace('Bearer ', '') : req.cookies?.discord_token;
-    const user = verifyToken(discordToken);
-
-    if (!checkPassword(adminSenha, ADMIN_PASSWORD) && (!user || !user.isAjudante)) {
-        return res.status(401).json({ erro: 'Não autorizado. Senha de administrador necessária.' });
+app.delete('/api/hf/accounts/:id', mutationLimiter, requireAdminOrAjudante, async (req, res) => {
+    const rawId = req.params.id ? req.params.id.replace('db_', '') : '';
+    const numericId = parseInt(rawId, 10);
+    if (isNaN(numericId)) {
+        return res.status(400).json({ erro: 'ID de conta inválido.' });
     }
-    const id = req.params.id.replace('db_', '');
     try {
-        await pool.query('DELETE FROM hf_contas WHERE id = $1', [id]);
+        const result = await pool.query('DELETE FROM hf_contas WHERE id = $1', [numericId]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ erro: 'Conta não encontrada.' });
+        }
         return res.json({ sucesso: true });
-    } catch {
+    } catch (err) {
+        console.error('Erro ao remover conta HF:', err.message);
         return res.status(500).json({ erro: 'Erro ao remover conta HF do banco de dados.' });
     }
 });
 
-// ==========================================
-// ROTA: Redirecionamento Mascarado (Opção 1: 302 Redirect - 0% CPU e 0% RAM)
-// Suporta /v/:filename ou /v/:accountId/:filename
-// ==========================================
+// Redirecionamento de Vídeo Hugging Face (302 Direct - 0% CPU e RAM)
 app.get(['/v/:arg1/:arg2', '/v/:arg1', '/api/stream/hf/:arg1/:arg2', '/api/stream/hf/:arg1'], async (req, res) => {
     try {
         let accountId = null;
@@ -788,31 +901,76 @@ app.get(['/v/:arg1/:arg2', '/v/:arg1', '/api/stream/hf/:arg1/:arg2', '/api/strea
             filename = req.params.arg2;
         }
 
-        const accounts = await getHfAccountsList();
-        let targetAccount = accounts[0];
+        if (!filename || typeof filename !== 'string') {
+            return res.status(400).send('Nome de arquivo inválido.');
+        }
 
+        const accounts = await getHfAccountsList();
+        if (!accounts || accounts.length === 0) {
+            return res.status(404).send('Nenhuma conta Hugging Face configurada no servidor.');
+        }
+
+        let targetAccount = accounts[0];
         if (accountId) {
-            const found = accounts.find(a => a.id === accountId || a.repo.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() === accountId.toLowerCase());
+            const found = accounts.find(a => 
+                a.id === accountId || 
+                a.repo.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() === accountId.toLowerCase()
+            );
             if (found) targetAccount = found;
         }
 
-        const directUrl = `https://huggingface.co/${targetAccount.plural}/${targetAccount.repo}/resolve/main/${encodeURIComponent(filename)}`;
+        const cleanFilename = path.basename(filename.trim());
+        const directUrl = `https://huggingface.co/${targetAccount.plural}/${targetAccount.repo}/resolve/main/${encodeURIComponent(cleanFilename)}`;
 
         res.setHeader('Cache-Control', 'public, max-age=86400');
         res.setHeader('Access-Control-Allow-Origin', '*');
         return res.redirect(302, directUrl);
     } catch (err) {
-        console.error('[Stream Redirect] Erro no redirecionamento:', err);
+        console.error('[Stream Redirect Error]:', err.message);
         return res.status(500).send('Erro ao redirecionar vídeo.');
     }
 });
 
+// ============================================================================
+// BALANCEADOR DE CARGA DE STREAM (ROUND ROBIN PARA /stream/*)
+// ============================================================================
+const defaultStreamBackends = [
+    'https://husky-denny-fenixflixaddon-ec8e842b.koyeb.app',
+    'https://stream.fenixhub.online'
+];
 
-// ==========================================
-// ROTA 1: Enviar JSON (Pública - Sem senha)
-// ==========================================
+let currentBackendIndex = 0;
+
+function getStreamBackends() {
+    if (process.env.STREAM_BACKENDS) {
+        return process.env.STREAM_BACKENDS.split(',')
+            .map(s => s.trim().replace(/\/+$/, ''))
+            .filter(Boolean);
+    }
+    return defaultStreamBackends;
+}
+
+app.get('/stream/{*splat}', (req, res) => {
+    const backends = getStreamBackends();
+    if (!backends || backends.length === 0) {
+        return res.status(502).send('Nenhum backend de streaming configurado.');
+    }
+
+    const backend = backends[currentBackendIndex % backends.length];
+    currentBackendIndex = (currentBackendIndex + 1) % backends.length;
+
+    const finalUrl = backend + req.originalUrl;
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'no-cache');
+    return res.redirect(302, finalUrl);
+});
+
+// ============================================================================
+// ROTA 1: ENVIAR CONTEÚDO / UPLOAD JSON
+// ============================================================================
 app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
-    const { nome, conteudo, senha } = req.body;
+    const { nome, conteudo } = req.body;
 
     if (!nome || !conteudo) {
         return res.status(400).json({ erro: 'O nome e o conteúdo do JSON são obrigatórios.' });
@@ -822,7 +980,7 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
     if (typeof conteudo === 'string') {
         try {
             parsedConteudo = JSON.parse(conteudo);
-        } catch (e) {
+        } catch {
             return res.status(400).json({ erro: 'O conteúdo enviado não é um JSON válido.' });
         }
     }
@@ -830,97 +988,86 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
     if (!parsedConteudo || typeof parsedConteudo !== 'object' || Array.isArray(parsedConteudo)) {
         return res.status(400).json({ erro: 'Estrutura JSON inválida. O conteúdo deve ser um objeto.' });
     }
-    
+
     if (parsedConteudo.type !== 'movie' && parsedConteudo.type !== 'series') {
         return res.status(400).json({ erro: 'O JSON deve possuir um "type" válido (movie ou series).' });
     }
-    
+
     if (parsedConteudo.streams === undefined || parsedConteudo.streams === null) {
         return res.status(400).json({ erro: 'O JSON deve conter a propriedade "streams".' });
     }
-    
+
     if (parsedConteudo.type === 'movie' && !Array.isArray(parsedConteudo.streams)) {
         return res.status(400).json({ erro: 'Para filmes, "streams" deve ser um array.' });
     }
-    
+
     if (parsedConteudo.type === 'series' && (typeof parsedConteudo.streams !== 'object' || Array.isArray(parsedConteudo.streams))) {
         return res.status(400).json({ erro: 'Para séries, "streams" deve ser um objeto.' });
     }
 
-    // Verificar autenticação (Discord Token ou Senha Admin)
-    const token = extractToken(req);
-    const user = verifyToken(token);
+    // Autenticação Unificada (Header Admin, Body Admin ou Discord Token)
+    const adminAuthed = isAdmin(req);
+    const user = getAuthUser(req);
 
-    const adminPassword = ADMIN_PASSWORD;
-    const isAdmin = (checkPassword(senha, adminPassword));
-
-    if (!isAdmin && !user) {
-        return res.status(401).json({ erro: 'Você precisa estar logado com o Discord para salvar links.' });
+    if (!adminAuthed && !user) {
+        return res.status(401).json({ erro: 'Você precisa estar logado com o Discord ou autenticado como Admin para salvar links.' });
     }
 
-    const isAjudante = Boolean(user && user.isAjudante);
+    const isAjudanteUser = Boolean(user && user.isAjudante);
     const forcePendente = req.query.force_pendente === 'true' || req.body.force_pendente === 'true';
-    const isPendente = (!isAdmin && !isAjudante) || forcePendente;
+    const isPendente = (!adminAuthed && !isAjudanteUser) || forcePendente;
     const isGenerator = req.query.generator === 'true';
 
-    // Se estiver logado via Discord, forçar a autoria das streams e registrar o cargo
-    if (user && !isAdmin) {
+    // Se autenticado via Discord (não admin), forçar e sobrescrever a autoria real para evitar spoofing
+    if (user && !adminAuthed) {
         const discordName = user.global_name || user.username;
-        const roleStr = isAjudante ? 'ajudante' : 'membro';
-        
-        parsedConteudo.colaborador = parsedConteudo.colaborador || discordName;
-        parsedConteudo.colaborador_role = parsedConteudo.colaborador_role || roleStr;
-        parsedConteudo.colaborador_id = parsedConteudo.colaborador_id || user.id;
-        parsedConteudo.colaborador_avatar = parsedConteudo.colaborador_avatar || user.avatar;
-        
-        const injectColaboradorIntoStream = (s) => {
+        const roleStr = isAjudanteUser ? 'ajudante' : 'membro';
+
+        parsedConteudo.colaborador = discordName;
+        parsedConteudo.colaborador_role = roleStr;
+        parsedConteudo.colaborador_id = user.id;
+        parsedConteudo.colaborador_avatar = user.avatar || null;
+
+        const enforceColaboradorOnStream = (s) => {
             if (s && typeof s === 'object') {
-                s.colaborador = s.colaborador || discordName;
-                s.colaborador_role = s.colaborador_role || roleStr;
-                s.colaborador_id = s.colaborador_id || user.id;
-                s.colaborador_avatar = s.colaborador_avatar || user.avatar;
+                s.colaborador = discordName;
+                s.colaborador_role = roleStr;
+                s.colaborador_id = user.id;
+                s.colaborador_avatar = user.avatar || null;
             }
         };
 
         if (parsedConteudo.type === 'movie' && Array.isArray(parsedConteudo.streams)) {
-            parsedConteudo.streams.forEach(injectColaboradorIntoStream);
+            parsedConteudo.streams.forEach(enforceColaboradorOnStream);
         } else if (parsedConteudo.type === 'series' && parsedConteudo.streams && typeof parsedConteudo.streams === 'object') {
             Object.keys(parsedConteudo.streams).forEach(seasonNum => {
                 const season = parsedConteudo.streams[seasonNum] || {};
                 Object.keys(season).forEach(epNum => {
                     const epStreams = season[epNum] || [];
                     if (Array.isArray(epStreams)) {
-                        epStreams.forEach(injectColaboradorIntoStream);
+                        epStreams.forEach(enforceColaboradorOnStream);
                     }
                 });
             });
         }
     }
 
-    // ==========================================
-    // ENRIQUECIMENTO NUVIOMETA
-    // ==========================================
+    // Enriquecimento com Metadados Nuviometa
     try {
         let imdbID = "";
         if (typeof parsedConteudo.id === 'string' && parsedConteudo.id.startsWith('tt')) {
             imdbID = parsedConteudo.id;
         } else if (nome && String(nome).startsWith('tt')) {
-            imdbID = String(nome);
+            imdbID = String(nome).replace(/\.json$/, '');
         }
 
         if (imdbID) {
             const cType = parsedConteudo.type || "movie";
             const nuviometaData = await getNuviometaInfo(imdbID, cType);
-            
+
             if (nuviometaData) {
-                if (nuviometaData.name && !parsedConteudo.title) {
-                    parsedConteudo.title = nuviometaData.name;
-                }
-                if (nuviometaData.videos) {
+                if (nuviometaData.videos && !parsedConteudo.nuviometaVideos) {
                     parsedConteudo.nuviometaVideos = nuviometaData.videos;
-                }
-                if (nuviometaData.poster && (!parsedConteudo.poster || parsedConteudo.poster.includes('ratingposterdb') || parsedConteudo.poster.includes('tmdb'))) {
-                    parsedConteudo.poster = nuviometaData.poster;
                 }
             }
 
@@ -929,13 +1076,55 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
             }
         }
     } catch (enrichErr) {
-        console.error("⚠️ Falha ao enriquecer metadados do JSON:", enrichErr.message);
+        console.warn("⚠️ Falha ao enriquecer metadados do JSON:", enrichErr.message);
     }
 
     let finalConteudo = parsedConteudo;
+    // O JSON armazena apenas dados estruturais de streams/id/tipo. Remove título, poster, fanart e sinopse:
+    delete finalConteudo.title;
+    delete finalConteudo.name;
+    delete finalConteudo.poster;
+    delete finalConteudo.background;
+    delete finalConteudo.backdrop;
+    delete finalConteudo.description;
+    delete finalConteudo.overview;
+    delete finalConteudo.year;
+
     injectDateIntoStreams(finalConteudo);
 
-    const client = await pool.connect();
+    // Modo Hugging Face: Salva diretamente no repositório HF
+    if (process.env.DATABASE_SOURCE === 'huggingface') {
+        try {
+            if (!adminAuthed && !isGenerator) {
+                const existing = await getContentFromHf(nome);
+                if (existing) {
+                    finalConteudo = mergeMediaContents(existing, parsedConteudo);
+                }
+            }
+
+            await saveContentToHf(nome, finalConteudo);
+            invalidateCatalogCache();
+            return res.status(201).json({
+                mensagem: `JSON '${nome}' publicado com sucesso no Hugging Face (${process.env.HF_DATABASE_REPO || 'Fenixflix/Database'})!`
+            });
+        } catch (hfErr) {
+            console.error('[Upload HF Error]:', hfErr.message);
+            const status = hfErr.isPermissionError ? 403 : 500;
+            return res.status(status).json({
+                erro: hfErr.message,
+                needsWriteToken: Boolean(hfErr.isPermissionError)
+            });
+        }
+    }
+
+    let client;
+    try {
+        client = await pool.connect();
+    } catch (connErr) {
+        console.error('[Upload DB Connection Error]:', connErr.message);
+        return res.status(500).json({ erro: 'Falha ao conectar ao banco de dados.' });
+    }
+
     try {
         await client.query('BEGIN');
 
@@ -945,7 +1134,7 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
                 ? JSON.parse(checkRes.rows[0].conteudo)
                 : checkRes.rows[0].conteudo;
 
-            if (!isAdmin && !isGenerator) {
+            if (!adminAuthed && !isGenerator) {
                 finalConteudo = mergeMediaContents(existing, parsedConteudo);
             }
         }
@@ -969,74 +1158,140 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
             `;
             await client.query(publishQuery, [nome, JSON.stringify(finalConteudo)]);
             await client.query('COMMIT');
+            invalidateCatalogCache();
             return res.status(201).json({ mensagem: `JSON '${nome}' publicado com sucesso!` });
         }
     } catch (err) {
-        await client.query('ROLLBACK');
-        console.error('[Upload Transaction Error]:', err);
+        try {
+            await client.query('ROLLBACK');
+        } catch (rbErr) {
+            console.error('[Upload Rollback Error]:', rbErr.message);
+        }
+        console.error('[Upload Transaction Error]:', err.message);
         return res.status(500).json({ erro: 'Falha ao salvar dados no banco de dados.' });
     } finally {
         client.release();
     }
 });
 
-// ==========================================
-// ROTA 2: Listar todos os JSONs (/api/all)
-// ==========================================
+// ============================================================================
+// ROTAS DE CONSULTA E CATÁLOGO (COM CACHE EM MEMÓRIA - DICA 4)
+// ============================================================================
+let catalogCache = {
+    public: null,
+    publicTimestamp: 0,
+    privileged: null,
+    privilegedTimestamp: 0
+};
+const CATALOG_CACHE_TTL = 60 * 1000; // 60 segundos de retenção na RAM
+
+function invalidateCatalogCache() {
+    catalogCache.public = null;
+    catalogCache.publicTimestamp = 0;
+    catalogCache.privileged = null;
+    catalogCache.privilegedTimestamp = 0;
+}
+
 app.get('/api/all', (_req, res) => {
-    res.redirect(301, '/api/catalog');
-});
-/*
-    const token = extractToken(req);
-    const user = verifyToken(token);
-    const senha = req.headers['x-admin-password'];
-    const adminPassword = ADMIN_PASSWORD;
-    const canSeeHidden = (checkPassword(senha, adminPassword)) || (user && user.isAjudante);
-
-    try {
-        const query = `SELECT conteudo FROM arquivos_json ${canSeeHidden ? '' : 'WHERE is_oculto = FALSE AND is_pendente = FALSE'} ORDER BY criado_em DESC;`;
-        const result = await pool.query(query);
-        res.json(result.rows.map(r => r.conteudo));
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ erro: 'Erro ao buscar os dados.' });
-    }
+    res.redirect(302, '/api/catalog');
 });
 
-// ==========================================
-*/
-// ROTA 2b: Listar todos para o Catálogo (/api/catalog)
-// ==========================================
 app.get('/api/catalog', async (req, res) => {
-    const token = extractToken(req);
-    const user = verifyToken(token);
-    const senha = req.headers['x-admin-password'];
-    const adminPassword = ADMIN_PASSWORD;
-    const canSeeHidden = (checkPassword(senha, adminPassword)) || (user && user.isAjudante);
+    const privileged = isPrivileged(req);
+    const now = Date.now();
+    const cacheKey = privileged ? 'privileged' : 'public';
+    const timestampKey = privileged ? 'privilegedTimestamp' : 'publicTimestamp';
 
+    if (catalogCache[cacheKey] && (now - catalogCache[timestampKey] < CATALOG_CACHE_TTL)) {
+        res.setHeader('X-Cache', 'HIT');
+        if (!privileged) {
+            res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+        }
+        return res.json(catalogCache[cacheKey]);
+    }
+
+    const useHfDirectly = process.env.DATABASE_SOURCE === 'huggingface';
+
+    if (!useHfDirectly) {
+        try {
+            const query = `
+                SELECT conteudo 
+                FROM arquivos_json 
+                ${privileged ? '' : 'WHERE is_oculto = FALSE AND is_pendente = FALSE'} 
+                ORDER BY criado_em DESC;
+            `;
+            const result = await pool.query(query);
+            const catalog = result.rows.map(r => typeof r.conteudo === 'string' ? JSON.parse(r.conteudo) : r.conteudo);
+            
+            catalogCache[cacheKey] = catalog;
+            catalogCache[timestampKey] = now;
+
+            res.setHeader('X-Cache', 'MISS');
+            res.setHeader('X-Source', 'PostgreSQL');
+            if (!privileged) {
+                res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+            }
+            return res.json(catalog);
+        } catch (err) {
+            console.warn('[PostgreSQL Catalog Warning]:', err.message);
+        }
+    }
+
+    // FALLBACK / FONTE HUGGING FACE
     try {
-        const query = `SELECT conteudo FROM arquivos_json ${canSeeHidden ? '' : 'WHERE is_oculto = FALSE AND is_pendente = FALSE'} ORDER BY criado_em DESC;`;
-        const result = await pool.query(query);
-        res.json(result.rows.map(r => r.conteudo));
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ erro: 'Erro ao carregar o catálogo.' });
+        const hfItems = await fetchCatalogFromHf(false);
+        const filtered = privileged ? hfItems : hfItems.filter(i => !i.is_oculto && !i.is_pendente);
+
+        catalogCache[cacheKey] = filtered;
+        catalogCache[timestampKey] = now;
+
+        res.setHeader('X-Cache', 'MISS');
+        res.setHeader('X-Source', 'HuggingFace');
+        if (!privileged) {
+            res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+        }
+        return res.json(filtered);
+    } catch (hfErr) {
+        console.error('[HuggingFace Catalog Error]:', hfErr.message);
+
+        return res.status(503).json({ 
+            erro: 'Falha ao carregar catálogo do Hugging Face: ' + hfErr.message,
+            dbPaused: false,
+            isHf: true,
+            hfError: hfErr.message
+        });
     }
 });
 
-// ==========================================
-// ROTA 2c: Apagar JSON (/api/delete)
-// ==========================================
-app.delete('/api/delete', mutationLimiter, async (req, res) => {
-    const { id, senha } = req.body;
-    const adminPassword = ADMIN_PASSWORD;
-
-    if (!checkPassword(senha, adminPassword)) {
-        return res.status(401).json({ erro: 'Senha incorreta.' });
+// Testar conexão e diagnóstico do repositório Hugging Face Database
+app.get('/api/hf/database/test', async (_req, res) => {
+    try {
+        const testResult = await testHfDatabaseConnection();
+        res.json(testResult);
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
     }
+});
 
-    if (!id) {
-        return res.status(400).json({ erro: 'O nome/ID é obrigatório.' });
+// Sincronizar catálogo do Hugging Face manualmente
+app.all('/api/hf/database/sync', async (_req, res) => {
+    try {
+        const items = await fetchCatalogFromHf(true);
+        invalidateCatalogCache();
+        res.json({
+            sucesso: true,
+            mensagem: 'Catálogo sincronizado com sucesso a partir do Hugging Face!',
+            total_itens: items.length
+        });
+    } catch (err) {
+        res.status(500).json({ erro: `Falha ao sincronizar com Hugging Face: ${err.message}` });
+    }
+});
+
+app.delete('/api/delete', mutationLimiter, requireAdmin, async (req, res) => {
+    const { id } = req.body;
+    if (!id || typeof id !== 'string') {
+        return res.status(400).json({ erro: 'O nome/ID do arquivo é obrigatório.' });
     }
 
     try {
@@ -1044,78 +1299,94 @@ app.delete('/api/delete', mutationLimiter, async (req, res) => {
             DELETE FROM arquivos_json 
             WHERE nome_do_json = $1 OR conteudo->>'id' = $1;
         `;
-        await pool.query(query, [id]);
+        const result = await pool.query(query, [id.trim()]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ erro: 'Arquivo não encontrado.' });
+        }
+        invalidateCatalogCache();
         res.json({ sucesso: true, mensagem: `Arquivo '${id}' removido com sucesso.` });
     } catch (err) {
-        console.error(err);
+        console.error('Erro ao deletar arquivo:', err.message);
         res.status(500).json({ erro: 'Erro ao apagar o arquivo do banco.' });
     }
 });
 
-// ==========================================
-// ROTA 3: Contar total de JSONs (/count)
-// ==========================================
-app.get('/count', async (req, res) => {
+app.get('/count', async (_req, res) => {
+    if (process.env.DATABASE_SOURCE !== 'huggingface') {
+        try {
+            const query = 'SELECT COUNT(*)::int AS total FROM arquivos_json;';
+            const result = await pool.query(query);
+            return res.json({ total: result.rows[0].total, source: 'postgres' });
+        } catch (err) {
+            // Continua para Hugging Face
+        }
+    }
+
     try {
-        const query = 'SELECT COUNT(*) FROM arquivos_json;';
-        const result = await pool.query(query);
-        // Retorna o número como inteiro
-        res.json({ total: parseInt(result.rows[0].count, 10) }); 
+        const total = await getCountFromHf();
+        return res.json({ total, source: 'huggingface' });
     } catch (err) {
-        console.error(err);
+        console.error('Erro ao contar arquivos no Hugging Face:', err.message);
         res.status(500).json({ erro: 'Erro ao contar os arquivos.' });
     }
 });
 
-
-// ==========================================
-// ROTA 4: Visualizar JSON específico (/:nome)
-// ==========================================
-app.get('/api/content/:nome', async (req, res) => {
-    if (req.params.nome === 'favicon.ico') return res.status(204).end();
-    if (['upload', 'api', 'count'].includes(req.params.nome)) {
+// Visualizar JSON específico por nome ou IMDb ID (Exclusivo para Admin/Ajudante)
+app.get('/api/content/:nome', (req, res, next) => {
+    if (!isPrivileged(req)) {
+        return res.status(403).json({ erro: 'Acesso restrito. Somente administradores podem visualizar o JSON bruto.' });
+    }
+    next();
+}, async (req, res) => {
+    const rawNome = req.params.nome;
+    if (rawNome === 'favicon.ico') return res.status(204).end();
+    if (['upload', 'api', 'count'].includes(rawNome)) {
         return res.status(404).json({ erro: 'Rota reservada.' });
     }
-    try {
-        const token = extractToken(req);
-        const user = verifyToken(token);
-        
-        const senha = req.headers['x-admin-password'];
-        const adminPassword = ADMIN_PASSWORD;
-        
-        const isAdmin = (checkPassword(senha, adminPassword));
-        const isAjudante = user && user.isAjudante;
-        const canSeeHidden = isAdmin || isAjudante;
 
-        const query = `
-            UPDATE arquivos_json 
-            SET conteudo = jsonb_set(
-                conteudo, 
-                '{views}', 
-                to_jsonb(COALESCE((conteudo->>'views')::int, 0) + 1)
-            ) 
-            WHERE nome_do_json = $1 
-            ${canSeeHidden ? '' : 'AND is_oculto = FALSE AND is_pendente = FALSE'}
-            RETURNING conteudo;
-        `;
-        const result = await pool.query(query, [req.params.nome]);
+    const privileged = isPrivileged(req);
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ erro: 'JSON não encontrado ou oculto.' });
+    if (process.env.DATABASE_SOURCE !== 'huggingface') {
+        try {
+            const query = `
+                UPDATE arquivos_json 
+                SET conteudo = jsonb_set(
+                    conteudo, 
+                    '{views}', 
+                    to_jsonb(COALESCE((conteudo->>'views')::int, 0) + 1)
+                ) 
+                WHERE (nome_do_json = $1 OR nome_do_json = $1 || '.json' OR conteudo->>'id' = $1)
+                ${privileged ? '' : 'AND is_oculto = FALSE AND is_pendente = FALSE'}
+                RETURNING conteudo;
+            `;
+            const result = await pool.query(query, [rawNome]);
+
+            if (result.rows.length > 0) {
+                const conteudo = typeof result.rows[0].conteudo === 'string'
+                    ? JSON.parse(result.rows[0].conteudo)
+                    : result.rows[0].conteudo;
+
+                return res.json(conteudo);
+            }
+        } catch (err) {
+            console.warn('[PostgreSQL Content Warning]:', err.message);
         }
+    }
 
-        // Retorna diretamente o objeto JSON, sem encapsular
-        res.json(result.rows[0].conteudo);
+    // Fallback para Hugging Face
+    try {
+        const hfContent = await getContentFromHf(rawNome);
+        if (hfContent) {
+            return res.json(hfContent);
+        }
+        return res.status(404).json({ erro: 'JSON não encontrado ou oculto.' });
     } catch (err) {
-        console.error(err);
+        console.error('[Hugging Face Content Error]:', err.message);
         res.status(500).json({ erro: 'Erro interno ao buscar o arquivo.' });
     }
 });
 
-// ==========================================
-// ROTA 4b: Ranking de Acessos (/api/vistos)
-// ==========================================
-app.get('/api/vistos', async (req, res) => {
+app.get('/api/vistos', async (_req, res) => {
     try {
         const query = `
             SELECT 
@@ -1127,15 +1398,12 @@ app.get('/api/vistos', async (req, res) => {
         const result = await pool.query(query);
         res.json(result.rows);
     } catch (err) {
-        console.error(err);
+        console.error('Erro ao buscar vistos:', err.message);
         res.status(500).json({ erro: 'Erro ao buscar ranking de acessos.' });
     }
 });
 
-// ==========================================
-// ROTA 5: Estatísticas de Armazenamento (/api/stats)
-// ==========================================
-app.get('/api/stats', async (req, res) => {
+app.get('/api/stats', async (_req, res) => {
     try {
         const query = `
             SELECT 
@@ -1148,7 +1416,7 @@ app.get('/api/stats', async (req, res) => {
         `;
         const result = await pool.query(query);
         const stats = result.rows[0];
-        
+
         res.json({
             total_bytes: parseInt(stats.total_size, 10),
             movie_bytes: parseInt(stats.movie_size, 10),
@@ -1158,37 +1426,35 @@ app.get('/api/stats', async (req, res) => {
             total_count: parseInt(stats.total_count, 10)
         });
     } catch (err) {
-        console.error(err);
+        console.error('Erro ao buscar estatísticas:', err.message);
         res.status(500).json({ erro: 'Erro ao buscar estatísticas do banco de dados.' });
     }
 });
 
-// ==========================================
-// ROTA 6: Verificar Senha (/api/verify)
-// ==========================================
 app.post('/api/verify', authLimiter, (req, res) => {
-    const { senha } = req.body;
-    const adminPassword = ADMIN_PASSWORD;
-
-    if (checkPassword(senha, adminPassword)) {
+    if (isAdmin(req)) {
         return res.json({ sucesso: true });
     }
     return res.status(401).json({ erro: 'Senha incorreta.' });
 });
 
-// ==========================================
-// ROTA 7: Adicionar Pedido (/api/pedidos)
-// ==========================================
+// ============================================================================
+// ROTAS DE PEDIDOS SUGERIDOS
+// ============================================================================
 app.post('/api/pedidos', submissionLimiter, async (req, res) => {
     const { id, type, episode } = req.body;
 
-    if (!id || !type) {
+    if (!id || typeof id !== 'string' || !type || typeof type !== 'string') {
         return res.status(400).json({ erro: 'ID (IMDb) e tipo são obrigatórios.' });
     }
 
+    const cleanType = type.trim().toLowerCase();
+    if (cleanType !== 'movie' && cleanType !== 'series') {
+        return res.status(400).json({ erro: 'Tipo inválido. Deve ser "movie" ou "series".' });
+    }
+
     try {
-        // Verificar se já foi lançado
-        const nuviometaData = await getNuviometaInfo(id, type);
+        const nuviometaData = await getNuviometaInfo(id.trim(), cleanType);
         if (nuviometaData && nuviometaData.released) {
             const releaseDate = nuviometaData.released.split('T')[0];
             const today = new Date().toISOString().split('T')[0];
@@ -1197,25 +1463,28 @@ app.post('/api/pedidos', submissionLimiter, async (req, res) => {
             }
         }
 
+        if (process.env.DATABASE_SOURCE === 'huggingface') {
+            return res.status(201).json({ mensagem: 'Pedido registrado com sucesso!' });
+        }
+
         const query = `
             INSERT INTO pedidos_sugeridos (imdb_id, tipo, episodio)
             VALUES ($1, $2, $3)
             RETURNING *;
         `;
-        const values = [id, type, episode || null];
+        const values = [id.trim(), cleanType, episode ? String(episode).trim() : null];
         await pool.query(query, values);
         res.status(201).json({ mensagem: 'Pedido registrado com sucesso!' });
     } catch (err) {
-        console.error(err);
+        console.error('Erro ao registrar pedido:', err.message);
         res.status(500).json({ erro: 'Erro ao registrar pedido no banco.' });
     }
 });
 
-// ==========================================
-// ROTA 8: Listar e Somar Pedidos (/api/pedidos)
-// ==========================================
-app.get('/api/pedidos', async (req, res) => {
-    // Caso contrário (sem parâmetros), apenas lista todos
+app.get('/api/pedidos', async (_req, res) => {
+    if (process.env.DATABASE_SOURCE === 'huggingface') {
+        return res.json([]);
+    }
     try {
         const query = `
             SELECT 
@@ -1233,76 +1502,57 @@ app.get('/api/pedidos', async (req, res) => {
         const result = await pool.query(query);
         res.json(result.rows);
     } catch (err) {
-        console.error(err);
+        console.error('Erro ao listar pedidos:', err.message);
         res.status(500).json({ erro: 'Erro ao buscar pedidos no banco.' });
     }
 });
 
-// ==========================================
-// ROTA 9: Apagar Pedido (/api/pedidos/delete)
-// ==========================================
-app.post('/api/pedidos/delete', mutationLimiter, async (req, res) => {
-    const { id, senha } = req.body;
-    const adminPassword = ADMIN_PASSWORD;
-
-    if (!checkPassword(senha, adminPassword)) {
-        return res.status(401).json({ erro: 'Senha incorreta.' });
+app.post('/api/pedidos/delete', mutationLimiter, requireAdmin, async (req, res) => {
+    const { id } = req.body;
+    if (!id || typeof id !== 'string') {
+        return res.status(400).json({ erro: 'ID (IMDb) é obrigatório.' });
     }
 
-    if (!id) {
-        return res.status(400).json({ erro: 'ID (IMDb) é obrigatório.' });
+    if (process.env.DATABASE_SOURCE === 'huggingface') {
+        return res.json({ sucesso: true, mensagem: `Pedidos para o ID '${id}' removidos.` });
     }
 
     try {
         const query = 'DELETE FROM pedidos_sugeridos WHERE imdb_id = $1;';
-        await pool.query(query, [id]);
+        await pool.query(query, [id.trim()]);
         res.json({ sucesso: true, mensagem: `Pedidos para o ID '${id}' removidos.` });
     } catch (err) {
-        console.error(err);
+        console.error('Erro ao apagar pedidos:', err.message);
         res.status(500).json({ erro: 'Erro ao apagar pedidos do banco.' });
     }
 });
 
-// ==========================================
-// ROTA 9x: Ocultar/Desocultar Arquivo (/api/arquivos/ocultar)
-// ==========================================
-app.post('/api/arquivos/ocultar', mutationLimiter, async (req, res) => {
-    const { nome, is_oculto, senha } = req.body;
-    
-    const adminPassword = ADMIN_PASSWORD;
-    const token = extractToken(req);
-    const user = verifyToken(token);
-
-    const isAdmin = (checkPassword(senha, adminPassword));
-    const isAjudante = user && user.isAjudante;
-
-    if (!isAdmin && !isAjudante) {
-        return res.status(401).json({ erro: 'Acesso não autorizado para ocultar arquivos.' });
-    }
-
-    if (!nome) {
+// ============================================================================
+// ROTAS DE MODERAÇÃO E GERENCIAMENTO DE ARQUIVOS
+// ============================================================================
+app.post('/api/arquivos/ocultar', mutationLimiter, requireAdminOrAjudante, async (req, res) => {
+    const { nome, is_oculto } = req.body;
+    if (!nome || typeof nome !== 'string') {
         return res.status(400).json({ erro: 'Nome do arquivo é obrigatório.' });
     }
 
     try {
         const isOcultoBoolean = Boolean(is_oculto);
         const query = 'UPDATE arquivos_json SET is_oculto = $1 WHERE nome_do_json = $2 RETURNING *;';
-        const result = await pool.query(query, [isOcultoBoolean, nome]);
-        
+        const result = await pool.query(query, [isOcultoBoolean, nome.trim()]);
+
         if (result.rowCount === 0) {
             return res.status(404).json({ erro: 'Arquivo não encontrado.' });
         }
-        
-        res.json({ sucesso: true, mensagem: `Arquivo ${is_oculto ? 'ocultado' : 'desocultado'} com sucesso.` });
+
+        invalidateCatalogCache();
+        res.json({ sucesso: true, mensagem: `Arquivo ${isOcultoBoolean ? 'ocultado' : 'desocultado'} com sucesso.` });
     } catch (err) {
-        console.error(err);
+        console.error('Erro ao ocultar arquivo:', err.message);
         res.status(500).json({ erro: 'Erro ao alterar visibilidade do arquivo.' });
     }
 });
 
-// ==========================================
-// ROTA 9b: Denunciar Conteúdo (/api/denunciar)
-// ==========================================
 app.post('/api/denunciar', submissionLimiter, async (req, res) => {
     const { nome, titulo, motivo, detalhes } = req.body;
 
@@ -1316,22 +1566,23 @@ app.post('/api/denunciar', submissionLimiter, async (req, res) => {
             VALUES ($1, $2, $3, $4)
             RETURNING *;
         `;
-        await pool.query(query, [nome, titulo, motivo, detalhes || '']);
+        await pool.query(query, [
+            String(nome).trim(),
+            String(titulo).trim(),
+            String(motivo).trim(),
+            detalhes ? String(detalhes).trim() : ''
+        ]);
         res.status(201).json({ sucesso: true, mensagem: 'Denúncia registrada com sucesso!' });
     } catch (err) {
-        console.error(err);
+        console.error('Erro ao salvar denúncia:', err.message);
         res.status(500).json({ erro: 'Erro ao salvar denúncia no banco de dados.' });
     }
 });
 
-// ==========================================
-// ROTAS DE APROVAÇÃO (Moderation Queue)
-// ==========================================
 app.get('/api/meus-pendentes', async (req, res) => {
-    const token = extractToken(req);
-    const user = verifyToken(token);
-    if (!user) return res.json([]);
-    
+    const user = getAuthUser(req);
+    if (!user || !user.id) return res.json([]);
+
     try {
         const query = `
             SELECT nome_do_json FROM envios_pendentes 
@@ -1340,72 +1591,143 @@ app.get('/api/meus-pendentes', async (req, res) => {
         const result = await pool.query(query, [user.id]);
         res.json(result.rows);
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ erro: 'Erro' });
+        console.error('Erro ao buscar meus pendentes:', err.message);
+        res.status(500).json({ erro: 'Erro ao carregar pendentes do usuário.' });
     }
 });
 
-app.get('/api/arquivos/pendentes', async (req, res) => {
-    const senha = req.headers['x-admin-password'];
-    const adminPassword = ADMIN_PASSWORD;
-    const token = extractToken(req);
-    const user = verifyToken(token);
-
-    if (!checkPassword(senha, adminPassword) && (!user || !user.isAjudante)) {
-        return res.status(401).json({ erro: 'Não autorizado.' });
-    }
-
+app.get('/api/arquivos/pendentes', requireAdminOrAjudante, async (_req, res) => {
     try {
         const query = 'SELECT nome_do_json, conteudo, criado_em FROM envios_pendentes ORDER BY criado_em ASC;';
         const result = await pool.query(query);
         res.json(result.rows);
     } catch (err) {
-        console.error(err);
+        console.error('Erro ao listar arquivos pendentes:', err.message);
         res.status(500).json({ erro: 'Erro ao buscar arquivos pendentes.' });
     }
 });
 
-app.post('/api/arquivos/aprovar', mutationLimiter, async (req, res) => {
-    const { nome, senha, conteudo, restantePendente } = req.body;
-    const adminPassword = ADMIN_PASSWORD;
-    const token = extractToken(req);
-    const user = verifyToken(token);
-
-    if (!checkPassword(senha, adminPassword) && (!user || !user.isAjudante)) {
-        return res.status(401).json({ erro: 'Não autorizado.' });
+app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async (req, res) => {
+    const { nome, conteudo, restantePendente } = req.body;
+    if (!nome || typeof nome !== 'string') {
+        return res.status(400).json({ erro: 'Nome do arquivo pendente é obrigatório.' });
     }
 
-    const client = await pool.connect();
+    let client;
+    try {
+        client = await pool.connect();
+    } catch (connErr) {
+        console.error('[Aprovar DB Connection Error]:', connErr.message);
+        return res.status(500).json({ erro: 'Falha ao conectar ao banco de dados.' });
+    }
+
     try {
         await client.query('BEGIN');
 
-        // 1. Busca da fila com lock pessimista
-        const pendingRes = await client.query('SELECT conteudo FROM envios_pendentes WHERE nome_do_json = $1 FOR UPDATE;', [nome]);
+        const pendingRes = await client.query('SELECT conteudo FROM envios_pendentes WHERE nome_do_json = $1 FOR UPDATE;', [nome.trim()]);
         if (pendingRes.rowCount === 0) {
             await client.query('ROLLBACK');
             return res.status(404).json({ erro: 'Envio pendente não encontrado.' });
         }
-        
-        const conteudoToSave = conteudo || pendingRes.rows[0].conteudo;
 
-        // 2. Mescla e Publica
+        const pendingConteudo = typeof pendingRes.rows[0].conteudo === 'string'
+            ? JSON.parse(pendingRes.rows[0].conteudo)
+            : pendingRes.rows[0].conteudo;
+
+        let conteudoToSave = conteudo ? (typeof conteudo === 'string' ? JSON.parse(conteudo) : conteudo) : null;
+
+        if (!conteudoToSave) {
+            const existingRes = await client.query('SELECT conteudo FROM arquivos_json WHERE nome_do_json = $1;', [nome.trim()]);
+            if (existingRes.rows.length > 0) {
+                const existing = typeof existingRes.rows[0].conteudo === 'string'
+                    ? JSON.parse(existingRes.rows[0].conteudo)
+                    : existingRes.rows[0].conteudo;
+                conteudoToSave = mergeMediaContents(existing, pendingConteudo);
+            } else {
+                conteudoToSave = pendingConteudo;
+            }
+        }
+
+        // Garantir que a autoria do envio pendente seja preservada e injetada nas streams
+        const pColab = pendingConteudo.colaborador;
+        const pColabId = pendingConteudo.colaborador_id;
+        const pColabAvatar = pendingConteudo.colaborador_avatar;
+        const pColabRole = pendingConteudo.colaborador_role;
+
+        if (pColab) {
+            if (!conteudoToSave.colaborador) conteudoToSave.colaborador = pColab;
+            if (!conteudoToSave.colaborador_id && pColabId) conteudoToSave.colaborador_id = pColabId;
+            if (!conteudoToSave.colaborador_avatar && pColabAvatar) conteudoToSave.colaborador_avatar = pColabAvatar;
+            if (!conteudoToSave.colaborador_role && pColabRole) conteudoToSave.colaborador_role = pColabRole;
+
+            const injectColab = (s) => {
+                if (s && typeof s === 'object') {
+                    if (!s.colaborador) s.colaborador = pColab;
+                    if (!s.colaborador_id && pColabId) s.colaborador_id = pColabId;
+                    if (!s.colaborador_avatar && pColabAvatar) s.colaborador_avatar = pColabAvatar;
+                    if (!s.colaborador_role && pColabRole) s.colaborador_role = pColabRole;
+                }
+            };
+
+            if (conteudoToSave.type === 'movie' && Array.isArray(conteudoToSave.streams)) {
+                conteudoToSave.streams.forEach(injectColab);
+            } else if (conteudoToSave.type === 'series' && conteudoToSave.streams && typeof conteudoToSave.streams === 'object') {
+                Object.keys(conteudoToSave.streams).forEach(seasonNum => {
+                    const season = conteudoToSave.streams[seasonNum] || {};
+                    Object.keys(season).forEach(epNum => {
+                        const epStreams = season[epNum] || [];
+                        if (Array.isArray(epStreams)) {
+                            epStreams.forEach(injectColab);
+                        }
+                    });
+                });
+            }
+        }
+
+        const checkMissingQuality = (streams, type) => {
+            if (type === 'movie' && Array.isArray(streams)) {
+                return streams.some(s => {
+                    const parts = (s?.name || '').split('\n');
+                    return !parts[1] || parts[1].trim() === '' || parts[1].trim() === 'Nenhuma';
+                });
+            }
+            if (type === 'series' && streams && typeof streams === 'object') {
+                for (const s in streams) {
+                    for (const e in streams[s]) {
+                        if (Array.isArray(streams[s][e])) {
+                            if (streams[s][e].some(str => {
+                                const parts = (str?.name || '').split('\n');
+                                return !parts[1] || parts[1].trim() === '' || parts[1].trim() === 'Nenhuma';
+                            })) return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        };
+
+        if (checkMissingQuality(conteudoToSave.streams, conteudoToSave.type)) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ erro: 'Não é permitido aprovar links sem qualidade informada. Defina a qualidade (ex: 1080p, 720p) nas streams.' });
+        }
+
         const upsertQuery = `
             INSERT INTO arquivos_json (nome_do_json, conteudo, is_pendente) 
             VALUES ($1, $2, FALSE)
             ON CONFLICT (nome_do_json) 
             DO UPDATE SET conteudo = EXCLUDED.conteudo, is_pendente = FALSE, criado_em = CURRENT_TIMESTAMP;
         `;
-        await client.query(upsertQuery, [nome, JSON.stringify(conteudoToSave)]);
-        
-        // 3. Gerencia a fila
+        await client.query(upsertQuery, [nome.trim(), JSON.stringify(conteudoToSave)]);
+        invalidateCatalogCache();
+
         if (restantePendente) {
             let temRestante = false;
-            if (restantePendente.type === 'movie' && restantePendente.streams && restantePendente.streams.length > 0) {
+            if (restantePendente.type === 'movie' && Array.isArray(restantePendente.streams) && restantePendente.streams.length > 0) {
                 temRestante = true;
             } else if (restantePendente.type === 'series' && restantePendente.streams) {
                 for (const s in restantePendente.streams) {
                     for (const e in restantePendente.streams[s]) {
-                        if (restantePendente.streams[s][e].length > 0) {
+                        if (Array.isArray(restantePendente.streams[s][e]) && restantePendente.streams[s][e].length > 0) {
                             temRestante = true;
                             break;
                         }
@@ -1415,116 +1737,98 @@ app.post('/api/arquivos/aprovar', mutationLimiter, async (req, res) => {
             }
 
             if (temRestante) {
-                await client.query('UPDATE envios_pendentes SET conteudo = $1 WHERE nome_do_json = $2;', [JSON.stringify(restantePendente), nome]);
+                await client.query('UPDATE envios_pendentes SET conteudo = $1 WHERE nome_do_json = $2;', [JSON.stringify(restantePendente), nome.trim()]);
             } else {
-                await client.query('DELETE FROM envios_pendentes WHERE nome_do_json = $1;', [nome]);
+                await client.query('DELETE FROM envios_pendentes WHERE nome_do_json = $1;', [nome.trim()]);
             }
         } else {
-            await client.query('DELETE FROM envios_pendentes WHERE nome_do_json = $1;', [nome]);
+            await client.query('DELETE FROM envios_pendentes WHERE nome_do_json = $1;', [nome.trim()]);
         }
-        
+
         await client.query('COMMIT');
         res.json({ sucesso: true, mensagem: 'Item aprovado e publicado com sucesso.' });
     } catch (err) {
-        await client.query('ROLLBACK');
-        console.error('[Aprovar Error]:', err);
+        try {
+            await client.query('ROLLBACK');
+        } catch (rbErr) {
+            console.error('[Aprovar Rollback Error]:', rbErr.message);
+        }
+        console.error('[Aprovar Error]:', err.message);
         res.status(500).json({ erro: 'Erro ao processar aprovação.' });
     } finally {
         client.release();
     }
 });
 
-app.post('/api/arquivos/rejeitar', mutationLimiter, async (req, res) => {
-    const { nome, senha } = req.body;
-    const adminPassword = ADMIN_PASSWORD;
-    const token = extractToken(req);
-    const user = verifyToken(token);
-
-    if (!checkPassword(senha, adminPassword) && (!user || !user.isAjudante)) {
-        return res.status(401).json({ erro: 'Não autorizado.' });
+app.post('/api/arquivos/rejeitar', mutationLimiter, requireAdminOrAjudante, async (req, res) => {
+    const { nome } = req.body;
+    if (!nome || typeof nome !== 'string') {
+        return res.status(400).json({ erro: 'Nome do arquivo é obrigatório.' });
     }
 
     try {
         const query = 'DELETE FROM envios_pendentes WHERE nome_do_json = $1 RETURNING *;';
-        const result = await pool.query(query, [nome]);
-        
-        if (result.rowCount === 0) return res.status(404).json({ erro: 'Arquivo pendente não encontrado.' });
+        const result = await pool.query(query, [nome.trim()]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ erro: 'Arquivo pendente não encontrado.' });
+        }
         res.json({ sucesso: true, mensagem: 'Edição/Envio rejeitado com sucesso.' });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ erro: 'Erro ao rejeitar.' });
+        console.error('Erro ao rejeitar arquivo:', err.message);
+        res.status(500).json({ erro: 'Erro ao rejeitar arquivo pendente.' });
     }
 });
 
-// ==========================================
-// ROTA 9c: Listar Denúncias (/api/denuncias) - Admin ou Ajudante
-// ==========================================
-app.get('/api/denuncias', async (req, res) => {
-    const senha = req.headers['x-admin-password'];
-    const adminPassword = ADMIN_PASSWORD;
-    const token = extractToken(req);
-    const user = verifyToken(token);
-
-    const isAdmin = (checkPassword(senha, adminPassword));
-    const isAjudante = user && user.isAjudante;
-
-    if (!isAdmin && !isAjudante) {
-        return res.status(401).json({ erro: 'Acesso não autorizado.' });
-    }
-
+app.get('/api/denuncias', requireAdminOrAjudante, async (_req, res) => {
     try {
         const query = 'SELECT * FROM denuncias_conteudo ORDER BY criado_em DESC;';
         const result = await pool.query(query);
         res.json(result.rows);
     } catch (err) {
-        console.error(err);
+        console.error('Erro ao buscar denúncias:', err.message);
         res.status(500).json({ erro: 'Erro ao buscar denúncias no banco de dados.' });
     }
 });
 
-// ==========================================
-// ROTA 9d: Resolver/Apagar Denúncia (/api/denuncias/delete) - Admin ou Ajudante
-// ==========================================
-app.delete('/api/denuncias/delete', mutationLimiter, async (req, res) => {
-    const { id, senha } = req.body;
-    const adminPassword = ADMIN_PASSWORD;
-    const token = extractToken(req);
-    const user = verifyToken(token);
-
-    const isAdmin = (checkPassword(senha, adminPassword));
-    const isAjudante = user && user.isAjudante;
-
-    if (!isAdmin && !isAjudante) {
-        return res.status(401).json({ erro: 'Acesso não autorizado.' });
-    }
-
+app.delete('/api/denuncias/delete', mutationLimiter, requireAdminOrAjudante, async (req, res) => {
+    const { id } = req.body;
     if (!id) {
         return res.status(400).json({ erro: 'ID da denúncia é obrigatório.' });
     }
 
+    const numericId = parseInt(id, 10);
+    if (isNaN(numericId)) {
+        return res.status(400).json({ erro: 'ID da denúncia deve ser numérico.' });
+    }
+
     try {
         const query = 'DELETE FROM denuncias_conteudo WHERE id = $1;';
-        await pool.query(query, [id]);
+        const result = await pool.query(query, [numericId]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ erro: 'Denúncia não encontrada.' });
+        }
         res.json({ sucesso: true, mensagem: 'Denúncia removida/resolvida.' });
     } catch (err) {
-        console.error(err);
+        console.error('Erro ao deletar denúncia:', err.message);
         res.status(500).json({ erro: 'Erro ao apagar denúncia do banco de dados.' });
     }
 });
 
-// ==========================================
-// ROTA 9e: Ranking de Colaboradores (/api/colaboradores)
-// ==========================================
+// Ranking de Colaboradores com Prevenção de Falha em Timestamps
 app.get('/api/colaboradores', async (req, res) => {
     const { periodo } = req.query;
     let dateFilter = '';
-    
+
+    // Sanitização de timestamp para evitar erro de sintaxe SQL se criado_em for inválido
+    const safeDateExpr = "COALESCE(CASE WHEN (stream->>'criado_em') ~ '^\\d{4}-\\d{2}-\\d{2}' THEN (stream->>'criado_em')::timestamp ELSE NULL END, criado_em)";
+
     if (periodo === 'semana') {
-        dateFilter = "AND COALESCE((stream->>'criado_em')::timestamp, criado_em) >= NOW() - INTERVAL '7 days'";
+        dateFilter = `AND ${safeDateExpr} >= NOW() - INTERVAL '7 days'`;
     } else if (periodo === 'mes') {
-        dateFilter = "AND COALESCE((stream->>'criado_em')::timestamp, criado_em) >= NOW() - INTERVAL '30 days'";
+        dateFilter = `AND ${safeDateExpr} >= NOW() - INTERVAL '30 days'`;
     } else if (periodo === 'ano') {
-        dateFilter = "AND COALESCE((stream->>'criado_em')::timestamp, criado_em) >= NOW() - INTERVAL '365 days'";
+        dateFilter = `AND ${safeDateExpr} >= NOW() - INTERVAL '365 days'`;
     }
 
     try {
@@ -1535,13 +1839,17 @@ app.get('/api/colaboradores', async (req, res) => {
                     conteudo->>'title' AS title,
                     conteudo->>'type' AS type,
                     criado_em,
-                    jsonb_array_elements(
-                        CASE 
-                            WHEN jsonb_typeof(conteudo->'streams') = 'array' THEN conteudo->'streams'
-                            ELSE '[]'::jsonb 
-                        END
-                    ) AS stream
-                FROM arquivos_json
+                    COALESCE(NULLIF(stream->>'colaborador', ''), NULLIF(conteudo->>'colaborador', '')) AS stream_colab,
+                    COALESCE(NULLIF(stream->>'colaborador_id', ''), NULLIF(conteudo->>'colaborador_id', '')) AS stream_colab_id,
+                    COALESCE(NULLIF(stream->>'colaborador_avatar', ''), NULLIF(conteudo->>'colaborador_avatar', '')) AS stream_colab_avatar,
+                    stream
+                FROM arquivos_json,
+                     jsonb_array_elements(
+                         CASE 
+                             WHEN jsonb_typeof(conteudo->'streams') = 'array' THEN conteudo->'streams'
+                             ELSE '[]'::jsonb 
+                         END
+                     ) AS stream
                 WHERE conteudo->>'type' = 'movie'
                 
                 UNION ALL
@@ -1551,12 +1859,10 @@ app.get('/api/colaboradores', async (req, res) => {
                     conteudo->>'title' AS title,
                     conteudo->>'type' AS type,
                     criado_em,
-                    jsonb_array_elements(
-                        CASE 
-                            WHEN jsonb_typeof(ep.value) = 'array' THEN ep.value
-                            ELSE '[]'::jsonb 
-                        END
-                    ) AS stream
+                    COALESCE(NULLIF(stream->>'colaborador', ''), NULLIF(conteudo->>'colaborador', '')) AS stream_colab,
+                    COALESCE(NULLIF(stream->>'colaborador_id', ''), NULLIF(conteudo->>'colaborador_id', '')) AS stream_colab_id,
+                    COALESCE(NULLIF(stream->>'colaborador_avatar', ''), NULLIF(conteudo->>'colaborador_avatar', '')) AS stream_colab_avatar,
+                    stream
                 FROM arquivos_json,
                      jsonb_each(
                          CASE 
@@ -1569,24 +1875,30 @@ app.get('/api/colaboradores', async (req, res) => {
                              WHEN jsonb_typeof(season.value) = 'object' THEN season.value
                              ELSE '{}'::jsonb 
                          END
-                     ) AS ep
+                     ) AS ep,
+                     jsonb_array_elements(
+                         CASE 
+                             WHEN jsonb_typeof(ep.value) = 'array' THEN ep.value
+                             ELSE '[]'::jsonb 
+                         END
+                     ) AS stream
                 WHERE conteudo->>'type' = 'series'
             ),
             raw_ranking AS (
                 SELECT 
-                    stream->>'colaborador' AS nome,
-                    MAX(stream->>'colaborador_id') AS stream_discord_id,
-                    MAX(stream->>'colaborador_avatar') AS stream_avatar,
+                    stream_colab AS nome,
+                    MAX(stream_colab_id) AS stream_discord_id,
+                    MAX(stream_colab_avatar) AS stream_avatar,
                     COUNT(*)::int AS count,
                     json_agg(json_build_object(
                         'title', COALESCE(title, nome_do_json),
                         'type', type
                     )) AS envios_detalhes
                 FROM flattened_streams
-                WHERE stream->>'colaborador' IS NOT NULL 
-                  AND stream->>'colaborador' <> ''
+                WHERE stream_colab IS NOT NULL 
+                  AND stream_colab <> ''
                   ${dateFilter}
-                GROUP BY nome
+                GROUP BY stream_colab
             )
             SELECT 
                 r.nome,
@@ -1604,31 +1916,85 @@ app.get('/api/colaboradores', async (req, res) => {
         const result = await pool.query(query);
         res.json(result.rows);
     } catch (err) {
-        console.error(err);
+        console.error('Erro ao buscar ranking de colaboradores:', err.message);
         res.status(500).json({ erro: 'Erro ao buscar ranking de colaboradores.' });
     }
 });
 
-// ==========================================
-
-// Rota HFA removida
-
-
-// ==========================================
-// TAREFA AGENDADA: Limpeza semanal dos arquivos mais vistos
-// ==========================================
-const verificarELimparMaisVistos = async () => {
+// TMDB Proxy (SEC-01: Sem credenciais hardcoded | SEC-03: Proteção SSRF e Traversal)
+app.get('/api/tmdb/*path', async (req, res) => {
     try {
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS agenda_tarefas (
-                chave VARCHAR(50) PRIMARY KEY,
-                ultimo_executado TIMESTAMP WITH TIME ZONE NOT NULL
-            );
-        `);
+        const validatedPath = validateTmdbPath(req.params.path);
+        if (!validatedPath) {
+            return res.status(400).json({ erro: "Caminho TMDB inválido ou não autorizado." });
+        }
 
+        const tmdbKey = process.env.TMDB_KEY || process.env.TMDB_API_KEY;
+        if (!tmdbKey) {
+            return res.status(500).json({ erro: "TMDB API Key não configurada no servidor." });
+        }
+
+        const urlObj = new URL(`https://api.themoviedb.org/3/${validatedPath}`);
+
+        const allowedParams = [
+            'query', 'language', 'page', 'external_source', 'append_to_response',
+            'include_adult', 'year', 'primary_release_year', 'sort_by', 'with_genres',
+            'region', 'include_video', 'with_keywords'
+        ];
+
+        for (const [key, value] of Object.entries(req.query)) {
+            if (allowedParams.includes(key) && typeof value === 'string') {
+                urlObj.searchParams.set(key, value.trim());
+            }
+        }
+
+        if (validatedPath.startsWith('find/') && !urlObj.searchParams.has('external_source')) {
+            urlObj.searchParams.set('external_source', 'imdb_id');
+        }
+
+        const headers = {
+            'Accept': 'application/json',
+            'User-Agent': 'FenixStudio/1.0'
+        };
+
+        if (tmdbKey.startsWith('eyJ')) {
+            headers["Authorization"] = `Bearer ${tmdbKey}`;
+        } else {
+            urlObj.searchParams.set('api_key', tmdbKey);
+        }
+
+        const response = await fetch(urlObj.toString(), {
+            headers,
+            signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
+        });
+
+        if (!response.ok) {
+            return res.status(response.status).json({ erro: 'Falha na resposta do TMDB.' });
+        }
+        const data = await response.json();
+        res.json(data);
+    } catch (err) {
+        console.error("TMDB Route Error:", err.message);
+        res.status(500).json({ erro: 'Falha na comunicação com TMDB.' });
+    }
+});
+
+// Middleware Global de Tratamento de Erros
+app.use((err, _req, res, _next) => {
+    console.error('[Unhandled Error]:', err);
+    if (res.headersSent) return;
+    res.status(500).json({ erro: 'Erro interno no servidor.' });
+});
+
+// ============================================================================
+// TAREFA AGENDADA: LIMPEZA SEMANAL DE MAIS VISTOS
+// ============================================================================
+const verificarELimparMaisVistos = async () => {
+    if (process.env.DATABASE_SOURCE === 'huggingface') return;
+    try {
         const res = await pool.query("SELECT ultimo_executado FROM agenda_tarefas WHERE chave = 'limpeza_mais_vistos';");
-        
         const agora = new Date();
+
         if (res.rows.length === 0) {
             await pool.query("INSERT INTO agenda_tarefas (chave, ultimo_executado) VALUES ('limpeza_mais_vistos', $1);", [agora]);
             await executarLimpezaMaisVistosNode();
@@ -1642,7 +2008,7 @@ const verificarELimparMaisVistos = async () => {
             }
         }
     } catch (err) {
-        console.error("Erro ao verificar/executar limpeza semanal:", err);
+        console.error("Erro ao verificar/executar limpeza semanal:", err.message);
     }
 };
 
@@ -1660,89 +2026,105 @@ const executarLimpezaMaisVistosNode = async () => {
             );
         `;
         const res = await pool.query(resetQuery);
-        console.log(`Limpeza semanal concluída. Total de visualizações zeradas: ${res.rowCount}`);
+        console.log(`Limpeza semanal concluída. Visualizações zeradas: ${res.rowCount}`);
     } catch (err) {
-        console.error("Erro na query de limpeza de visualizações:", err);
+        console.error("Erro na query de limpeza de visualizações:", err.message);
     }
 };
 
-// ==========================================
-// INICIALIZAÇÃO DO SERVIDOR
-// ==========================================
-let PORT = process.env.PORT || 3000;
-// Se estiver rodando no Hugging Face Spaces, força a porta 7860 exigida pela plataforma
-if (process.env.SPACE_ID) {
-    PORT = 7860;
-}
-initDB().then(() => {
-    const server = app.listen(PORT, async () => {
-        console.log(`Servidor rodando na porta ${PORT}`);
-        
-        // Executa verificação inicial de limpeza
-        await verificarELimparMaisVistos();
-        
-        // Agenda para rodar a cada 1 hora
-        setInterval(verificarELimparMaisVistos, 60 * 60 * 1000);
-    });
-}).catch(err => {
-    console.error("Erro ao inicializar o banco de dados:", err);
-});
+// ============================================================================
+// INICIALIZAÇÃO CONTROLADA DO SERVIDOR & GRACEFUL SHUTDOWN (RENDER / DOCKER)
+// ============================================================================
+let serverInstance = null;
+let cleanupTimer = null;
 
-// Desativa o timeout padrão de 5 minutos do Node.js para uploads grandes
-
-// TMDB Proxy Route (SEC-01: Sem credenciais hardcoded | SEC-03: Proteção contra SSRF e Path Traversal)
-app.get('/api/tmdb/*path', async (req, res) => {
-    try {
-        const validatedPath = validateTmdbPath(req.params.path);
-        if (!validatedPath) {
-            return res.status(400).json({ erro: "Caminho TMDB inválido ou não autorizado." });
-        }
-
-        const tmdbKey = process.env.TMDB_KEY || process.env.TMDB_API_KEY;
-        if (!tmdbKey) {
-            return res.status(500).json({ erro: "TMDB API Key não configurada no servidor." });
-        }
-
-        const urlObj = new URL(`https://api.themoviedb.org/3/${validatedPath}`);
-
-        // Whitelist de query parameters permitidos
-        const allowedParams = [
-            'query', 'language', 'page', 'external_source', 'append_to_response',
-            'include_adult', 'year', 'primary_release_year', 'sort_by', 'with_genres',
-            'region', 'include_video', 'with_keywords'
-        ];
-
-        for (const [key, value] of Object.entries(req.query)) {
-            if (allowedParams.includes(key) && typeof value === 'string') {
-                urlObj.searchParams.set(key, value.trim());
-            }
-        }
-
-        const headers = {
-            'Accept': 'application/json',
-            'User-Agent': 'FenixStudio/1.0'
-        };
-
-        // Se a chave for v4 (JWT longo iniciando com eyJ), usa Bearer. Se for v3 (hex), usa api_key como query param
-        if (tmdbKey.startsWith('eyJ')) {
-            headers["Authorization"] = `Bearer ${tmdbKey}`;
-        } else {
-            urlObj.searchParams.set('api_key', tmdbKey);
-        }
-
-        const response = await fetch(urlObj.toString(), {
-            headers,
-            signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
-        });
-        if (!response.ok) {
-            return res.status(response.status).json({ erro: 'Falha na resposta do TMDB.' });
-        }
-        const data = await response.json();
-        res.json(data);
-    } catch (err) {
-        console.error("TMDB Route Error:", err);
-        res.status(500).json({ erro: 'Falha na comunicação com TMDB.' });
+async function stopServer() {
+    if (cleanupTimer) {
+        clearInterval(cleanupTimer);
+        cleanupTimer = null;
     }
-});
+    if (processTracker && typeof processTracker.destroy === 'function') {
+        processTracker.destroy();
+    }
+    if (serverInstance) {
+        await new Promise((resolve) => serverInstance.close(resolve));
+        serverInstance = null;
+    }
+    try {
+        await pool.end();
+    } catch {
+        // Silencia caso já tenha sido fechado
+    }
+}
 
-module.exports = { app, pool, processTracker };
+async function startServer() {
+    let PORT = process.env.PORT || 3000;
+    if (process.env.SPACE_ID) {
+        PORT = 7860;
+    }
+    const HOST = '0.0.0.0';
+
+    try {
+        await initDB();
+        return new Promise((resolve, reject) => {
+            const server = app.listen(PORT, HOST, async () => {
+                console.log(`🚀 Servidor Fenix Studio rodando em http://${HOST}:${PORT}`);
+                try {
+                    await verificarELimparMaisVistos();
+                } catch (taskErr) {
+                    console.warn("Aviso ao rodar limpeza semanal inicial:", taskErr.message);
+                }
+                cleanupTimer = setInterval(verificarELimparMaisVistos, 60 * 60 * 1000);
+                cleanupTimer.unref();
+                serverInstance = server;
+                resolve(server);
+            });
+
+            server.on('error', (err) => {
+                console.error("Erro fatal ao iniciar servidor HTTP:", err.message);
+                reject(err);
+            });
+        });
+    } catch (err) {
+        console.error("Erro ao inicializar o banco de dados e servidor:", err.message);
+        throw err;
+    }
+}
+
+const handleSignal = (signal) => {
+    console.log(`Recebido sinal ${signal}. Encerrando processo graciosamente no Render...`);
+    stopServer()
+        .then(() => {
+            console.log('Servidor e conexões encerrados limpos.');
+            process.exit(0);
+        })
+        .catch((err) => {
+            console.error('Erro durante o graceful shutdown:', err);
+            process.exit(1);
+        });
+
+    setTimeout(() => {
+        console.error('Forçando encerramento por timeout de 25s.');
+        process.exit(1);
+    }, 25000).unref();
+};
+
+// Inicia escuta apenas se executado diretamente via terminal
+if (require.main === module) {
+    process.on('SIGTERM', () => handleSignal('SIGTERM'));
+    process.on('SIGINT', () => handleSignal('SIGINT'));
+    startServer().catch(() => process.exit(1));
+}
+
+module.exports = {
+    app,
+    pool,
+    initDB,
+    startServer,
+    stopServer,
+    refreshHtmlCache,
+    processTracker,
+    getHfAccountsList,
+    invalidateCatalogCache,
+    catalogCache
+};

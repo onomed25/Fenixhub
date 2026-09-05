@@ -1,7 +1,7 @@
 let isAdmin = false;
 
 const VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.avi', '.webm', '.ts', '.mov', '.flv', '.3gp', '.mpeg', '.m4v'];
-const QUALITIES = ["Nenhuma", "1080p", "720p", "4K", "SD", "FHD", "HD", "CAM"];
+const QUALITIES = ["1080p", "720p", "4K", "FHD", "HD", "SD", "CAM"];
 function clearDiscordSession() {
     localStorage.removeItem('discord_token');
     localStorage.removeItem('discord_username');
@@ -37,6 +37,23 @@ function clearDiscordSession() {
         }
 
         const escapeHTML = str => (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\//g, '&#x2F;').replace(/\n/g, '&#10;');
+
+        function resolveStreamPlaybackUrl(rawUrl) {
+            if (!rawUrl || typeof rawUrl !== 'string') return '';
+            let url = rawUrl.trim();
+            if (url.includes('/stream/')) {
+                const pathIndex = url.indexOf('/stream/');
+                const streamPath = url.substring(pathIndex);
+                const bases = [
+                    "https://husky-denny-fenixflixaddon-ec8e842b.koyeb.app",
+                    "https://stream.fenixhub.online"
+                ];
+                const base = bases[Math.floor(Math.random() * bases.length)];
+                return `${base}${streamPath}`;
+            }
+            return url;
+        }
+        window.resolveStreamPlaybackUrl = resolveStreamPlaybackUrl;
 
         function showCustomLoginModal(promptMessage) {
             return new Promise((resolve) => {
@@ -242,18 +259,6 @@ function clearDiscordSession() {
                     btnApprovals.classList.remove('hidden');
                 } else {
                     btnApprovals.classList.add('hidden');
-                }
-            }
-
-            // Botão de Upload em Lote no Catálogo (Apenas Admin e Colaboradores/Ajudantes)
-            const btnUploadLote = document.getElementById('btnUploadLote');
-            if (btnUploadLote) {
-                if (isLogged || isAjudante || isColaborador) {
-                    btnUploadLote.classList.remove('hidden');
-                    btnUploadLote.classList.add('flex');
-                } else {
-                    btnUploadLote.classList.add('hidden');
-                    btnUploadLote.classList.remove('flex');
                 }
             }
 
@@ -721,8 +726,8 @@ function clearDiscordSession() {
                 if (!/^tt\d{7,10}$/.test(tgImdbId)) {
                     return showToast("O ID IMDb informado é inválido! Deve começar com 'tt' e conter de 7 a 10 dígitos (ex: tt0903747).", "error");
                 }
-                if (!tgQuality) {
-                    return showToast("A qualidade do vídeo é obrigatória para enviar o vídeo!", "error");
+                if (!tgQuality || tgQuality === 'Nenhuma') {
+                    return showToast("A qualidade do vídeo é obrigatória para enviar o vídeo! Selecione uma opção (ex: 1080p, 720p).", "error");
                 }
 
                 // Garantir que todos os arquivos selecionados são vídeos
@@ -1024,8 +1029,8 @@ function clearDiscordSession() {
                 if (!/^tt\d{7,10}$/.test(tgImdbId)) {
                     return showToast("O ID IMDb informado é inválido! Deve começar com 'tt' e conter de 7 a 10 dígitos (ex: tt0903747).", "error");
                 }
-                if (!tgQuality) {
-                    return showToast("A qualidade do vídeo é obrigatória para enviar o vídeo!", "error");
+                if (!tgQuality || tgQuality === 'Nenhuma') {
+                    return showToast("A qualidade do vídeo é obrigatória para enviar o vídeo! Selecione uma opção (ex: 1080p, 720p).", "error");
                 }
 
                 // Validar extensão do arquivo local
@@ -1744,8 +1749,9 @@ self.onmessage = async (e) => {
                 
                 select.innerHTML = '';
                 qualities.forEach(q => {
+                    if (q === "Nenhuma") return;
                     const opt = document.createElement('option');
-                    opt.value = q === "Nenhuma" ? "" : q;
+                    opt.value = q;
                     opt.innerText = q;
                     select.appendChild(opt);
                 });
@@ -1784,8 +1790,11 @@ self.onmessage = async (e) => {
             },
 
             getMaxEpForSeason: (seasonNum) => {
+                if (gen.seasonMap && gen.seasonMap[parseInt(seasonNum)]) {
+                    return Math.max(...gen.seasonMap[parseInt(seasonNum)]);
+                }
                 const videos = (gen.lastNuviometaResult && gen.lastNuviometaResult.meta && gen.lastNuviometaResult.meta.videos) 
-                    || (gen.currentData (gen.currentData && gen.currentData.nuviometaVideos)(gen.currentData && gen.currentData.nuviometaVideos) (gen.currentData.nuviometaVideos || gen.currentData.cinemetaVideos));
+                    || (gen.currentData && (gen.currentData.nuviometaVideos || gen.currentData.cinemetaVideos));
                 if (!videos || !Array.isArray(videos)) return null;
                 const eps = videos
                     .filter(v => v.season === parseInt(seasonNum))
@@ -1835,9 +1844,48 @@ self.onmessage = async (e) => {
                 }
                 
                 if (val.startsWith('tt')) {
-                    await gen.searchNuviometa();
+                    await gen.loadByImdbId(val);
                 } else {
                     await gen.searchTMDBByName(val);
+                }
+            },
+
+            loadByImdbId: async (imdbId) => {
+                const btn = document.getElementById('btnSmartSearch') || document.getElementById('btnSearchTMDB');
+                const icon = document.getElementById('btnSmartSearchIcon') || document.getElementById('btnSearchTMDBIcon');
+                
+                if (btn) btn.disabled = true;
+                if (icon) icon.className = "fa-solid fa-spinner animate-spin";
+                
+                try {
+                    const res = await fetch(`/api/tmdb/find/${encodeURIComponent(imdbId)}?external_source=imdb_id`);
+                    if (!res.ok) throw new Error("Falha na consulta ao TMDB");
+                    const findData = await res.json();
+                    
+                    if (findData.tv_results && findData.tv_results.length > 0) {
+                        const tv = findData.tv_results[0];
+                        const radio = document.querySelector('input[name="contentType"][value="series"]');
+                        if (radio) { radio.checked = true; gen.toggleInputs(); }
+                        const sInput = document.getElementById('seriesName');
+                        if (sInput) sInput.value = tv.name;
+                        await gen.loadTmdbSeriesDetails(tv.id, imdbId, tv);
+                    } else if (findData.movie_results && findData.movie_results.length > 0) {
+                        const movie = findData.movie_results[0];
+                        const radio = document.querySelector('input[name="contentType"][value="movie"]');
+                        if (radio) { radio.checked = true; gen.toggleInputs(); }
+                        const sInput = document.getElementById('seriesName');
+                        if (sInput) sInput.value = movie.title;
+                        await gen.loadTmdbMovieDetails(movie.id, imdbId, movie);
+                    } else {
+                        console.warn("Item não encontrado no TMDB find, recorrendo ao Nuviometa...");
+                        await gen.searchNuviometa();
+                    }
+                } catch (err) {
+                    console.warn("Erro ao buscar no TMDB por IMDb ID, tentando Nuviometa...", err);
+                    await gen.searchNuviometa();
+                } finally {
+                    if (btn) btn.disabled = false;
+                    if (icon) icon.className = "fa-solid fa-magnifying-glass";
                 }
             },
 
@@ -1922,10 +1970,11 @@ self.onmessage = async (e) => {
             },
 
             selectTMDBItem: async (tmdbId, mediaType, name) => {
-                document.getElementById('tmdbSearchResults').classList.add('hidden');
+                const searchResults = document.getElementById('tmdbSearchResults');
+                if (searchResults) searchResults.classList.add('hidden');
                 
                 const idInput = document.getElementById('contentId');
-                idInput.value = "Buscando ID...";
+                if (idInput) idInput.value = "Buscando dados...";
                 
                 try {
                     let imdbId = '';
@@ -1943,19 +1992,557 @@ self.onmessage = async (e) => {
                         }
                     }
                     
+                    if (idInput) idInput.value = imdbId || `tmdb:${tmdbId}`;
+                    const seriesInput = document.getElementById('seriesName');
+                    if (seriesInput) seriesInput.value = name;
+                    
                     if (imdbId) {
-                        idInput.value = imdbId;
-                        document.getElementById('seriesName').value = name;
-                        showToast(`ID IMDb encontrado: ${imdbId}`, "success");
-                        await gen.searchNuviometa();
+                        showToast(`Item selecionado: ${imdbId}`, "success");
+                    }
+                    
+                    if (mediaType === 'tv') {
+                        const radio = document.querySelector('input[name="contentType"][value="series"]');
+                        if (radio) { radio.checked = true; gen.toggleInputs(); }
+                        await gen.loadTmdbSeriesDetails(tmdbId, imdbId);
                     } else {
-                        idInput.value = '';
-                        showToast("ID IMDb não encontrado para este item no TMDB.", "error");
+                        const radio = document.querySelector('input[name="contentType"][value="movie"]');
+                        if (radio) { radio.checked = true; gen.toggleInputs(); }
+                        await gen.loadTmdbMovieDetails(tmdbId, imdbId);
                     }
                 } catch (e) {
-                    idInput.value = '';
-                    console.error("Erro ao buscar ID do TMDB:", e);
-                    showToast("Erro ao carregar ID do TMDB", "error");
+                    if (idInput) idInput.value = '';
+                    console.error("Erro ao carregar dados do TMDB:", e);
+                    showToast("Erro ao carregar dados do TMDB", "error");
+                }
+            },
+
+            setSelectValue: (selectIdOrEl, value, label) => {
+                const select = typeof selectIdOrEl === 'string' ? document.getElementById(selectIdOrEl) : selectIdOrEl;
+                if (!select) return;
+                const valStr = String(value);
+                let optionFound = false;
+                for (let i = 0; i < select.options.length; i++) {
+                    if (select.options[i].value === valStr) {
+                        select.selectedIndex = i;
+                        optionFound = true;
+                        break;
+                    }
+                }
+                if (!optionFound) {
+                    const opt = document.createElement('option');
+                    opt.value = valStr;
+                    opt.innerText = label || (select.id === 'seasonNum' ? valStr : `Episódio ${valStr}`);
+                    select.appendChild(opt);
+                    select.value = valStr;
+                }
+            },
+
+            populateGenericSeasons: () => {
+                const sSelect = document.getElementById('seasonNum');
+                if (!sSelect) return;
+                const currentVal = sSelect.value || '1';
+                sSelect.innerHTML = '';
+                for (let i = 1; i <= 50; i++) {
+                    const opt = document.createElement('option');
+                    opt.value = String(i);
+                    opt.innerText = String(i);
+                    sSelect.appendChild(opt);
+                }
+                sSelect.value = '1';
+            },
+
+            populateGenericEpisodes: (maxCount = 60) => {
+                const eSelect = document.getElementById('startEp');
+                if (!eSelect) return;
+                eSelect.innerHTML = '';
+                for (let i = 1; i <= maxCount; i++) {
+                    const opt = document.createElement('option');
+                    opt.value = String(i);
+                    opt.innerText = String(i);
+                    eSelect.appendChild(opt);
+                }
+                eSelect.value = '1';
+            },
+
+            fetchAndPopulateEpisodes: async (tvId, seasonNum) => {
+                const epSelect = document.getElementById('startEp');
+                if (!epSelect) return;
+                
+                epSelect.innerHTML = '<option value="">...</option>';
+                epSelect.disabled = true;
+                
+                try {
+                    const res = await fetch(`/api/tmdb/tv/${tvId}/season/${seasonNum}?language=pt-BR`);
+                    if (!res.ok) throw new Error("Falha ao buscar episódios da temporada");
+                    const data = await res.json();
+                    const episodes = data.episodes || [];
+                    
+                    epSelect.innerHTML = '';
+                    if (episodes.length === 0) {
+                        epSelect.innerHTML = '<option value="1">1</option>';
+                    } else {
+                        episodes.forEach(ep => {
+                            const opt = document.createElement('option');
+                            opt.value = String(ep.episode_number);
+                            opt.innerText = String(ep.episode_number);
+                            opt.dataset.title = ep.name || `Episódio ${ep.episode_number}`;
+                            opt.dataset.still = ep.still_path || '';
+                            epSelect.appendChild(opt);
+                        });
+                    }
+                    epSelect.disabled = false;
+                    
+                    if (epSelect.options.length > 0) {
+                        epSelect.selectedIndex = 0;
+                        const firstOpt = epSelect.options[0];
+                        const epNumber = parseInt(firstOpt.value, 10) || 1;
+                        gen.declareEpisode(
+                            seasonNum,
+                            epNumber,
+                            firstOpt.dataset.title || firstOpt.innerText,
+                            firstOpt.dataset.still || ''
+                        );
+                    }
+                } catch (e) {
+                    console.error("Erro ao carregar episódios do TMDB:", e);
+                    epSelect.disabled = false;
+                    gen.populateGenericEpisodes(50);
+                }
+            },
+
+            onSeasonSelectChange: async (val) => {
+                const seasonNum = parseInt(val, 10) || 1;
+                if (gen.tmdbSeries && gen.tmdbSeries.tvId) {
+                    await gen.fetchAndPopulateEpisodes(gen.tmdbSeries.tvId, seasonNum);
+                    if (document.getElementById('tmdbInteractiveExplorer')) {
+                        await gen.selectTmdbSeason(gen.tmdbSeries.tvId, seasonNum);
+                    }
+                } else if (gen.seasonMap && gen.seasonMap[seasonNum]) {
+                    const count = gen.seasonMap[seasonNum].length;
+                    gen.populateGenericEpisodes(count || 50);
+                    gen.declareEpisode(seasonNum, 1, `Temporada ${seasonNum} • Episódio 1`);
+                } else {
+                    gen.populateGenericEpisodes(50);
+                    gen.declareEpisode(seasonNum, 1, `Temporada ${seasonNum} • Episódio 1`);
+                }
+            },
+
+            onEpisodeSelectChange: (val) => {
+                const epNum = parseInt(val, 10) || 1;
+                const seasonSelect = document.getElementById('seasonNum');
+                const seasonNum = parseInt(seasonSelect?.value, 10) || 1;
+                const epSelect = document.getElementById('startEp');
+                const selectedOpt = epSelect?.options[epSelect.selectedIndex];
+                const epTitle = selectedOpt?.dataset?.title || (selectedOpt ? selectedOpt.innerText : `Episódio ${epNum}`);
+                const epStill = selectedOpt?.dataset?.still || '';
+                
+                gen.declareEpisode(seasonNum, epNum, epTitle, epStill);
+            },
+
+            loadTmdbSeriesDetails: async (tvId, imdbId, initialData) => {
+                try {
+                    const res = await fetch(`/api/tmdb/tv/${tvId}?language=pt-BR`);
+                    if (!res.ok) throw new Error("Erro ao buscar detalhes da série no TMDB");
+                    const data = await res.json();
+                    
+                    const safeId = imdbId || `tmdb:${tvId}`;
+                    if (!gen.currentData) {
+                        gen.currentData = { id: safeId, type: 'series', streams: {} };
+                    } else {
+                        gen.currentData.id = safeId;
+                        gen.currentData.type = 'series';
+                        if (!gen.currentData.streams) gen.currentData.streams = {};
+                    }
+                    
+                    const sInput = document.getElementById('seriesName');
+                    if (sInput) sInput.value = data.name;
+                    
+                    // Mapa de temporadas e limites
+                    const validSeasons = (data.seasons || []).filter(s => s.season_number > 0 && s.episode_count > 0);
+                    const specials = (data.seasons || []).filter(s => s.season_number === 0 && s.episode_count > 0);
+                    const allSeasons = [...validSeasons, ...specials];
+                    
+                    const seasonMap = {};
+                    allSeasons.forEach(s => {
+                        seasonMap[s.season_number] = Array.from({ length: s.episode_count }, (_, i) => i + 1);
+                    });
+                    gen.seasonMap = seasonMap;
+                    gen.maxSeason = validSeasons.length > 0 ? Math.max(...validSeasons.map(s => s.season_number)) : 0;
+                    
+                    gen.tmdbSeries = {
+                        tvId,
+                        imdbId,
+                        data,
+                        seasons: allSeasons
+                    };
+                    
+                    // Popula o seletor de Temporadas com apenas os números da temporada (sem texto 'Temporada' e sem contagem de eps)
+                    const sSelect = document.getElementById('seasonNum');
+                    if (sSelect) {
+                        sSelect.innerHTML = '';
+                        allSeasons.forEach(s => {
+                            const opt = document.createElement('option');
+                            opt.value = String(s.season_number);
+                            opt.innerText = String(s.season_number);
+                            sSelect.appendChild(opt);
+                        });
+                    }
+                    
+                    const sBadge = document.getElementById('seasonCountBadge');
+                    if (sBadge) sBadge.innerText = '';
+                    
+                    // Atualiza o Mini Card Informativo da Série
+                    const miniCard = document.getElementById('tmdbMiniSeriesCard');
+                    if (miniCard) {
+                        miniCard.classList.remove('hidden');
+                        const miniPoster = document.getElementById('tmdbMiniPoster');
+                        if (miniPoster) {
+                            miniPoster.src = data.poster_path ? `https://image.tmdb.org/t/p/w185${data.poster_path}` : '';
+                            miniPoster.style.display = data.poster_path ? 'block' : 'none';
+                        }
+                        const miniTitle = document.getElementById('tmdbMiniTitle');
+                        if (miniTitle) miniTitle.innerText = data.name;
+                        const miniYear = document.getElementById('tmdbMiniYear');
+                        if (miniYear) miniYear.innerText = data.first_air_date ? `(${data.first_air_date.substring(0, 4)})` : '';
+                        const miniStats = document.getElementById('tmdbMiniStats');
+                        if (miniStats) {
+                            const vote = data.vote_average ? ` • ⭐ ${data.vote_average.toFixed(1)}` : '';
+                            miniStats.innerText = `${data.number_of_seasons || allSeasons.length} temporadas • ${data.number_of_episodes || 0} eps${vote}`;
+                        }
+                    }
+                    
+                    // Render Explorer UI se o container estiver presente
+                    gen.renderTmdbExplorer(data, allSeasons);
+                    
+                    // Oculta caixa simples do Nuviometa já que TMDB é prioritário
+                    const nuvioBox = document.getElementById('nuviometaInfoBox');
+                    if (nuvioBox) nuvioBox.classList.add('hidden');
+                    
+                    // Seleciona temporada inicial
+                    const currentSeasonInput = parseInt(document.getElementById('seasonNum')?.value, 10) || 1;
+                    const defaultSeason = allSeasons.some(s => s.season_number === currentSeasonInput) 
+                        ? currentSeasonInput 
+                        : (validSeasons[0] ? validSeasons[0].season_number : 1);
+                    
+                    if (sSelect) sSelect.value = String(defaultSeason);
+                    await gen.fetchAndPopulateEpisodes(tvId, defaultSeason);
+                    if (document.getElementById('tmdbInteractiveExplorer')) {
+                        await gen.selectTmdbSeason(tvId, defaultSeason);
+                    }
+                    
+                    gen.updateDisplay();
+                    showToast(`Série "${data.name}" carregada do TMDB!`, "success");
+                } catch (e) {
+                    console.error("Erro ao carregar detalhes da série:", e);
+                    showToast("Erro ao carregar detalhes da série no TMDB", "error");
+                }
+            },
+
+            renderTmdbExplorer: (data, seasons) => {
+                const explorer = document.getElementById('tmdbInteractiveExplorer');
+                if (!explorer) return;
+                
+                explorer.classList.remove('hidden');
+                
+                const posterImg = document.getElementById('tmdbSeriesPoster');
+                if (posterImg) {
+                    posterImg.src = data.poster_path ? `https://image.tmdb.org/t/p/w185${data.poster_path}` : '';
+                    posterImg.style.display = data.poster_path ? 'block' : 'none';
+                }
+                
+                const titleEl = document.getElementById('tmdbSeriesTitle');
+                if (titleEl) titleEl.innerText = data.name;
+                
+                const yearEl = document.getElementById('tmdbSeriesYear');
+                if (yearEl) yearEl.innerText = data.first_air_date ? data.first_air_date.substring(0, 4) : '';
+                
+                const ratingEl = document.getElementById('tmdbSeriesRating');
+                if (ratingEl) {
+                    const vote = data.vote_average ? data.vote_average.toFixed(1) : null;
+                    if (vote && vote !== '0.0') {
+                        ratingEl.innerHTML = `<i class="fa-solid fa-star text-amber-400 text-[10px]"></i> ${vote}`;
+                        ratingEl.classList.remove('hidden');
+                    } else {
+                        ratingEl.classList.add('hidden');
+                    }
+                }
+                
+                const overviewEl = document.getElementById('tmdbSeriesOverview');
+                if (overviewEl) overviewEl.innerText = data.overview || 'Sinopse não disponível em português.';
+                
+                const seasonsText = document.getElementById('tmdbTotalSeasonsText');
+                if (seasonsText) seasonsText.innerText = `${data.number_of_seasons || seasons.length} Temp.`;
+                
+                const epsText = document.getElementById('tmdbTotalEpisodesText');
+                if (epsText) epsText.innerText = `${data.number_of_episodes || 0} eps`;
+                
+                // Renderizar pílulas de temporadas
+                const seasonsBar = document.getElementById('tmdbSeasonsBar');
+                if (seasonsBar) {
+                    seasonsBar.innerHTML = '';
+                    seasons.forEach(s => {
+                        const pill = document.createElement('button');
+                        pill.type = 'button';
+                        pill.id = `tmdb-season-pill-${s.season_number}`;
+                        pill.className = 'tmdb-season-pill btn-spring px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border border-white/8 bg-white/5 text-text-soft hover:text-white hover:bg-white/10';
+                        const label = s.season_number === 0 ? 'Especiais (T0)' : `Temp. ${s.season_number}`;
+                        pill.innerHTML = `<span>${label}</span> <span class="text-[10px] opacity-70 font-mono font-normal">(${s.episode_count})</span>`;
+                        pill.onclick = () => gen.selectTmdbSeason(data.id, s.season_number);
+                        seasonsBar.appendChild(pill);
+                    });
+                }
+            },
+
+            selectTmdbSeason: async (tvId, seasonNum) => {
+                seasonNum = parseInt(seasonNum, 10);
+                
+                gen.setSelectValue('seasonNum', seasonNum);
+                
+                document.querySelectorAll('.tmdb-season-pill').forEach(btn => {
+                    btn.classList.remove('bg-primary', 'text-black', 'shadow-md', 'border-primary');
+                    btn.classList.add('bg-white/5', 'text-text-soft', 'border-white/8');
+                });
+                const activePill = document.getElementById(`tmdb-season-pill-${seasonNum}`);
+                if (activePill) {
+                    activePill.classList.remove('bg-white/5', 'text-text-soft', 'border-white/8');
+                    activePill.classList.add('bg-primary', 'text-black', 'shadow-md', 'border-primary');
+                }
+                
+                await gen.loadTmdbSeasonEpisodes(tvId, seasonNum);
+            },
+
+            loadTmdbSeasonEpisodes: async (tvId, seasonNum) => {
+                const list = document.getElementById('tmdbEpisodesList');
+                if (!list) return;
+                
+                list.innerHTML = `
+                    <div class="py-8 flex flex-col items-center justify-center text-text-soft gap-2">
+                        <i class="fa-solid fa-circle-notch fa-spin text-primary text-xl"></i>
+                        <span class="text-xs">Carregando episódios da Temporada ${seasonNum}...</span>
+                    </div>
+                `;
+                
+                const countBadge = document.getElementById('tmdbCurrentSeasonCount');
+                if (countBadge) countBadge.innerText = `Temporada ${seasonNum}`;
+                
+                try {
+                    const res = await fetch(`/api/tmdb/tv/${tvId}/season/${seasonNum}?language=pt-BR`);
+                    if (!res.ok) throw new Error("Erro ao buscar episódios da temporada");
+                    const data = await res.json();
+                    
+                    const episodes = data.episodes || [];
+                    list.innerHTML = '';
+                    
+                    if (episodes.length === 0) {
+                        list.innerHTML = `<div class="p-4 text-center text-xs text-zinc-500">Nenhum episódio cadastrado nesta temporada.</div>`;
+                        return;
+                    }
+                    
+                    episodes.forEach(ep => {
+                        const isDeclared = gen.declaredEpisode && 
+                            gen.declaredEpisode.season === seasonNum && 
+                            gen.declaredEpisode.epNum === ep.episode_number;
+                            
+                        const card = document.createElement('div');
+                        card.id = `tmdb-ep-card-${seasonNum}-${ep.episode_number}`;
+                        card.className = `tmdb-episode-card group p-3 rounded-2xl transition-all border ${
+                            isDeclared 
+                                ? 'border-primary bg-primary/10 ring-2 ring-primary/40 shadow-lg shadow-primary/5' 
+                                : 'border-white/6 bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/12'
+                        } flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between`;
+                        
+                        const stillHtml = ep.still_path 
+                            ? `<img src="https://image.tmdb.org/t/p/w185${escapeHTML(ep.still_path)}" class="w-full h-full object-cover" loading="lazy">` 
+                            : `<div class="w-full h-full flex items-center justify-center text-zinc-600"><i class="fa-solid fa-film text-xs"></i></div>`;
+                            
+                        const airDate = ep.air_date 
+                            ? new Date(ep.air_date + 'T00:00:00').toLocaleDateString('pt-BR') 
+                            : 'Data não informada';
+                            
+                        const safeTitle = escapeHTML(ep.name || `Episódio ${ep.episode_number}`);
+                        const safeOverview = ep.overview ? escapeHTML(ep.overview) : '';
+                        
+                        card.innerHTML = `
+                            <div class="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                                <div class="relative w-20 h-12 rounded-xl overflow-hidden bg-surface-elevated shrink-0 border border-white/8">
+                                    ${stillHtml}
+                                    <span class="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-sm text-[9px] font-mono font-bold text-white">
+                                        EP ${ep.episode_number}
+                                    </span>
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <h5 class="text-xs font-semibold text-white truncate">${safeTitle}</h5>
+                                        <span id="badge-declared-${seasonNum}-${ep.episode_number}" class="${isDeclared ? '' : 'hidden'} px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary text-black shrink-0">
+                                            Declarado
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center gap-2 text-[10px] text-text-soft mt-0.5">
+                                        <span>${airDate}</span>
+                                        ${ep.runtime ? `<span>• ${ep.runtime} min</span>` : ''}
+                                    </div>
+                                    ${safeOverview ? `<p class="text-[11px] text-zinc-400 line-clamp-1 mt-0.5">${safeOverview}</p>` : ''}
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                                <button type="button" id="btn-declare-${seasonNum}-${ep.episode_number}" 
+                                    class="btn-spring px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                                        isDeclared 
+                                            ? 'bg-primary text-black shadow-md border-transparent' 
+                                            : 'bg-white/5 hover:bg-primary hover:text-black text-zinc-300 border border-white/8'
+                                    }">
+                                    <i class="fa-solid ${isDeclared ? 'fa-check' : 'fa-bullseye'} text-[11px]"></i>
+                                    <span>${isDeclared ? 'Declarado' : 'Declarar EP'}</span>
+                                </button>
+                            </div>
+                        `;
+                        
+                        const declareBtn = card.querySelector(`#btn-declare-${seasonNum}-${ep.episode_number}`);
+                        if (declareBtn) {
+                            declareBtn.onclick = () => {
+                                if (gen.declaredEpisode && gen.declaredEpisode.season === seasonNum && gen.declaredEpisode.epNum === ep.episode_number) {
+                                    gen.clearDeclaredEpisode();
+                                } else {
+                                    gen.declareEpisode(seasonNum, ep.episode_number, ep.name, ep.still_path);
+                                }
+                            };
+                        }
+                        
+                        list.appendChild(card);
+                    });
+                } catch (e) {
+                    console.error("Erro ao buscar episódios:", e);
+                    list.innerHTML = `<div class="p-4 text-center text-xs text-red-400">Falha ao carregar episódios da temporada ${seasonNum}.</div>`;
+                }
+            },
+
+            declareEpisode: (season, epNum, epTitle, stillPath, showToastMsg = false) => {
+                season = parseInt(season, 10);
+                epNum = parseInt(epNum, 10);
+                if (isNaN(season) || isNaN(epNum)) {
+                    return;
+                }
+                
+                gen.declaredEpisode = {
+                    season,
+                    epNum,
+                    title: epTitle || `Episódio ${epNum}`,
+                    still: stillPath ? (stillPath.startsWith('http') ? stillPath : `https://image.tmdb.org/t/p/w185${stillPath}`) : ''
+                };
+                
+                gen.setSelectValue('seasonNum', season);
+                gen.setSelectValue('startEp', epNum);
+                
+                const badge = document.getElementById('declaredEpBadge');
+                if (badge) badge.classList.remove('hidden');
+                
+                gen.renderDeclaredEpisodeBanner();
+                gen.highlightDeclaredEpisodeCard();
+                
+                if (showToastMsg) {
+                    showToast(`T${season}E${epNum} selecionado.`);
+                }
+            },
+
+            declareCurrentInputs: () => {
+                const sInput = document.getElementById('seasonNum');
+                const eInput = document.getElementById('startEp');
+                const season = parseInt(sInput?.value, 10) || 1;
+                const ep = parseInt(eInput?.value, 10) || 1;
+                const seriesTitle = document.getElementById('seriesName')?.value || document.getElementById('contentId')?.value || 'Série';
+                gen.declareEpisode(season, ep, `${seriesTitle} • T${season}E${ep}`);
+            },
+
+            clearDeclaredEpisode: () => {
+                gen.declaredEpisode = null;
+                const badge = document.getElementById('declaredEpBadge');
+                if (badge) badge.classList.add('hidden');
+                gen.renderDeclaredEpisodeBanner();
+                gen.highlightDeclaredEpisodeCard();
+            },
+
+            renderDeclaredEpisodeBanner: () => {
+                const banner = document.getElementById('declaredEpisodeBanner');
+                if (banner) {
+                    banner.classList.add('hidden');
+                    banner.innerHTML = '';
+                    banner.style.display = 'none';
+                }
+            },
+
+            highlightDeclaredEpisodeCard: () => {
+                const list = document.getElementById('tmdbEpisodesList');
+                if (!list) return;
+                
+                const cards = list.querySelectorAll('.tmdb-episode-card');
+                cards.forEach(card => {
+                    const id = card.id;
+                    const parts = id.replace('tmdb-ep-card-', '').split('-');
+                    const s = parseInt(parts[0], 10);
+                    const e = parseInt(parts[1], 10);
+                    
+                    const isDeclared = gen.declaredEpisode && 
+                        gen.declaredEpisode.season === s && 
+                        gen.declaredEpisode.epNum === e;
+                        
+                    const badge = card.querySelector(`#badge-declared-${s}-${e}`);
+                    const btn = card.querySelector(`#btn-declare-${s}-${e}`);
+                    
+                    if (isDeclared) {
+                        card.className = "tmdb-episode-card group p-3 rounded-2xl transition-all border border-primary bg-primary/10 ring-2 ring-primary/40 shadow-lg shadow-primary/5 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between";
+                        if (badge) badge.classList.remove('hidden');
+                        if (btn) {
+                            btn.className = "btn-spring px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 bg-primary text-black shadow-md border-transparent";
+                            btn.innerHTML = `<i class="fa-solid fa-check text-[11px]"></i> <span>Declarado</span>`;
+                        }
+                    } else {
+                        card.className = "tmdb-episode-card group p-3 rounded-2xl transition-all border border-white/6 bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/12 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between";
+                        if (badge) badge.classList.add('hidden');
+                        if (btn) {
+                            btn.className = "btn-spring px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 bg-white/5 hover:bg-primary hover:text-black text-zinc-300 border border-white/8";
+                            btn.innerHTML = `<i class="fa-solid fa-bullseye text-[11px]"></i> <span>Declarar EP</span>`;
+                        }
+                    }
+                });
+            },
+
+            loadTmdbMovieDetails: async (movieId, imdbId, initialData) => {
+                try {
+                    const res = await fetch(`/api/tmdb/movie/${movieId}?language=pt-BR`);
+                    if (!res.ok) throw new Error("Erro ao buscar detalhes do filme no TMDB");
+                    const data = await res.json();
+                    
+                    const safeId = imdbId || `tmdb:${movieId}`;
+                    if (!gen.currentData) {
+                        gen.currentData = { id: safeId, type: 'movie', streams: [] };
+                    } else {
+                        gen.currentData.id = safeId;
+                        gen.currentData.type = 'movie';
+                        if (!Array.isArray(gen.currentData.streams)) gen.currentData.streams = [];
+                    }
+                    
+                    const sInput = document.getElementById('seriesName');
+                    if (sInput) sInput.value = data.title;
+                    
+                    const explorer = document.getElementById('tmdbInteractiveExplorer');
+                    if (explorer) explorer.classList.add('hidden');
+                    const miniCard = document.getElementById('tmdbMiniSeriesCard');
+                    if (miniCard) miniCard.classList.add('hidden');
+                    const banner = document.getElementById('declaredEpisodeBanner');
+                    if (banner) banner.classList.add('hidden');
+                    const declBadge = document.getElementById('declaredEpBadge');
+                    if (declBadge) declBadge.classList.add('hidden');
+                    const sBadge = document.getElementById('seasonCountBadge');
+                    if (sBadge) sBadge.innerText = '';
+                    const nuvioBox = document.getElementById('nuviometaInfoBox');
+                    if (nuvioBox) nuvioBox.classList.add('hidden');
+                    
+                    gen.declaredEpisode = null;
+                    gen.updateDisplay();
+                    showToast(`Filme "${data.title}" carregado do TMDB!`, "success");
+                } catch (e) {
+                    console.error("Erro ao carregar detalhes do filme:", e);
+                    showToast("Erro ao carregar filme no TMDB", "error");
                 }
             },
 
@@ -2112,12 +2699,6 @@ self.onmessage = async (e) => {
                     gen.currentData.type = type;
                 }
                 
-                gen.currentData.title = meta.name;
-                gen.currentData.year = meta.year || (meta.released ? meta.released.substring(0, 4) : "");
-                gen.currentData.poster = meta.poster;
-                gen.currentData.background = meta.background;
-                gen.currentData.description = meta.description;
-                
                 if (type === 'series' && meta.videos) {
                     gen.currentData.nuviometaVideos = meta.videos;
                 }
@@ -2128,7 +2709,10 @@ self.onmessage = async (e) => {
             
             init: () => {
                 gen.loadQualities();
+                gen.populateGenericSeasons();
+                gen.populateGenericEpisodes(50);
                 gen.clearFields();
+                gen.toggleInputs();
                 
                 const savedNick = localStorage.getItem('fenix_uploader_nick');
                 const nickInput = document.getElementById('uploaderNick');
@@ -2142,14 +2726,30 @@ self.onmessage = async (e) => {
                 }
             },
             toggleInputs: () => {
-                const type = document.querySelector('input[name="contentType"]:checked').value;
+                const type = document.querySelector('input[name="contentType"]:checked')?.value || 'series';
                 const showSeries = type === 'series';
+                const contentIdCol = document.getElementById('contentIdCol');
                 const seasonCol = document.getElementById('seasonNumCol');
                 const startEpCol = document.getElementById('startEpCol');
                 const smartHint = document.getElementById('smartDetectHint');
+                const miniCard = document.getElementById('tmdbMiniSeriesCard');
+                const declBanner = document.getElementById('declaredEpisodeBanner');
+                
+                if (contentIdCol) {
+                    if (showSeries) {
+                        contentIdCol.classList.remove('md:col-span-12');
+                        contentIdCol.classList.add('md:col-span-8');
+                    } else {
+                        contentIdCol.classList.remove('md:col-span-8');
+                        contentIdCol.classList.add('md:col-span-12');
+                    }
+                }
+                
                 if (seasonCol) seasonCol.style.display = showSeries ? 'block' : 'none';
                 if (startEpCol) startEpCol.style.display = showSeries ? 'block' : 'none';
                 if (smartHint) smartHint.style.display = showSeries ? 'flex' : 'none';
+                if (!showSeries && miniCard) miniCard.classList.add('hidden');
+                if (!showSeries && declBanner) declBanner.classList.add('hidden');
                 
                 if (showSeries) {
                     const linksInput = document.getElementById('manualLinks');
@@ -2169,7 +2769,7 @@ self.onmessage = async (e) => {
                         if (json.id) {
                             document.getElementById('contentId').value = json.id;
                             if (json.id.startsWith('tt')) {
-                                gen.searchNuviometa();
+                                gen.loadByImdbId(json.id);
                             }
                         }
                         if (json.type) {
@@ -2245,6 +2845,8 @@ self.onmessage = async (e) => {
             clearFields: () => {
                 window.forcePendenteForEdit = false;
                 gen.currentData = null;
+                gen.declaredEpisode = null;
+                gen.tmdbSeries = null;
                 const cid = document.getElementById('contentId');
                 if (cid) cid.value = '';
                 const sname = document.getElementById('seriesName');
@@ -2261,6 +2863,25 @@ self.onmessage = async (e) => {
                 if (actions) actions.classList.add('hidden');
                 const cinfo = document.getElementById('nuviometaInfoBox');
                 if (cinfo) cinfo.classList.add('hidden');
+                const tmdbExp = document.getElementById('tmdbInteractiveExplorer');
+                if (tmdbExp) tmdbExp.classList.add('hidden');
+                const miniCard = document.getElementById('tmdbMiniSeriesCard');
+                if (miniCard) miniCard.classList.add('hidden');
+                const declBadge = document.getElementById('declaredEpBadge');
+                if (declBadge) declBadge.classList.add('hidden');
+                const sBadge = document.getElementById('seasonCountBadge');
+                if (sBadge) sBadge.innerText = '';
+                const declBanner = document.getElementById('declaredEpisodeBanner');
+                if (declBanner) {
+                    declBanner.classList.add('hidden');
+                    declBanner.innerHTML = '';
+                }
+                gen.populateGenericSeasons();
+                gen.populateGenericEpisodes(50);
+                const sSelect = document.getElementById('seasonNum');
+                if (sSelect) sSelect.value = '1';
+                const eSelect = document.getElementById('startEp');
+                if (eSelect) eSelect.value = '1';
                 gen.lastNuviometaResult = null;
                 localStorage.removeItem('fenixflix_draft');
             },
@@ -2305,6 +2926,9 @@ self.onmessage = async (e) => {
                 const quality = document.getElementById('videoQuality').value.trim();
                 const rawText = document.getElementById('manualLinks').value;
                 
+                if (!quality || quality === 'Nenhuma') {
+                    return showToast("A qualidade do vídeo é obrigatória! Selecione uma opção (ex: 1080p, 720p).", "error");
+                }
                 if (!rawText.trim()) return showToast("Cole os links primeiro.", "error");
 
                 if (!gen.currentData) gen.currentData = { "id": id, "type": type, "streams": type === 'series' ? {} : [] };
@@ -2315,7 +2939,8 @@ self.onmessage = async (e) => {
                 const nickVal = document.getElementById('uploaderNick')?.value.trim();
 
                 const firstLine = baseAudio;
-                const secondLine = quality ? quality : "FenixStudio";
+                const secondLine = quality;
+                const hasQuality = Boolean(secondLine && secondLine !== 'Nenhuma');
 
                 if (type === 'series') {
                     let manualSeason = document.getElementById('seasonNum').value || '1';
@@ -2358,8 +2983,17 @@ self.onmessage = async (e) => {
                             return; 
                         }
 
-                        const targetSeason = lineSeason || currentSmartSeason || manualSeason;
-                        const targetEp = lineEp || currentSmartEp || manualEp.toString();
+                        let targetSeason;
+                        let targetEp;
+
+                        // Se houver episódio declarado e a linha não possui marcação explícita SxxExx, vincula ao declarado!
+                        if (gen.declaredEpisode && !lineSeason && !lineEp && !currentSmartSeason && !currentSmartEp) {
+                            targetSeason = gen.declaredEpisode.season.toString();
+                            targetEp = gen.declaredEpisode.epNum.toString();
+                        } else {
+                            targetSeason = lineSeason || currentSmartSeason || manualSeason;
+                            targetEp = lineEp || currentSmartEp || manualEp.toString();
+                        }
 
                         if (!gen.currentData.streams[targetSeason]) gen.currentData.streams[targetSeason] = {};
                         if (!gen.currentData.streams[targetSeason][targetEp]) gen.currentData.streams[targetSeason][targetEp] = [];
@@ -2372,7 +3006,7 @@ self.onmessage = async (e) => {
                         }).length;
                         
                         const finalFirstLine = count > 0 ? `${firstLine} ${count + 1}` : firstLine;
-                        const finalName = `${finalFirstLine}\n${secondLine}`;
+                        const finalName = hasQuality ? `${finalFirstLine}\n${secondLine}` : finalFirstLine;
 
                         const streamObj = { "url": url, "name": finalName };
                         if (nickVal) streamObj.colaborador = nickVal;
@@ -2386,7 +3020,9 @@ self.onmessage = async (e) => {
                             manualEp = parseInt(lineEp) + 1;
                         }
 
-                        if (currentSmartSeason) {
+                        if (gen.declaredEpisode && !lineSeason && !lineEp) {
+                            // Mantém o episódio declarado fixo para múltiplas transmissões (ex: 1080p, 720p, Dublado, Legendado)
+                        } else if (currentSmartSeason) {
                             currentSmartEp = null;
                         } else if (!lineSeason && !lineEp) {
                             const maxEp = gen.getMaxEpForSeason(manualSeason);
@@ -2398,9 +3034,9 @@ self.onmessage = async (e) => {
                             }
                         }
                     });
-                    if(!currentSmartSeason) {
-                        document.getElementById('seasonNum').value = manualSeason;
-                        document.getElementById('startEp').value = manualEp;
+                    if (!currentSmartSeason && !gen.declaredEpisode) {
+                        gen.setSelectValue('seasonNum', manualSeason);
+                        gen.setSelectValue('startEp', manualEp);
                     }
                 } else {
                     if(!Array.isArray(gen.currentData.streams)) gen.currentData.streams = [];
@@ -2415,7 +3051,7 @@ self.onmessage = async (e) => {
                             }).length;
                             
                             const finalFirstLine = count > 0 ? `${firstLine} ${count + 1}` : firstLine;
-                            const finalName = `${finalFirstLine}\n${secondLine}`;
+                            const finalName = hasQuality ? `${finalFirstLine}\n${secondLine}` : finalFirstLine;
                             
                             const streamObj = { "url": url, "name": finalName };
                             if (nickVal) streamObj.colaborador = nickVal;
@@ -2479,6 +3115,16 @@ self.onmessage = async (e) => {
                 }
             },
             updateDisplay: (save = true) => {
+                if (gen.currentData) {
+                    delete gen.currentData.title;
+                    delete gen.currentData.name;
+                    delete gen.currentData.poster;
+                    delete gen.currentData.background;
+                    delete gen.currentData.backdrop;
+                    delete gen.currentData.description;
+                    delete gen.currentData.overview;
+                    delete gen.currentData.year;
+                }
                 const jsonStr = JSON.stringify(gen.currentData, null, 4);
                 document.getElementById('jsonOutput').value = jsonStr;
                 document.getElementById('resultActions').classList.remove('hidden');
@@ -2525,6 +3171,14 @@ self.onmessage = async (e) => {
             },
             download: () => {
                 if (!gen.currentData) return;
+                delete gen.currentData.title;
+                delete gen.currentData.name;
+                delete gen.currentData.poster;
+                delete gen.currentData.background;
+                delete gen.currentData.backdrop;
+                delete gen.currentData.description;
+                delete gen.currentData.overview;
+                delete gen.currentData.year;
                 const fileName = gen.currentData.id || 'data';
                 const blob = new Blob([JSON.stringify(gen.currentData, null, 4)], { type: 'application/json' });
                 const a = document.createElement('a');
@@ -2540,6 +3194,14 @@ self.onmessage = async (e) => {
                 if (!gen.currentData) {
                     return showToast("Nenhum dado para salvar.", "warning");
                 }
+                delete gen.currentData.title;
+                delete gen.currentData.name;
+                delete gen.currentData.poster;
+                delete gen.currentData.background;
+                delete gen.currentData.backdrop;
+                delete gen.currentData.description;
+                delete gen.currentData.overview;
+                delete gen.currentData.year;
                 
                 const nick = document.getElementById('uploaderNick')?.value.trim();
                 if (nick) {
@@ -2754,7 +3416,7 @@ self.onmessage = async (e) => {
                         if (stream) {
                             let parts = stream.name.split('\n');
                             let audio = bulkAudio || parts[0] || 'Dublado';
-                            let quality = bulkQuality || parts[1] || '1080p';
+                            let quality = (bulkQuality !== undefined && bulkQuality !== '' && bulkQuality !== 'Nenhuma') ? bulkQuality : (parts[1] || '1080p');
                             stream.name = `${audio}\n${quality}`;
                         }
                     });
@@ -2770,7 +3432,7 @@ self.onmessage = async (e) => {
                         if (stream) {
                             let parts = stream.name.split('\n');
                             let audio = bulkAudio || parts[0] || 'Dublado';
-                            let quality = bulkQuality || parts[1] || '1080p';
+                            let quality = (bulkQuality !== undefined && bulkQuality !== '' && bulkQuality !== 'Nenhuma') ? bulkQuality : (parts[1] || '1080p');
                             stream.name = `${audio}\n${quality}`;
 
                             if (bulkSeasonVal && bulkSeasonVal !== season) {
@@ -2895,7 +3557,8 @@ self.onmessage = async (e) => {
                 const emptyState = document.getElementById('visualEditorEmptyState');
                 if (!player || !url) return;
 
-                player.src = url;
+                const resolvedUrl = resolveStreamPlaybackUrl(url);
+                player.src = resolvedUrl;
                 player.classList.remove('hidden');
                 if (emptyState) emptyState.style.display = 'none';
                 player.load();
@@ -2924,11 +3587,11 @@ self.onmessage = async (e) => {
                 let html = '';
 
                 const audiosList = ['Dublado', 'Português (PT-BR)', 'Dual Áudio', 'Legendado', 'Nacional', 'English'];
-                const qualitiesList = ["FHD", "1080p", "720p", "4K", "HD", "SD", "CAM", "Nenhuma"];
+                const qualitiesList = ["1080p", "720p", "4K", "FHD", "HD", "SD", "CAM"];
 
                 const parseName = (name) => {
                     const parts = (name || '').split('\n');
-                    return { audio: parts[0] || 'Dublado', qual: parts[1] || 'FHD' };
+                    return { audio: parts[0] || 'Dublado', qual: parts[1] || '1080p' };
                 };
 
                 const renderStreamCard = (stream, index, type, season, ep) => {
@@ -3090,7 +3753,7 @@ self.onmessage = async (e) => {
                 let quality = parts[1] || '1080p';
 
                 if (field === 'audio') audio = value;
-                if (field === 'quality') quality = value;
+                if (field === 'quality') quality = value || '1080p';
 
                 stream.name = `${audio}\n${quality}`;
             }
@@ -3117,6 +3780,61 @@ self.onmessage = async (e) => {
                     cat.isLoadingMore = false;
                 }, 200); // Throttle de 200ms
             },
+
+            renderDbPausedState: () => {
+                const grid = document.getElementById('gridContainer');
+                if (!grid) return;
+                grid.innerHTML = `
+                    <div class="col-span-full py-16 px-6 text-center glass-panel rounded-3xl border border-amber-500/25 max-w-md mx-auto my-8 shadow-2xl">
+                        <div class="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-3xl mx-auto mb-4 border border-amber-500/20">
+                            <i class="fa-solid fa-database"></i>
+                        </div>
+                        <h3 class="text-white font-bold font-display text-lg mb-2">Banco de Dados Supabase Pausado</h3>
+                        <p class="text-text-soft text-xs mb-6 leading-relaxed">O Supabase pausa projetos inativos automaticamente. Para reativar seu catálogo em 1 clique, acesse seu painel e clique no botão <strong>Restore project</strong>.</p>
+                        <div class="flex flex-col sm:flex-row gap-2.5 justify-center">
+                            <a href="https://supabase.com/dashboard" target="_blank" class="btn-fenix-primary px-5 py-2.5 rounded-xl text-xs font-bold inline-flex items-center justify-center gap-2 shadow-md">
+                                <i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir Supabase Dashboard
+                            </a>
+                            <button onclick="cat.init()" class="bg-white/5 hover:bg-white/10 text-white px-4 py-2.5 rounded-xl text-xs font-semibold border border-white/10 transition">
+                                <i class="fa-solid fa-rotate mr-1.5"></i> Testar Novamente
+                            </button>
+                        </div>
+                    </div>
+                `;
+            },
+
+            renderHfErrorState: (errorMsg) => {
+                const grid = document.getElementById('gridContainer');
+                if (!grid) return;
+                const is401 = errorMsg && (errorMsg.includes('401') || errorMsg.includes('Token'));
+                grid.innerHTML = `
+                    <div class="col-span-full py-16 px-6 text-center glass-panel rounded-3xl border border-indigo-500/25 max-w-lg mx-auto my-8 shadow-2xl">
+                        <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-3xl mx-auto mb-4 border border-indigo-500/20">
+                            <i class="fa-solid fa-cloud"></i>
+                        </div>
+                        <h3 class="text-white font-bold font-display text-lg mb-2">Conectando ao Hugging Face</h3>
+                        <p class="text-text-soft text-xs mb-4 leading-relaxed">
+                            O sistema está configurado para ler do repositório <strong>Fenixflix/Database</strong> no Hugging Face.
+                        </p>
+                        <div class="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-300 text-xs font-mono mb-4 text-left break-all">
+                            ${escapeHTML(errorMsg || 'Erro desconhecido ao consultar Hugging Face')}
+                        </div>
+                        ${is401 ? `
+                        <p class="text-amber-400/90 text-xs mb-6 leading-relaxed bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl text-left">
+                            ⚠️ <strong>Atenção:</strong> O token HF no seu <code>.env</code> está inválido ou expirado. Acesse <a href="https://huggingface.co/settings/tokens" target="_blank" class="underline font-bold text-white">huggingface.co/settings/tokens</a>, gere um token Read e atualize a linha <code>HF_TOKEN=...</code>.
+                        </p>
+                        ` : ''}
+                        <div class="flex flex-col sm:flex-row gap-2.5 justify-center">
+                            <a href="/api/hf/database/test" target="_blank" class="btn-fenix-primary px-5 py-2.5 rounded-xl text-xs font-bold inline-flex items-center justify-center gap-2 shadow-md">
+                                <i class="fa-solid fa-vial"></i> Ver Teste Detalhado
+                            </a>
+                            <button onclick="cat.init()" class="bg-white/5 hover:bg-white/10 text-white px-4 py-2.5 rounded-xl text-xs font-semibold border border-white/10 transition">
+                                <i class="fa-solid fa-rotate mr-1.5"></i> Testar Novamente
+                            </button>
+                        </div>
+                    </div>
+                `;
+            },
             
             init: async () => {
                 cat.setLoading(true);
@@ -3131,7 +3849,18 @@ self.onmessage = async (e) => {
                     if (adminSenha) headers['x-admin-password'] = adminSenha;
 
                     const response = await fetch(API_URL + '/api/catalog', { headers });
-                    if (!response.ok) throw new Error("Falha na API");
+                    if (!response.ok) {
+                        const errData = await response.json().catch(() => ({}));
+                        if (errData.isHf || errData.hfError) {
+                            cat.renderHfErrorState(errData.hfError || errData.erro);
+                            return;
+                        }
+                        if (response.status === 503 || errData.dbPaused) {
+                            cat.renderDbPausedState();
+                            return;
+                        }
+                        throw new Error(errData.erro || "Falha na API");
+                    }
                     const data = await response.json();
 
                     cat.allItems = data.map((item, index) => {
@@ -3582,6 +4311,10 @@ self.onmessage = async (e) => {
                         audio = audio.replace(new RegExp(qualityMatch[0], 'i'), '').trim();
                     }
                 }
+
+                if (quality.toLowerCase() === 'fenixstudio' || quality.toLowerCase() === 'nenhuma') {
+                    quality = '';
+                }
                 
                 audio = audio.replace(/^[-\s]+|[-\s]+$/g, '');
                 if (!audio) audio = "Principal";
@@ -3625,10 +4358,19 @@ self.onmessage = async (e) => {
                 
                 document.getElementById('modalTitle').innerText = item.title || item.id;
                 
-                document.getElementById('btnModalEdit').onclick = () => {
-                    cat.closeModal();
-                    cat.editInGenerator(item.id);
-                };
+                const btnEdit = document.getElementById('btnModalEdit');
+                if (btnEdit) {
+                    const isAdmin = Boolean(sessionStorage.getItem('fenixflix_senha'));
+                    if (isAdmin) {
+                        btnEdit.classList.remove('hidden');
+                        btnEdit.onclick = () => {
+                            cat.closeModal();
+                            cat.editInGenerator(item.id);
+                        };
+                    } else {
+                        btnEdit.classList.add('hidden');
+                    }
+                }
 
                 const statsEl = document.getElementById('modalStats');
                 const content = document.getElementById('modalContent');
@@ -3991,18 +4733,7 @@ self.onmessage = async (e) => {
                     placeholder.classList.add('hidden');
                     video.classList.remove('hidden');
 
-                    const bases = [
-                        "https://husky-denny-fenixflixaddon-ec8e842b.koyeb.app",
-                        "https://passing-melinda-onomed1-d0cbec40.koyeb.app"
-                    ];
-                    const base = bases[Math.floor(Math.random() * bases.length)];
-
-                    let url_stream = stream.url;
-                    if (url_stream && url_stream.includes("/stream/")) {
-                        const path_index = url_stream.indexOf("/stream/");
-                        const path = url_stream.substring(path_index);
-                        url_stream = `${base}${path}`;
-                    }
+                    const url_stream = resolveStreamPlaybackUrl(stream.url);
 
                     video.src = url_stream;
                     video.load();
@@ -5202,7 +5933,7 @@ self.onmessage = async (e) => {
             
             const parseName = (name) => {
                 const parts = (name || '').split('\n');
-                return { audio: parts[0] || 'Dublado', quality: parts[1] || '1080p' };
+                return { audio: parts[0] || 'Dublado', quality: (parts[1] && parts[1] !== 'Nenhuma') ? parts[1] : '1080p' };
             };
 
             window.toggleApproval = function(checkbox) {
@@ -5228,7 +5959,8 @@ self.onmessage = async (e) => {
                 const emptyState = document.getElementById('previewEmptyState');
                 if (!player || !url) return;
 
-                player.src = url;
+                const resolvedUrl = resolveStreamPlaybackUrl(url);
+                player.src = resolvedUrl;
                 player.classList.remove('hidden');
                 if (emptyState) emptyState.style.display = 'none';
                 
@@ -5249,6 +5981,24 @@ self.onmessage = async (e) => {
 
                 const newStreamsProcessed = new Set();
 
+                let missingQuality = false;
+                inputs.forEach(input => {
+                    const idx = input.getAttribute('data-idx');
+                    const season = input.getAttribute('data-season') || null;
+                    const ep = input.getAttribute('data-ep') || null;
+                    const selector = type === 'movie' ? `[data-idx="${idx}"]` : `[data-season="${season}"][data-ep="${ep}"][data-idx="${idx}"]`;
+                    const isChecked = modal.querySelector(`.approve-checkbox${selector}`)?.checked;
+                    const urlVal = (modal.querySelector(`.url-input${selector}`)?.value || '').trim();
+                    const qualityVal = (modal.querySelector(`.quality-input${selector}`)?.value || '').trim();
+                    if (isChecked && urlVal && (!qualityVal || qualityVal === 'Nenhuma')) {
+                        missingQuality = true;
+                    }
+                });
+
+                if (missingQuality) {
+                    return showToast("A qualidade do vídeo é obrigatória para todos os links aprovados! Defina a qualidade (ex: 1080p, 720p) antes de salvar.", "error");
+                }
+
                 inputs.forEach(input => {
                     const idx = input.getAttribute('data-idx');
                     const season = input.getAttribute('data-season') || null;
@@ -5257,8 +6007,8 @@ self.onmessage = async (e) => {
                     const selector = type === 'movie' ? `[data-idx="${idx}"]` : `[data-season="${season}"][data-ep="${ep}"][data-idx="${idx}"]`;
                     
                     let urlVal = (modal.querySelector(`.url-input${selector}`)?.value || '').trim();
-                    const audioVal = modal.querySelector(`.audio-input${selector}`)?.value || '';
-                    const qualityVal = modal.querySelector(`.quality-input${selector}`)?.value || '';
+                    const audioVal = modal.querySelector(`.audio-input${selector}`)?.value || 'Dublado';
+                    const qualityVal = modal.querySelector(`.quality-input${selector}`)?.value || '1080p';
                     const isChecked = modal.querySelector(`.approve-checkbox${selector}`)?.checked;
                     
                     const newSeason = type === 'series' ? (modal.querySelector(`.season-input${selector}`)?.value || season || '1') : null;
@@ -5272,6 +6022,13 @@ self.onmessage = async (e) => {
                             let s = { ...pendente.conteudo.streams[idx] };
                             s.url = urlVal;
                             s.name = `${audioVal}\n${qualityVal}`;
+
+                            if (!s.colaborador && pendente.conteudo.colaborador) {
+                                s.colaborador = pendente.conteudo.colaborador;
+                                s.colaborador_id = pendente.conteudo.colaborador_id;
+                                s.colaborador_avatar = pendente.conteudo.colaborador_avatar;
+                                s.colaborador_role = pendente.conteudo.colaborador_role;
+                            }
                             
                             finalContent.streams = finalContent.streams.filter(x => x.url !== s.url);
                             finalContent.streams.push(s);
@@ -5284,6 +6041,13 @@ self.onmessage = async (e) => {
                                 let s = { ...pendente.conteudo.streams[season][ep][idx] };
                                 s.url = urlVal;
                                 s.name = `${audioVal}\n${qualityVal}`;
+
+                                if (!s.colaborador && pendente.conteudo.colaborador) {
+                                    s.colaborador = pendente.conteudo.colaborador;
+                                    s.colaborador_id = pendente.conteudo.colaborador_id;
+                                    s.colaborador_avatar = pendente.conteudo.colaborador_avatar;
+                                    s.colaborador_role = pendente.conteudo.colaborador_role;
+                                }
                                 
                                 if (!finalContent.streams[newSeason]) finalContent.streams[newSeason] = {};
                                 if (!finalContent.streams[newSeason][newEp]) finalContent.streams[newSeason][newEp] = [];
@@ -5294,6 +6058,13 @@ self.onmessage = async (e) => {
                         }
                     }
                 });
+
+                if (!finalContent.colaborador && pendente.conteudo.colaborador) {
+                    finalContent.colaborador = pendente.conteudo.colaborador;
+                    finalContent.colaborador_id = pendente.conteudo.colaborador_id;
+                    finalContent.colaborador_avatar = pendente.conteudo.colaborador_avatar;
+                    finalContent.colaborador_role = pendente.conteudo.colaborador_role;
+                }
 
                 const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
                 const discordToken = localStorage.getItem('discord_token');
@@ -5323,13 +6094,14 @@ self.onmessage = async (e) => {
 
             const generateStreamHtml = (s, idx, audio, quality, isMovie, season, ep) => {
                 const audios = ['Dublado', 'Português (PT-BR)', 'Dual Áudio', 'Legendado', 'Nacional', 'English'];
-                const qualities = ["1080p", "720p", "4K", "FHD", "HD", "SD", "CAM", "Nenhuma"];
+                const qualities = ["1080p", "720p", "4K", "FHD", "HD", "SD", "CAM"];
+                const safeQuality = (quality && quality !== 'Nenhuma') ? quality : '1080p';
                 
                 let audioOpts = audios.map(a => `<option value="${a}" ${audio === a ? 'selected' : ''}>${a}</option>`).join('');
                 if (audio && !audios.includes(audio)) audioOpts += `<option value="${escapeHTML(audio)}" selected>${escapeHTML(audio)}</option>`;
                 
-                let qualityOpts = qualities.map(q => `<option value="${q}" ${quality === q ? 'selected' : ''}>${q}</option>`).join('');
-                if (quality && !qualities.includes(quality)) qualityOpts += `<option value="${escapeHTML(quality)}" selected>${escapeHTML(quality)}</option>`;
+                let qualityOpts = qualities.map(q => `<option value="${q}" ${safeQuality === q ? 'selected' : ''}>${q}</option>`).join('');
+                if (safeQuality && !qualities.includes(safeQuality)) qualityOpts += `<option value="${escapeHTML(safeQuality)}" selected>${escapeHTML(safeQuality)}</option>`;
 
                 const dataAttr = isMovie ? `data-idx="${idx}"` : `data-season="${season}" data-ep="${ep}" data-idx="${idx}"`;
                 
@@ -5487,6 +6259,35 @@ self.onmessage = async (e) => {
         }
 
         async function approveFile(nome) {
+            const pendente = window.currentPendentes?.find(p => p.nome_do_json === nome);
+            if (pendente && pendente.conteudo) {
+                const checkMissingQuality = (streams, type) => {
+                    if (type === 'movie' && Array.isArray(streams)) {
+                        return streams.some(s => {
+                            const parts = (s?.name || '').split('\n');
+                            return !parts[1] || parts[1].trim() === '' || parts[1].trim() === 'Nenhuma';
+                        });
+                    }
+                    if (type === 'series' && streams && typeof streams === 'object') {
+                        for (const s in streams) {
+                            for (const e in streams[s]) {
+                                if (Array.isArray(streams[s][e])) {
+                                    if (streams[s][e].some(str => {
+                                        const parts = (str?.name || '').split('\n');
+                                        return !parts[1] || parts[1].trim() === '' || parts[1].trim() === 'Nenhuma';
+                                    })) return true;
+                                }
+                            }
+                        }
+                    }
+                    return false;
+                };
+
+                if (checkMissingQuality(pendente.conteudo.streams, pendente.conteudo.type)) {
+                    return showToast("Este arquivo contém streams sem qualidade definida. Abra em 'Visualizar/Testar' (ícone de olho) para definir a qualidade antes de aprovar!", "error");
+                }
+            }
+
             if (confirm(`Deseja aprovar e publicar o arquivo ${nome} diretamente no catálogo?`)) {
                 actionPendingFile(nome, 'approve');
             }
