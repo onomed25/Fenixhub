@@ -32,6 +32,7 @@ const {
     mergeMediaContents
 } = require('./src/media-merger');
 
+<<<<<<< Updated upstream
 const {
     getHfDbConfig,
     clearHfCache,
@@ -48,6 +49,10 @@ const {
 const isTestEnv = process.env.NODE_ENV === 'test';
 
 if (!process.env.ADMIN_PASSWORD && !isTestEnv) {
+=======
+// Validar variáveis de ambiente críticas (SEC-01)
+if (!process.env.ADMIN_PASSWORD) {
+>>>>>>> Stashed changes
     console.error("ERRO FATAL: ADMIN_PASSWORD não configurada no .env");
     process.exit(1);
 }
@@ -61,9 +66,12 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const JWT_SECRET = process.env.JWT_SECRET;
 const HTTP_TIMEOUT_MS = 8000;
 
+<<<<<<< Updated upstream
 // ============================================================================
 // CONFIGURAÇÃO EXPRESS & SEGURANÇA BÁSICA
 // ============================================================================
+=======
+>>>>>>> Stashed changes
 const app = express();
 app.set('trust proxy', 1); // Suporte para X-Forwarded-For em proxies reversos (Render/Cloudflare)
 app.disable('x-powered-by');
@@ -74,7 +82,53 @@ app.use(helmet({
 }));
 app.use(compression());
 app.use(cookieParser());
+<<<<<<< Updated upstream
 app.use(express.json({ limit: '10mb' }));
+=======
+
+// Rate Limiters especializados para proteção contra DDoS e Força Bruta (SEC-05)
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 500,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { erro: 'Muitas requisições deste IP, tente novamente mais tarde.' }
+});
+
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 15, // 15 tentativas a cada 15 minutos
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { erro: 'Muitas tentativas de autenticação. Tente novamente mais tarde.' }
+});
+
+const uploadLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { erro: 'Limite de uploads atingido temporariamente. Tente novamente mais tarde.' }
+});
+
+const mutationLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 40,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { erro: 'Muitas requisições de exclusão/modificação. Tente novamente mais tarde.' }
+});
+
+const submissionLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 25,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { erro: 'Muitos envios/pedidos realizados. Tente novamente mais tarde.' }
+});
+
+app.use('/api/', apiLimiter);
+>>>>>>> Stashed changes
 
 // CORS Seguro com suporte a múltiplas origens sanitizadas
 const allowedOrigins = process.env.ALLOWED_ORIGINS
@@ -111,6 +165,7 @@ const authLimiter = rateLimit({
     message: { erro: 'Muitas tentativas de autenticação. Tente novamente mais tarde.' }
 });
 
+<<<<<<< Updated upstream
 const uploadLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 60,
@@ -263,6 +318,16 @@ const pool = new Pool({
     connectionTimeoutMillis: 5000,
     ssl: getDatabaseSslConfig(),
     stream: () => {
+=======
+const net = require('net');
+// Configuração do banco de dados (SEC-06: SSL Seguro)
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 5, // Limita as conexões simultâneas
+    ssl: getDatabaseSslConfig(),
+    // Força a conexão a utilizar apenas IPv4 interceptando o método connect do socket
+    stream: (config) => {
+>>>>>>> Stashed changes
         const socket = new net.Socket();
         const originalConnect = socket.connect;
         socket.connect = function(port, host, cb) {
@@ -436,6 +501,10 @@ async function getNuviometaInfo(id, type) {
     try {
         const sanitized = sanitizeNuviometaParams(id, type);
         if (!sanitized) {
+<<<<<<< Updated upstream
+=======
+            console.warn("⚠️ Parâmetros inválidos para Nuviometa:", { id, type });
+>>>>>>> Stashed changes
             return null;
         }
         const url = `https://nuviometa.wasmer.app/meta/${sanitized.type}/${sanitized.id}.json`;
@@ -451,6 +520,7 @@ async function getNuviometaInfo(id, type) {
     }
 }
 
+<<<<<<< Updated upstream
 // Cache em memória para cargos da guilda do Discord (evita gargalo de N+1 e rate limit 429)
 let cachedDiscordRoles = {
     roles: null,
@@ -531,6 +601,9 @@ async function checkDiscordMemberRoles(userId) {
 }
 
 // ============================================================================
+=======
+// ==========================================
+>>>>>>> Stashed changes
 // ROTAS DE AUTENTICAÇÃO DO DISCORD
 // ============================================================================
 app.get('/api/auth/discord', (req, res) => {
@@ -615,6 +688,7 @@ app.get('/api/auth/discord/callback', async (req, res) => {
             isColaborador: isCol,
             cargos
         };
+<<<<<<< Updated upstream
 
         if (process.env.DATABASE_SOURCE !== 'huggingface') {
             try {
@@ -648,14 +722,39 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         const token = generateToken(payload);
         const safeRedirect = sanitizeRedirectUrl(state, '/');
 
+=======
+        
+        // Salva/atualiza o perfil do usuário do Discord no banco de dados local
+        try {
+            const queryUpsertUser = `
+                INSERT INTO usuarios_discord (discord_id, username, global_name, avatar, is_ajudante, is_colaborador, cargos, atualizado_em)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+                ON CONFLICT (discord_id)
+                DO UPDATE SET username = EXCLUDED.username, global_name = EXCLUDED.global_name, avatar = EXCLUDED.avatar, is_ajudante = EXCLUDED.is_ajudante, is_colaborador = EXCLUDED.is_colaborador, cargos = EXCLUDED.cargos, atualizado_em = CURRENT_TIMESTAMP;
+            `;
+            await pool.query(queryUpsertUser, [userData.id, userData.username, userData.global_name || userData.username, userData.avatar, isAjudante, isColaborador, JSON.stringify(cargos)]);
+        } catch (dbErr) {
+            console.error("Erro ao salvar usuário do Discord no banco de dados:", dbErr.message);
+        }
+        
+        const token = generateToken(payload);
+        const safeRedirect = sanitizeRedirectUrl(state, '/');
+        
+        // Define o token via cookie httpOnly seguro (evita roubo de sessão via XSS - SEC-04)
+>>>>>>> Stashed changes
         res.cookie('discord_token', token, {
             maxAge: 30 * 24 * 60 * 60 * 1000,
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
             path: '/'
+<<<<<<< Updated upstream
         });
 
+=======
+        }); 
+        
+>>>>>>> Stashed changes
         res.redirect(safeRedirect);
     } catch (err) {
         console.error("Erro no callback do Discord:", err.message);
@@ -742,7 +841,12 @@ app.get('/api/auth/me', async (req, res) => {
     }
 });
 
+<<<<<<< Updated upstream
 app.post('/api/auth/logout', (_req, res) => {
+=======
+// ROTA: Logout Discord seguro
+app.post('/api/auth/logout', (req, res) => {
+>>>>>>> Stashed changes
     res.clearCookie('discord_token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
@@ -751,6 +855,10 @@ app.post('/api/auth/logout', (_req, res) => {
     });
     res.json({ sucesso: true, mensagem: 'Desconectado com sucesso.' });
 });
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 
 // ============================================================================
 // GERENCIAMENTO HUGGING FACE (MÚLTIPLAS CONTAS & ROTAS DE STREAM)
@@ -852,7 +960,20 @@ app.get('/api/hf/config', async (req, res) => {
     }
 });
 
+<<<<<<< Updated upstream
 app.post('/api/hf/accounts', mutationLimiter, requireAdminOrAjudante, async (req, res) => {
+=======
+// Adicionar nova conta do Hugging Face (Admin ou Ajudante)
+app.post('/api/hf/accounts', mutationLimiter, async (req, res) => {
+    const adminSenha = req.headers['x-admin-password'] || req.body.senha;
+    const authHeader = req.headers['authorization'];
+    const discordToken = authHeader ? authHeader.replace('Bearer ', '') : req.cookies?.discord_token;
+    const user = verifyToken(discordToken);
+
+    if (!checkPassword(adminSenha, ADMIN_PASSWORD) && (!user || !user.isAjudante)) {
+        return res.status(401).json({ erro: 'Não autorizado. Senha de administrador necessária.' });
+    }
+>>>>>>> Stashed changes
     const { nome, token, repo, tipo } = req.body;
     if (typeof token !== 'string' || !token.trim() || typeof repo !== 'string' || !repo.trim()) {
         return res.status(400).json({ erro: 'Token e Repositório válidos são obrigatórios.' });
@@ -872,11 +993,23 @@ app.post('/api/hf/accounts', mutationLimiter, requireAdminOrAjudante, async (req
     }
 });
 
+<<<<<<< Updated upstream
 app.delete('/api/hf/accounts/:id', mutationLimiter, requireAdminOrAjudante, async (req, res) => {
     const rawId = req.params.id ? req.params.id.replace('db_', '') : '';
     const numericId = parseInt(rawId, 10);
     if (isNaN(numericId)) {
         return res.status(400).json({ erro: 'ID de conta inválido.' });
+=======
+// Excluir conta adicional do Hugging Face (Admin ou Ajudante)
+app.delete('/api/hf/accounts/:id', mutationLimiter, async (req, res) => {
+    const adminSenha = req.headers['x-admin-password'] || req.query.senha;
+    const authHeader = req.headers['authorization'];
+    const discordToken = authHeader ? authHeader.replace('Bearer ', '') : req.cookies?.discord_token;
+    const user = verifyToken(discordToken);
+
+    if (!checkPassword(adminSenha, ADMIN_PASSWORD) && (!user || !user.isAjudante)) {
+        return res.status(401).json({ erro: 'Não autorizado. Senha de administrador necessária.' });
+>>>>>>> Stashed changes
     }
     try {
         const result = await pool.query('DELETE FROM hf_contas WHERE id = $1', [numericId]);
@@ -939,6 +1072,7 @@ const defaultStreamBackends = [
     'https://stream.fenixhub.online'
 ];
 
+<<<<<<< Updated upstream
 let currentBackendIndex = 0;
 
 function getStreamBackends() {
@@ -971,6 +1105,13 @@ app.get('/stream/{*splat}', (req, res) => {
 // ============================================================================
 app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
     const { nome, conteudo } = req.body;
+=======
+// ==========================================
+// ROTA 1: Enviar JSON (Pública - Sem senha)
+// ==========================================
+app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
+    const { nome, conteudo, senha } = req.body;
+>>>>>>> Stashed changes
 
     if (!nome || !conteudo) {
         return res.status(400).json({ erro: 'O nome e o conteúdo do JSON são obrigatórios.' });
@@ -1263,6 +1404,7 @@ app.get('/api/catalog', async (req, res) => {
     }
 });
 
+<<<<<<< Updated upstream
 // Testar conexão e diagnóstico do repositório Hugging Face Database
 app.get('/api/hf/database/test', async (_req, res) => {
     try {
@@ -1270,6 +1412,17 @@ app.get('/api/hf/database/test', async (_req, res) => {
         res.json(testResult);
     } catch (err) {
         res.status(500).json({ ok: false, error: err.message });
+=======
+// ==========================================
+// ROTA 2c: Apagar JSON (/api/delete)
+// ==========================================
+app.delete('/api/delete', mutationLimiter, async (req, res) => {
+    const { id, senha } = req.body;
+    const adminPassword = ADMIN_PASSWORD;
+
+    if (!checkPassword(senha, adminPassword)) {
+        return res.status(401).json({ erro: 'Senha incorreta.' });
+>>>>>>> Stashed changes
     }
 });
 
@@ -1431,16 +1584,33 @@ app.get('/api/stats', async (_req, res) => {
     }
 });
 
+<<<<<<< Updated upstream
 app.post('/api/verify', authLimiter, (req, res) => {
     if (isAdmin(req)) {
+=======
+// ==========================================
+// ROTA 6: Verificar Senha (/api/verify)
+// ==========================================
+app.post('/api/verify', authLimiter, (req, res) => {
+    const { senha } = req.body;
+    const adminPassword = ADMIN_PASSWORD;
+
+    if (checkPassword(senha, adminPassword)) {
+>>>>>>> Stashed changes
         return res.json({ sucesso: true });
     }
     return res.status(401).json({ erro: 'Senha incorreta.' });
 });
 
+<<<<<<< Updated upstream
 // ============================================================================
 // ROTAS DE PEDIDOS SUGERIDOS
 // ============================================================================
+=======
+// ==========================================
+// ROTA 7: Adicionar Pedido (/api/pedidos)
+// ==========================================
+>>>>>>> Stashed changes
 app.post('/api/pedidos', submissionLimiter, async (req, res) => {
     const { id, type, episode } = req.body;
 
@@ -1507,10 +1677,22 @@ app.get('/api/pedidos', async (_req, res) => {
     }
 });
 
+<<<<<<< Updated upstream
 app.post('/api/pedidos/delete', mutationLimiter, requireAdmin, async (req, res) => {
     const { id } = req.body;
     if (!id || typeof id !== 'string') {
         return res.status(400).json({ erro: 'ID (IMDb) é obrigatório.' });
+=======
+// ==========================================
+// ROTA 9: Apagar Pedido (/api/pedidos/delete)
+// ==========================================
+app.post('/api/pedidos/delete', mutationLimiter, async (req, res) => {
+    const { id, senha } = req.body;
+    const adminPassword = ADMIN_PASSWORD;
+
+    if (!checkPassword(senha, adminPassword)) {
+        return res.status(401).json({ erro: 'Senha incorreta.' });
+>>>>>>> Stashed changes
     }
 
     if (process.env.DATABASE_SOURCE === 'huggingface') {
@@ -1527,12 +1709,33 @@ app.post('/api/pedidos/delete', mutationLimiter, requireAdmin, async (req, res) 
     }
 });
 
+<<<<<<< Updated upstream
 // ============================================================================
 // ROTAS DE MODERAÇÃO E GERENCIAMENTO DE ARQUIVOS
 // ============================================================================
 app.post('/api/arquivos/ocultar', mutationLimiter, requireAdminOrAjudante, async (req, res) => {
     const { nome, is_oculto } = req.body;
     if (!nome || typeof nome !== 'string') {
+=======
+// ==========================================
+// ROTA 9x: Ocultar/Desocultar Arquivo (/api/arquivos/ocultar)
+// ==========================================
+app.post('/api/arquivos/ocultar', mutationLimiter, async (req, res) => {
+    const { nome, is_oculto, senha } = req.body;
+    
+    const adminPassword = ADMIN_PASSWORD;
+    const token = extractToken(req);
+    const user = verifyToken(token);
+
+    const isAdmin = (checkPassword(senha, adminPassword));
+    const isAjudante = user && user.isAjudante;
+
+    if (!isAdmin && !isAjudante) {
+        return res.status(401).json({ erro: 'Acesso não autorizado para ocultar arquivos.' });
+    }
+
+    if (!nome) {
+>>>>>>> Stashed changes
         return res.status(400).json({ erro: 'Nome do arquivo é obrigatório.' });
     }
 
@@ -1553,6 +1756,12 @@ app.post('/api/arquivos/ocultar', mutationLimiter, requireAdminOrAjudante, async
     }
 });
 
+<<<<<<< Updated upstream
+=======
+// ==========================================
+// ROTA 9b: Denunciar Conteúdo (/api/denunciar)
+// ==========================================
+>>>>>>> Stashed changes
 app.post('/api/denunciar', submissionLimiter, async (req, res) => {
     const { nome, titulo, motivo, detalhes } = req.body;
 
@@ -1607,11 +1816,19 @@ app.get('/api/arquivos/pendentes', requireAdminOrAjudante, async (_req, res) => 
     }
 });
 
+<<<<<<< Updated upstream
 app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async (req, res) => {
     const { nome, conteudo, restantePendente } = req.body;
     if (!nome || typeof nome !== 'string') {
         return res.status(400).json({ erro: 'Nome do arquivo pendente é obrigatório.' });
     }
+=======
+app.post('/api/arquivos/aprovar', mutationLimiter, async (req, res) => {
+    const { nome, senha, conteudo, restantePendente } = req.body;
+    const adminPassword = ADMIN_PASSWORD;
+    const token = extractToken(req);
+    const user = verifyToken(token);
+>>>>>>> Stashed changes
 
     let client;
     try {
@@ -1760,10 +1977,21 @@ app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async
     }
 });
 
+<<<<<<< Updated upstream
 app.post('/api/arquivos/rejeitar', mutationLimiter, requireAdminOrAjudante, async (req, res) => {
     const { nome } = req.body;
     if (!nome || typeof nome !== 'string') {
         return res.status(400).json({ erro: 'Nome do arquivo é obrigatório.' });
+=======
+app.post('/api/arquivos/rejeitar', mutationLimiter, async (req, res) => {
+    const { nome, senha } = req.body;
+    const adminPassword = ADMIN_PASSWORD;
+    const token = extractToken(req);
+    const user = verifyToken(token);
+
+    if (!checkPassword(senha, adminPassword) && (!user || !user.isAjudante)) {
+        return res.status(401).json({ erro: 'Não autorizado.' });
+>>>>>>> Stashed changes
     }
 
     try {
@@ -1791,8 +2019,27 @@ app.get('/api/denuncias', requireAdminOrAjudante, async (_req, res) => {
     }
 });
 
+<<<<<<< Updated upstream
 app.delete('/api/denuncias/delete', mutationLimiter, requireAdminOrAjudante, async (req, res) => {
     const { id } = req.body;
+=======
+// ==========================================
+// ROTA 9d: Resolver/Apagar Denúncia (/api/denuncias/delete) - Admin ou Ajudante
+// ==========================================
+app.delete('/api/denuncias/delete', mutationLimiter, async (req, res) => {
+    const { id, senha } = req.body;
+    const adminPassword = ADMIN_PASSWORD;
+    const token = extractToken(req);
+    const user = verifyToken(token);
+
+    const isAdmin = (checkPassword(senha, adminPassword));
+    const isAjudante = user && user.isAjudante;
+
+    if (!isAdmin && !isAjudante) {
+        return res.status(401).json({ erro: 'Acesso não autorizado.' });
+    }
+
+>>>>>>> Stashed changes
     if (!id) {
         return res.status(400).json({ erro: 'ID da denúncia é obrigatório.' });
     }
@@ -2038,10 +2285,65 @@ const executarLimpezaMaisVistosNode = async () => {
 let serverInstance = null;
 let cleanupTimer = null;
 
+<<<<<<< Updated upstream
 async function stopServer() {
     if (cleanupTimer) {
         clearInterval(cleanupTimer);
         cleanupTimer = null;
+=======
+// Desativa o timeout padrão de 5 minutos do Node.js para uploads grandes
+
+// TMDB Proxy Route (SEC-01: Sem credenciais hardcoded | SEC-03: Proteção contra SSRF e Path Traversal)
+app.get('/api/tmdb/*path', async (req, res) => {
+    try {
+        const validatedPath = validateTmdbPath(req.params.path);
+        if (!validatedPath) {
+            return res.status(400).json({ erro: "Caminho TMDB inválido ou não autorizado." });
+        }
+
+        const tmdbKey = process.env.TMDB_KEY || process.env.TMDB_API_KEY;
+        if (!tmdbKey) {
+            return res.status(500).json({ erro: "TMDB API Key não configurada no servidor." });
+        }
+
+        const urlObj = new URL(`https://api.themoviedb.org/3/${validatedPath}`);
+
+        // Whitelist de query parameters permitidos
+        const allowedParams = [
+            'query', 'language', 'page', 'external_source', 'append_to_response',
+            'include_adult', 'year', 'primary_release_year', 'sort_by', 'with_genres',
+            'region', 'include_video', 'with_keywords'
+        ];
+
+        for (const [key, value] of Object.entries(req.query)) {
+            if (allowedParams.includes(key) && typeof value === 'string') {
+                urlObj.searchParams.set(key, value.trim());
+            }
+        }
+
+        const headers = {
+            'Accept': 'application/json',
+            'User-Agent': 'FenixStudio/1.0'
+        };
+
+        // Se a chave for v4 (JWT longo iniciando com eyJ), usa Bearer. Se for v3 (hex), usa api_key como query param
+        if (tmdbKey.startsWith('eyJ')) {
+            headers["Authorization"] = `Bearer ${tmdbKey}`;
+        } else {
+            urlObj.searchParams.set('api_key', tmdbKey);
+        }
+        
+        const response = await fetch(urlObj.toString(), { headers });
+        if (!response.ok) {
+            const errorText = await response.text();
+            return res.status(response.status).json({ erro: "Erro na API TMDB: " + response.statusText, detalhe: errorText });
+        }
+        const data = await response.json();
+        res.json(data);
+    } catch (e) {
+        console.error("Erro no proxy do TMDB:", e);
+        res.status(500).json({ erro: "TMDB error: " + e.message });
+>>>>>>> Stashed changes
     }
     if (processTracker && typeof processTracker.destroy === 'function') {
         processTracker.destroy();

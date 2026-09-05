@@ -117,6 +117,7 @@ function mergeStreamArrays(existingList, incomingList) {
 }
 
 /**
+<<<<<<< Updated upstream
  * Sanitizes series streams object preventing Prototype Pollution.
  * 
  * @param {object|null|undefined} streams - Series streams object
@@ -140,6 +141,8 @@ function sanitizeSeriesStreams(streams) {
 }
 
 /**
+=======
+>>>>>>> Stashed changes
  * Merges media records (movie or series) preserving views and deduplicating streams.
  * Time Complexity: O(N + M) using Hash Set deduplication.
  * Space Complexity: O(N + M).
@@ -152,19 +155,30 @@ function mergeMediaContents(existing, incoming) {
     if (!existing || typeof existing !== 'object') return incoming || {};
     if (!incoming || typeof incoming !== 'object') return existing || {};
 
+<<<<<<< Updated upstream
     if (existing.type && incoming.type && existing.type !== incoming.type) {
         if (incoming.type === 'series' && incoming.streams) {
             return { ...incoming, streams: sanitizeSeriesStreams(incoming.streams) };
         }
+=======
+    if (existing.type !== incoming.type) {
+>>>>>>> Stashed changes
         return incoming;
     }
 
     const merged = { ...existing, ...incoming };
+<<<<<<< Updated upstream
     const targetType = incoming.type || existing.type;
 
     if (targetType === 'movie') {
         merged.streams = mergeStreamArrays(existing.streams, incoming.streams);
     } else if (targetType === 'series') {
+=======
+
+    if (incoming.type === 'movie') {
+        merged.streams = mergeStreamArrays(existing.streams, incoming.streams);
+    } else if (incoming.type === 'series') {
+>>>>>>> Stashed changes
         const existingStreams = (existing.streams && typeof existing.streams === 'object' && !Array.isArray(existing.streams)) ? existing.streams : {};
         const incomingStreams = (incoming.streams && typeof incoming.streams === 'object' && !Array.isArray(incoming.streams)) ? incoming.streams : {};
 
@@ -196,11 +210,17 @@ function mergeMediaContents(existing, incoming) {
     }
 
     // Preserve the highest view count safely
+<<<<<<< Updated upstream
     if (existing.views !== undefined || incoming.views !== undefined) {
         const existingViews = parseInt(existing.views, 10) || 0;
         const incomingViews = parseInt(incoming.views, 10) || 0;
         merged.views = Math.max(existingViews, incomingViews);
     }
+=======
+    const existingViews = parseInt(existing.views, 10) || 0;
+    const incomingViews = parseInt(incoming.views, 10) || 0;
+    merged.views = Math.max(existingViews, incomingViews);
+>>>>>>> Stashed changes
 
     return merged;
 }

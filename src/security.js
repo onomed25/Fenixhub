@@ -259,9 +259,14 @@ function sanitizeNuviometaParams(id, type = 'series') {
 }
 
 /**
+<<<<<<< Updated upstream
  * Builds a Postgres SSL configuration based on environment settings.
  * Supports cloud providers (Render, Supabase, Neon) with managed internal certificates,
  * custom CA certificates, and configurable strict verification.
+=======
+ * Builds a secure Postgres SSL configuration based on environment settings.
+ * Enforces certificate validation in production by default.
+>>>>>>> Stashed changes
  * 
  * @param {NodeJS.ProcessEnv|object} [env=process.env] - Environment variables object
  * @returns {object|boolean} Postgres connection ssl config
@@ -285,6 +290,7 @@ function getDatabaseSslConfig(env = process.env) {
         }
     }
 
+<<<<<<< Updated upstream
     // Em serviços em nuvem como Render, Supabase e Neon, os bancos utilizam certificados
     // internos/autoassinados pela infraestrutura da plataforma sem autoridade raiz pública.
     // Portanto, rejectUnauthorized é false por padrão para permitir conexão com criptografia TLS,
@@ -293,6 +299,14 @@ function getDatabaseSslConfig(env = process.env) {
 
     return {
         rejectUnauthorized
+=======
+    // In production, reject unauthorized certificates unless explicitly permitted
+    const isProduction = env.NODE_ENV === 'production';
+    const allowSelfSigned = env.DB_ALLOW_SELF_SIGNED === 'true' || env.DB_REJECT_UNAUTHORIZED === 'false';
+
+    return {
+        rejectUnauthorized: !allowSelfSigned && isProduction
+>>>>>>> Stashed changes
     };
 }
 

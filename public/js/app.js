@@ -262,6 +262,21 @@ function clearDiscordSession() {
                 }
             }
 
+<<<<<<< Updated upstream
+=======
+            // Botão de Upload em Lote no Catálogo (Apenas Admin e Colaboradores/Ajudantes)
+            const btnUploadLote = document.getElementById('btnUploadLote');
+            if (btnUploadLote) {
+                if (isLogged || isAjudante || isColaborador) {
+                    btnUploadLote.classList.remove('hidden');
+                    btnUploadLote.classList.add('flex');
+                } else {
+                    btnUploadLote.classList.add('hidden');
+                    btnUploadLote.classList.remove('flex');
+                }
+            }
+
+>>>>>>> Stashed changes
             // Controle de visibilidade das opções de upload (Bot vs Teste):
             // - Logado com cargo (Colaborador, Ajudante ou Admin): vê AMBOS (Bot e Teste)
             // - Usuário público comum (deslogado ou sem cargo): vê APENAS Bot (Teste 100% oculto)
@@ -1429,7 +1444,11 @@ function clearDiscordSession() {
                 } catch (e) {}
 
                 if (!allHfAccounts || allHfAccounts.length === 0) {
+<<<<<<< Updated upstream
                     showToast("Nenhuma conta do servidor teste configurada no servidor.", "error");
+=======
+                    showToast("Nenhuma conta Hugging Face configurada no servidor.", "error");
+>>>>>>> Stashed changes
                     return;
                 }
 
