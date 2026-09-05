@@ -1859,7 +1859,10 @@ self.onmessage = async (e) => {
                 
                 try {
                     const res = await fetch(`/api/tmdb/find/${encodeURIComponent(imdbId)}?external_source=imdb_id`);
-                    if (!res.ok) throw new Error("Falha na consulta ao TMDB");
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => null);
+                        throw new Error(errData?.erro || "Falha na consulta ao TMDB");
+                    }
                     const findData = await res.json();
                     
                     if (findData.tv_results && findData.tv_results.length > 0) {
@@ -1906,7 +1909,10 @@ self.onmessage = async (e) => {
                 try {
                     const res = await fetch(`/api/tmdb/search/multi?query=${encodeURIComponent(query)}&language=pt-BR`);
                     
-                    if (!res.ok) throw new Error("Erro na API do TMDB");
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => null);
+                        throw new Error(errData?.erro || "Erro na API do TMDB");
+                    }
                     
                     const data = await res.json();
                     const type = document.querySelector('input[name="contentType"]:checked').value;
@@ -1962,7 +1968,7 @@ self.onmessage = async (e) => {
                     
                 } catch (e) {
                     console.error(e);
-                    showToast("Erro ao pesquisar no TMDB", "error");
+                    showToast(e.message || "Erro ao pesquisar no TMDB", "error");
                 } finally {
                     if (btn) btn.disabled = false;
                     if (icon) icon.className = "fa-solid fa-magnifying-glass";

@@ -268,7 +268,14 @@ async function saveContentToHf(nome, conteudo) {
         throw new Error('Variável HF_TOKEN não configurada no arquivo .env.');
     }
 
-    const { uploadFile } = require('@huggingface/hub');
+    let uploadFile;
+    try {
+        uploadFile = require('@huggingface/hub').uploadFile;
+    } catch (reqErr) {
+        console.error('Falha ao carregar @huggingface/hub:', reqErr.message);
+        throw new Error('Módulo @huggingface/hub não instalado no servidor. Adicione ao package.json.');
+    }
+
     const cleanNome = String(nome).trim();
     const fileName = cleanNome.endsWith('.json') ? cleanNome : `${cleanNome}.json`;
     const contentStr = typeof conteudo === 'string' ? conteudo : JSON.stringify(conteudo, null, 2);

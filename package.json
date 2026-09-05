@@ -4,13 +4,16 @@
   "description": "Fenix Studio Application",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js",
-    "test": "jest --testPathPattern=tests/ --forceExit --detectOpenHandles",
-    "test:coverage": "jest --coverage --testPathPattern=tests/ --forceExit --detectOpenHandles",
-    "test:unit": "jest --testPathPattern=tests/unit/ --forceExit",
-    "test:integration": "jest --testPathPattern=tests/integration/ --forceExit --detectOpenHandles"
+    "test": "jest"
+  },
+  "jest": {
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/test.js"
+    ]
   },
   "dependencies": {
+    "@huggingface/hub": "^2.16.1",
     "bcrypt": "^6.0.0",
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
