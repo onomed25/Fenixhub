@@ -4189,9 +4189,18 @@ self.onmessage = async (e) => {
             },
 
             fetchMissingMetadata: async () => {
-                const missing = cat.allItems.filter(i => !i.title && i.id.startsWith('tt') && !i._fetchingMeta);
-                
-                const BATCH_SIZE = 10;
+                const missing = cat.allItems.filter(i => !i.title && i.id && i.id.startsWith('tt') && !i._fetchingMeta);
+                if (missing.length === 0) return;
+
+                // Priorizar os itens que estão visíveis na tela atualmente para carregar os títulos e capas instantaneamente
+                const visibleIds = new Set((cat.filteredItems || []).slice(0, cat.visibleCount || 36).map(i => i.id));
+                missing.sort((a, b) => {
+                    const aVis = visibleIds.has(a.id) ? 0 : 1;
+                    const bVis = visibleIds.has(b.id) ? 0 : 1;
+                    return aVis - bVis;
+                });
+
+                const BATCH_SIZE = 20;
                 for (let i = 0; i < missing.length; i += BATCH_SIZE) {
                     const batch = missing.slice(i, i + BATCH_SIZE);
                     await Promise.all(batch.map(async (item) => {
@@ -4211,7 +4220,9 @@ self.onmessage = async (e) => {
                         } catch (e) { console.error("Erro nuviometa", item.id); }
                     }));
                     cat.renderFiltered();
-                    await new Promise(r => setTimeout(r, 100)); // Small delay between batches
+                    if (i + BATCH_SIZE < missing.length) {
+                        await new Promise(r => setTimeout(r, 20));
+                    }
                 }
             },
 

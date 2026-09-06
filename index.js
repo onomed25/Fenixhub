@@ -1020,27 +1020,42 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
         return res.status(401).json({ erro: 'Você precisa estar logado com o Discord ou autenticado como Admin para salvar links.' });
     }
 
+    if (!hasStreamLinks(parsedConteudo.streams, parsedConteudo.type)) {
+        return res.status(400).json({ erro: 'O JSON deve conter pelo menos uma stream (link) para ser enviado.' });
+    }
+
     const isAjudanteUser = Boolean(user && user.isAjudante);
     const forcePendente = req.query.force_pendente === 'true' || req.body.force_pendente === 'true';
     const isPendente = (!adminAuthed && !isAjudanteUser) || forcePendente;
     const isGenerator = req.query.generator === 'true';
 
-    // Se autenticado via Discord (não admin), forçar e sobrescrever a autoria real para evitar spoofing
-    if (user && !adminAuthed) {
+    // Se autenticado via Discord, sobrescrever a autoria real para evitar spoofing (para membros normais),
+    // ou se o colaborador for um valor placeholder (ex: "AIeatorlo", "aleatorio", etc.) mesmo para Admin.
+    if (user) {
         const discordName = user.global_name || user.username;
-        const roleStr = isAjudanteUser ? 'ajudante' : 'membro';
+        const roleStr = isAjudanteUser ? 'ajudante' : (adminAuthed ? 'admin' : 'membro');
 
-        parsedConteudo.colaborador = discordName;
-        parsedConteudo.colaborador_role = roleStr;
-        parsedConteudo.colaborador_id = user.id;
-        parsedConteudo.colaborador_avatar = user.avatar || null;
+        const isPlaceholder = (name) => {
+            if (!name || typeof name !== 'string') return true;
+            const lower = name.trim().toLowerCase();
+            return lower === 'aieatorlo' || lower === 'aleatorio' || lower === 'desconhecido' || lower === 'null';
+        };
+
+        if (!adminAuthed || isPlaceholder(parsedConteudo.colaborador)) {
+            parsedConteudo.colaborador = discordName;
+            parsedConteudo.colaborador_role = roleStr;
+            parsedConteudo.colaborador_id = user.id;
+            parsedConteudo.colaborador_avatar = user.avatar || null;
+        }
 
         const enforceColaboradorOnStream = (s) => {
             if (s && typeof s === 'object') {
-                s.colaborador = discordName;
-                s.colaborador_role = roleStr;
-                s.colaborador_id = user.id;
-                s.colaborador_avatar = user.avatar || null;
+                if (!adminAuthed || isPlaceholder(s.colaborador)) {
+                    s.colaborador = discordName;
+                    s.colaborador_role = roleStr;
+                    s.colaborador_id = user.id;
+                    s.colaborador_avatar = user.avatar || null;
+                }
             }
         };
 
@@ -1762,6 +1777,25 @@ app.get('/api/arquivos/pendentes', requireAdminOrAjudante, async (_req, res) => 
     }
 });
 
+const hasStreamLinks = (streams, type) => {
+    if (!streams) return false;
+    if (type === 'movie' && Array.isArray(streams)) {
+        return streams.length > 0;
+    }
+    if (type === 'series' && typeof streams === 'object' && !Array.isArray(streams)) {
+        for (const s in streams) {
+            if (streams[s] && typeof streams[s] === 'object') {
+                for (const e in streams[s]) {
+                    if (Array.isArray(streams[s][e]) && streams[s][e].length > 0) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+};
+
 const checkMissingQuality = (streams, type) => {
     if (type === 'movie' && Array.isArray(streams)) {
         return streams.some(s => {
@@ -1843,6 +1877,10 @@ app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async
                         });
                     });
                 }
+            }
+
+            if (!hasStreamLinks(conteudoToSave.streams, conteudoToSave.type)) {
+                return res.status(400).json({ erro: 'Não é permitido aprovar um conteúdo sem nenhuma stream (link).' });
             }
 
             if (checkMissingQuality(conteudoToSave.streams, conteudoToSave.type)) {
@@ -1956,6 +1994,11 @@ app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async
                     });
                 });
             }
+        }
+
+        if (!hasStreamLinks(conteudoToSave.streams, conteudoToSave.type)) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ erro: 'Não é permitido aprovar um conteúdo sem nenhuma stream (link).' });
         }
 
         if (checkMissingQuality(conteudoToSave.streams, conteudoToSave.type)) {
