@@ -141,10 +141,12 @@ async function fetchCatalogFromHf(forceRefresh = false) {
         }
     }
 
-    // 3. Caso contrário, processar todos os arquivos .json individuais
+    // 3. Caso contrário, processar todos os arquivos .json individuais (excluindo pendentes/ e arquivos de controle)
     const jsonFiles = treeData.filter(f =>
         f.type === 'file' &&
         f.path.endsWith('.json') &&
+        !f.path.startsWith('pendentes/') &&
+        !f.path.startsWith('pendente_') &&
         !path.basename(f.path).startsWith('.')
     );
 
@@ -234,7 +236,8 @@ async function getContentFromHf(nomeOrId) {
 
     for (const p of possiblePaths) {
         try {
-            const rawUrl = `https://huggingface.co/${type}s/${repo}/raw/main/${encodeURIComponent(p)}`;
+            const encodedPath = p.split('/').map(encodeURIComponent).join('/');
+            const rawUrl = `https://huggingface.co/${type}s/${repo}/raw/main/${encodedPath}`;
             const res = await fetch(rawUrl, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -301,6 +304,108 @@ async function saveContentToHf(nome, conteudo) {
     }
 }
 
+/**
+ * Salva um arquivo na pasta de pendentes (pendentes/<nome>.json) no Hugging Face
+ */
+async function savePendingToHf(nome, conteudo) {
+    const cleanNome = String(nome).trim().replace(/^pendentes\//, '');
+    const fileName = cleanNome.endsWith('.json') ? cleanNome : `${cleanNome}.json`;
+    return await saveContentToHf(`pendentes/${fileName}`, conteudo);
+}
+
+/**
+ * Busca a lista de envios pendentes no repositório Hugging Face
+ */
+async function fetchPendingFromHf() {
+    const { token, repo, type } = getHfDbConfig();
+    if (!token) return [];
+
+    try {
+        const treeUrl = `https://huggingface.co/api/${type}s/${repo}/tree/main?recursive=true`;
+        const treeRes = await fetch(treeUrl, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!treeRes.ok) return [];
+
+        const treeData = await treeRes.json();
+        if (!Array.isArray(treeData)) return [];
+
+        const pendingFiles = treeData.filter(f =>
+            f.type === 'file' &&
+            (f.path.startsWith('pendentes/') || f.path.startsWith('pendente_')) &&
+            f.path.endsWith('.json')
+        );
+
+        if (pendingFiles.length === 0) return [];
+
+        const items = [];
+        for (const file of pendingFiles) {
+            try {
+                const encodedPath = file.path.split('/').map(encodeURIComponent).join('/');
+                const rawUrl = `https://huggingface.co/${type}s/${repo}/raw/main/${encodedPath}`;
+                const res = await fetch(rawUrl, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const content = await res.json();
+                    items.push({
+                        nome_do_json: path.basename(file.path),
+                        conteudo: content,
+                        criado_em: content.criado_em || new Date().toISOString()
+                    });
+                }
+            } catch (_) {}
+        }
+        return items;
+    } catch (err) {
+        console.error('[HuggingFace Pending Error]:', err.message);
+        return [];
+    }
+}
+
+/**
+ * Busca o conteúdo de um arquivo pendente específico no Hugging Face
+ */
+async function getPendingContentFromHf(nome) {
+    if (!nome) return null;
+    const clean = String(nome).trim().replace(/^pendentes\//, '');
+    const fileName = clean.endsWith('.json') ? clean : `${clean}.json`;
+    return await getContentFromHf(`pendentes/${fileName}`);
+}
+
+/**
+ * Remove um arquivo do repositório Hugging Face
+ */
+async function deleteFileFromHf(filePath) {
+    const { token, repo, type } = getHfDbConfig();
+    if (!token) {
+        throw new Error('Variável HF_TOKEN não configurada no arquivo .env.');
+    }
+
+    let deleteFile;
+    try {
+        deleteFile = require('@huggingface/hub').deleteFile;
+    } catch (reqErr) {
+        console.error('Falha ao carregar deleteFile de @huggingface/hub:', reqErr.message);
+        throw new Error('Módulo @huggingface/hub não instalado ou desatualizado.');
+    }
+
+    const cleanPath = String(filePath).trim();
+
+    try {
+        await deleteFile({
+            repo: { name: repo, type },
+            credentials: { accessToken: token },
+            path: cleanPath
+        });
+        clearHfCache();
+        return true;
+    } catch (err) {
+        console.error(`[HuggingFace Delete File Error ${cleanPath}]:`, err.message);
+        throw err;
+    }
+}
+
 module.exports = {
     getHfDbConfig,
     clearHfCache,
@@ -308,5 +413,9 @@ module.exports = {
     fetchCatalogFromHf,
     getContentFromHf,
     getCountFromHf,
-    saveContentToHf
+    saveContentToHf,
+    savePendingToHf,
+    fetchPendingFromHf,
+    getPendingContentFromHf,
+    deleteFileFromHf
 };

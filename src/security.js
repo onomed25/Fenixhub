@@ -215,7 +215,9 @@ function validateTmdbPath(rawPath) {
     const allowedPrefixes = [
         /^search\/(multi|movie|tv|person|collection|company|keyword)$/,
         /^movie\/[0-9]+(\/(external_ids|credits|videos|images|similar|recommendations|release_dates|translations|keywords))?$/,
+        /^movie\/(popular|top_rated|now_playing|upcoming)$/,
         /^tv\/[0-9]+(\/(external_ids|credits|videos|images|similar|recommendations|aggregate_credits|content_ratings|season\/[0-9]+(\/episode\/[0-9]+)?))?$/,
+        /^tv\/(popular|top_rated|on_the_air|airing_today)$/,
         /^find\/[a-zA-Z0-9_\-]+$/,
         /^trending\/(all|movie|tv|person)\/(day|week)$/,
         /^discover\/(movie|tv)$/,
@@ -259,14 +261,9 @@ function sanitizeNuviometaParams(id, type = 'series') {
 }
 
 /**
-<<<<<<< Updated upstream
  * Builds a Postgres SSL configuration based on environment settings.
  * Supports cloud providers (Render, Supabase, Neon) with managed internal certificates,
  * custom CA certificates, and configurable strict verification.
-=======
- * Builds a secure Postgres SSL configuration based on environment settings.
- * Enforces certificate validation in production by default.
->>>>>>> Stashed changes
  * 
  * @param {NodeJS.ProcessEnv|object} [env=process.env] - Environment variables object
  * @returns {object|boolean} Postgres connection ssl config
@@ -290,7 +287,6 @@ function getDatabaseSslConfig(env = process.env) {
         }
     }
 
-<<<<<<< Updated upstream
     // Em serviços em nuvem como Render, Supabase e Neon, os bancos utilizam certificados
     // internos/autoassinados pela infraestrutura da plataforma sem autoridade raiz pública.
     // Portanto, rejectUnauthorized é false por padrão para permitir conexão com criptografia TLS,
@@ -299,14 +295,6 @@ function getDatabaseSslConfig(env = process.env) {
 
     return {
         rejectUnauthorized
-=======
-    // In production, reject unauthorized certificates unless explicitly permitted
-    const isProduction = env.NODE_ENV === 'production';
-    const allowSelfSigned = env.DB_ALLOW_SELF_SIGNED === 'true' || env.DB_REJECT_UNAUTHORIZED === 'false';
-
-    return {
-        rejectUnauthorized: !allowSelfSigned && isProduction
->>>>>>> Stashed changes
     };
 }
 
