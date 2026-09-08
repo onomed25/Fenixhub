@@ -69,19 +69,29 @@ function getStreamKey(stream) {
     return `${name}|${url}`;
 }
 
+function isPlaceholder(name) {
+    if (!name || typeof name !== 'string') return true;
+    const clean = name.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    return clean === 'aieatorlo' || clean === 'aleatorio' || clean === 'aleatorlo' || clean === 'aieatorio' || clean === 'desconhecido' || clean === 'null' || clean === 'undefined';
+}
+
 /**
- * Deduplicates and merges incoming streams into existing streams in O(N + M) time.
+ * Merges and deduplicates two stream arrays preserving insertion order.
+ * Updates collaborator if existing stream has placeholder/empty authorship.
+ * Time Complexity: O(N + M) using Map-based lookup.
+ * Space Complexity: O(N + M).
  * 
  * @param {Array<object>} existingList - Existing streams array
  * @param {Array<object>} incomingList - Incoming streams array
+ * @param {object} [options] - Merge options
  * @returns {Array<object>} Deduplicated combined streams array
  */
-function mergeStreamArrays(existingList, incomingList) {
+function mergeStreamArrays(existingList, incomingList, options = {}) {
     const existingSafe = Array.isArray(existingList) ? existingList : [];
     const incomingSafe = Array.isArray(incomingList) ? incomingList : [];
 
-    const seenUrls = new Set();
-    const seenComposite = new Set();
+    const seenUrls = new Map();
+    const seenComposite = new Map();
     const result = [];
 
     // Register and preserve existing streams in O(N)
@@ -92,8 +102,8 @@ function mergeStreamArrays(existingList, incomingList) {
         if (!url) continue;
 
         const key = getStreamKey(stream);
-        seenUrls.add(url);
-        if (key) seenComposite.add(key);
+        seenUrls.set(url, stream);
+        if (key) seenComposite.set(key, stream);
         result.push(stream);
     }
 
@@ -105,11 +115,20 @@ function mergeStreamArrays(existingList, incomingList) {
         if (!url) continue;
 
         const key = getStreamKey(inStream);
-        const alreadyExists = seenUrls.has(url) || (key && seenComposite.has(key));
-        if (!alreadyExists) {
-            seenUrls.add(url);
-            if (key) seenComposite.add(key);
+        const existingStream = seenUrls.get(url) || (key ? seenComposite.get(key) : null);
+        if (!existingStream) {
+            seenUrls.set(url, inStream);
+            if (key) seenComposite.set(key, inStream);
             result.push(inStream);
+        } else {
+            // Se o stream existente tem colaborador vazio ou placeholder (ex: AIeatorlo),
+            // ou se options.overrideColaborador for true, atualiza a autoria com os dados do novo envio
+            if (inStream.colaborador && (!existingStream.colaborador || isPlaceholder(existingStream.colaborador) || options.overrideColaborador)) {
+                existingStream.colaborador = inStream.colaborador;
+                if (inStream.colaborador_id) existingStream.colaborador_id = inStream.colaborador_id;
+                if (inStream.colaborador_avatar) existingStream.colaborador_avatar = inStream.colaborador_avatar;
+                if (inStream.colaborador_role) existingStream.colaborador_role = inStream.colaborador_role;
+            }
         }
     }
 
@@ -148,7 +167,7 @@ function sanitizeSeriesStreams(streams) {
  * @param {object|null|undefined} incoming - New media entity payload
  * @returns {object} Merged media entity
  */
-function mergeMediaContents(existing, incoming) {
+function mergeMediaContents(existing, incoming, options = {}) {
     if (!existing || typeof existing !== 'object') return incoming || {};
     if (!incoming || typeof incoming !== 'object') return existing || {};
 
@@ -163,7 +182,7 @@ function mergeMediaContents(existing, incoming) {
     const targetType = incoming.type || existing.type;
 
     if (targetType === 'movie') {
-        merged.streams = mergeStreamArrays(existing.streams, incoming.streams);
+        merged.streams = mergeStreamArrays(existing.streams, incoming.streams, options);
     } else if (targetType === 'series') {
         const existingStreams = (existing.streams && typeof existing.streams === 'object' && !Array.isArray(existing.streams)) ? existing.streams : {};
         const incomingStreams = (incoming.streams && typeof incoming.streams === 'object' && !Array.isArray(incoming.streams)) ? incoming.streams : {};
@@ -188,7 +207,7 @@ function mergeMediaContents(existing, incoming) {
                 const existingEpStreams = Array.isArray(existingSeason[epNum]) ? existingSeason[epNum] : [];
                 const incomingEpStreams = Array.isArray(incomingSeason[epNum]) ? incomingSeason[epNum] : [];
 
-                mergedStreams[seasonNum][epNum] = mergeStreamArrays(existingEpStreams, incomingEpStreams);
+                mergedStreams[seasonNum][epNum] = mergeStreamArrays(existingEpStreams, incomingEpStreams, options);
             }
         }
 

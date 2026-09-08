@@ -1044,39 +1044,52 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
     const isPendente = (!adminAuthed && !isAjudanteUser) || forcePendente;
     const isGenerator = req.query.generator === 'true';
 
-    // Se autenticado via Discord, sobrescrever a autoria real para evitar spoofing (para membros normais),
-    // ou se o colaborador for um valor placeholder (ex: "AIeatorlo", "aleatorio", etc.) mesmo para Admin.
-    if (user) {
-        const discordName = user.global_name || user.username;
-        const roleStr = isAjudanteUser ? 'ajudante' : (adminAuthed ? 'admin' : 'membro');
+    // Auto-infere tipo caso ausente no JSON do lote
+    if (!parsedConteudo.type) {
+        if (parsedConteudo.streams && typeof parsedConteudo.streams === 'object' && !Array.isArray(parsedConteudo.streams)) {
+            parsedConteudo.type = 'series';
+        } else if (Array.isArray(parsedConteudo.streams)) {
+            parsedConteudo.type = 'movie';
+        }
+    }
 
-        const isPlaceholder = (name) => {
-            if (!name || typeof name !== 'string') return true;
-            const lower = name.trim().toLowerCase();
-            return lower === 'aieatorlo' || lower === 'aleatorio' || lower === 'desconhecido' || lower === 'null';
-        };
+    const isPlaceholder = (name) => {
+        if (!name || typeof name !== 'string') return true;
+        const clean = name.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        return clean === 'aieatorlo' || clean === 'aleatorio' || clean === 'aleatorlo' || clean === 'aieatorio' || clean === 'desconhecido' || clean === 'null' || clean === 'undefined' || clean === 'anonymous' || clean === 'anonimo';
+    };
 
-        if (!adminAuthed || isPlaceholder(parsedConteudo.colaborador)) {
-            parsedConteudo.colaborador = discordName;
+    // Identifica quem está enviando (via Discord Token ou nick de uploader)
+    const uploaderNick = user ? (user.global_name || user.username) : (req.body.uploader_nick || req.headers['x-uploader-nick'] || null);
+    const uploaderId = user ? user.id : null;
+    const uploaderAvatar = user ? (user.avatar || null) : null;
+    const roleStr = isAjudanteUser ? 'ajudante' : (adminAuthed ? 'admin' : 'membro');
+    const forceOverride = req.body.override_colaborador === 'true' || req.query.override_colaborador === 'true' || !isGenerator;
+
+    if (uploaderNick) {
+        const shouldOverride = !adminAuthed || forceOverride || isPlaceholder(parsedConteudo.colaborador);
+
+        if (shouldOverride) {
+            parsedConteudo.colaborador = uploaderNick;
             parsedConteudo.colaborador_role = roleStr;
-            parsedConteudo.colaborador_id = user.id;
-            parsedConteudo.colaborador_avatar = user.avatar || null;
+            if (uploaderId) parsedConteudo.colaborador_id = uploaderId;
+            if (uploaderAvatar) parsedConteudo.colaborador_avatar = uploaderAvatar;
         }
 
         const enforceColaboradorOnStream = (s) => {
             if (s && typeof s === 'object') {
-                if (!adminAuthed || isPlaceholder(s.colaborador)) {
-                    s.colaborador = discordName;
+                if (shouldOverride || isPlaceholder(s.colaborador)) {
+                    s.colaborador = uploaderNick;
                     s.colaborador_role = roleStr;
-                    s.colaborador_id = user.id;
-                    s.colaborador_avatar = user.avatar || null;
+                    if (uploaderId) s.colaborador_id = uploaderId;
+                    if (uploaderAvatar) s.colaborador_avatar = uploaderAvatar;
                 }
             }
         };
 
-        if (parsedConteudo.type === 'movie' && Array.isArray(parsedConteudo.streams)) {
+        if (Array.isArray(parsedConteudo.streams)) {
             parsedConteudo.streams.forEach(enforceColaboradorOnStream);
-        } else if (parsedConteudo.type === 'series' && parsedConteudo.streams && typeof parsedConteudo.streams === 'object') {
+        } else if (parsedConteudo.streams && typeof parsedConteudo.streams === 'object') {
             Object.keys(parsedConteudo.streams).forEach(seasonNum => {
                 const season = parsedConteudo.streams[seasonNum] || {};
                 Object.keys(season).forEach(epNum => {
@@ -1143,7 +1156,7 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
             if (!adminAuthed && !isGenerator) {
                 const existing = await getContentFromHf(nome);
                 if (existing) {
-                    finalConteudo = mergeMediaContents(existing, parsedConteudo);
+                    finalConteudo = mergeMediaContents(existing, parsedConteudo, { overrideColaborador: Boolean(uploaderNick) });
                 }
             }
 
@@ -1180,7 +1193,7 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
                 : checkRes.rows[0].conteudo;
 
             if (!adminAuthed && !isGenerator) {
-                finalConteudo = mergeMediaContents(existing, parsedConteudo);
+                finalConteudo = mergeMediaContents(existing, parsedConteudo, { overrideColaborador: Boolean(uploaderNick) });
             }
         }
 

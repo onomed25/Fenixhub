@@ -4388,6 +4388,8 @@ self.onmessage = async (e) => {
                 let erro = 0;
                 let discordExpired = false;
 
+                const currentUploader = localStorage.getItem('discord_global_name') || localStorage.getItem('discord_username') || localStorage.getItem('fenix_uploader_nick') || (hasAdminSession ? 'Admin' : '');
+
                 showToast(`A processar ${files.length} ficheiros... aguarde.`, 'info');
 
                 for (let i = 0; i < files.length; i++) {
@@ -4396,11 +4398,47 @@ self.onmessage = async (e) => {
                         const text = await file.text();
                         const json = JSON.parse(text);
 
+                        // Auto-infere o tipo se não estiver explícito no JSON do lote
+                        if (!json.type) {
+                            if (json.streams && typeof json.streams === 'object' && !Array.isArray(json.streams)) {
+                                json.type = 'series';
+                            } else if (Array.isArray(json.streams)) {
+                                json.type = 'movie';
+                            }
+                        }
+
+                        // Garante que o colaborador seja a pessoa que está enviando o lote
+                        if (currentUploader) {
+                            json.colaborador = currentUploader;
+                            const applyUploader = (s) => {
+                                if (s && typeof s === 'object') {
+                                    s.colaborador = currentUploader;
+                                }
+                            };
+                            if (Array.isArray(json.streams)) {
+                                json.streams.forEach(applyUploader);
+                            } else if (json.streams && typeof json.streams === 'object') {
+                                Object.keys(json.streams).forEach(seasonNum => {
+                                    const season = json.streams[seasonNum] || {};
+                                    Object.keys(season).forEach(epNum => {
+                                        const epStreams = season[epNum];
+                                        if (Array.isArray(epStreams)) {
+                                            epStreams.forEach(applyUploader);
+                                        }
+                                    });
+                                });
+                            }
+                        }
+
                         let nomeArquivo = (json.id && json.id.startsWith('tt')) ? json.id : file.name.replace('.json', '');
 
                         const formData = new FormData();
                         formData.append("nome", nomeArquivo);
                         formData.append("conteudo", JSON.stringify(json));
+                        formData.append("override_colaborador", "true");
+                        if (currentUploader) {
+                            formData.append("uploader_nick", currentUploader);
+                        }
 
                         const senha = sessionStorage.getItem('fenixflix_senha');
                         if (senha) {
