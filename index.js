@@ -445,14 +445,29 @@ async function getNuviometaInfo(id, type) {
         if (!sanitized) {
             return null;
         }
-        const url = `https://nuviometa.wasmer.app/meta/${sanitized.type}/${sanitized.id}.json`;
-        const res = await fetch(url, {
-            headers: { 'User-Agent': 'FenixStudio/1.0' },
-            signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
-        });
-        if (!res.ok) return null;
-        const data = await res.json();
-        return data.meta || null;
+        const endpoints = [
+            `https://catalog.nuvio.tv/%7B%22language%22%3A%22pt-BR%22%2C%22region%22%3A%22BR%22%7D/meta/${sanitized.type}/${sanitized.id}.json`,
+            `https://v3-cinemeta.strem.io/meta/${sanitized.type}/${sanitized.id}.json`,
+            `https://nuviometa.wasmer.app/meta/${sanitized.type}/${sanitized.id}.json`
+        ];
+
+        for (const url of endpoints) {
+            try {
+                const res = await fetch(url, {
+                    headers: { 'User-Agent': 'FenixStudio/1.0' },
+                    signal: AbortSignal.timeout(3500)
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.meta) {
+                        return data.meta;
+                    }
+                }
+            } catch {
+                // Tenta próximo endpoint em caso de erro/timeout
+            }
+        }
+        return null;
     } catch {
         return null;
     }

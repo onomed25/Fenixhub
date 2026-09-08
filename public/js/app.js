@@ -55,6 +55,65 @@ function clearDiscordSession() {
         }
         window.resolveStreamPlaybackUrl = resolveStreamPlaybackUrl;
 
+        async function fetchMediaMetadata(id, type = 'series') {
+            if (!id || typeof id !== 'string') return null;
+            const safeId = encodeURIComponent(id.trim());
+            const cleanType = (type === 'movie' || type === 'series') ? type : 'series';
+            const cacheKey = `fenix_meta_${cleanType}_${safeId}`;
+            
+            try {
+                const cached = localStorage.getItem(cacheKey);
+                if (cached) {
+                    const parsed = JSON.parse(cached);
+                    if (parsed && parsed.meta && parsed.time && (Date.now() - parsed.time < 7 * 24 * 60 * 60 * 1000)) {
+                        return parsed;
+                    }
+                }
+            } catch (e) {}
+
+            const alternateType = cleanType === 'series' ? 'movie' : 'series';
+            const endpointBases = [
+                (t, i) => `https://catalog.nuvio.tv/%7B%22language%22%3A%22pt-BR%22%2C%22region%22%3A%22BR%22%7D/meta/${t}/${i}.json`,
+                (t, i) => `https://v3-cinemeta.strem.io/meta/${t}/${i}.json`,
+                (t, i) => `https://cinemeta-live.strem.io/meta/${t}/${i}.json`,
+                (t, i) => `https://nuviometa.wasmer.app/meta/${t}/${i}.json`
+            ];
+
+            const typesToTry = [cleanType, alternateType];
+
+            for (const tryType of typesToTry) {
+                for (const getUrl of endpointBases) {
+                    try {
+                        const url = getUrl(tryType, safeId);
+                        const controller = new AbortController();
+                        const timer = setTimeout(() => controller.abort(), 3500);
+                        const res = await fetch(url, { signal: controller.signal });
+                        clearTimeout(timer);
+                        
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (data && data.meta && (data.meta.name || data.meta.title)) {
+                                const meta = data.meta;
+                                const result = {
+                                    meta: meta,
+                                    type: tryType,
+                                    time: Date.now()
+                                };
+                                try {
+                                    localStorage.setItem(cacheKey, JSON.stringify(result));
+                                } catch (e) {}
+                                return result;
+                            }
+                        }
+                    } catch (err) {
+                        // Tenta próximo endpoint
+                    }
+                }
+            }
+            return null;
+        }
+        window.fetchMediaMetadata = fetchMediaMetadata;
+
         function showCustomLoginModal(promptMessage) {
             return new Promise((resolve) => {
                 const modal = document.getElementById('custom-login-modal');
@@ -2568,36 +2627,13 @@ self.onmessage = async (e) => {
                 if (icon) icon.className = "fa-solid fa-spinner animate-spin";
                 
                 const type = document.querySelector('input[name="contentType"]:checked').value;
-                let meta = null;
-                let foundType = '';
-                
-                const safeId = encodeURIComponent(String(id).trim());
-                if (type === 'series') {
-                    try {
-                        const res = await fetch(`https://nuviometa.wasmer.app/meta/series/${safeId}.json`);
-                        if (res.ok) {
-                            const data = await res.json();
-                            if (data && data.meta) {
-                                meta = data.meta;
-                                foundType = 'series';
-                            }
-                        }
-                    } catch (e) {
-                        console.error("Erro ao buscar série no Nuviometa:", e);
-                    }
-                } else {
-                    try {
-                        const res = await fetch(`https://nuviometa.wasmer.app/meta/movie/${safeId}.json`);
-                        if (res.ok) {
-                            const data = await res.json();
-                            if (data && data.meta) {
-                                meta = data.meta;
-                                foundType = 'movie';
-                            }
-                        }
-                    } catch (e) {
-                        console.error("Erro ao buscar filme no Nuviometa:", e);
-                    }
+                const result = await fetchMediaMetadata(id, type);
+                let meta = result ? result.meta : null;
+                let foundType = result ? result.type : type;
+
+                if (meta) {
+                    meta.name = meta.name || meta.title;
+                    meta.year = meta.year || meta.releaseInfo || (meta.released ? meta.released.split('-')[0] : '');
                 }
                 
                 // Reset loading state
@@ -2605,7 +2641,7 @@ self.onmessage = async (e) => {
                 if (icon) icon.className = "fa-solid fa-magnifying-glass";
                 
                 if (!meta) {
-                    showToast("ID IMDb não encontrado no Nuviometa", "error");
+                    showToast("ID IMDb não encontrado nos metadados", "error");
                     document.getElementById('nuviometaInfoBox').classList.add('hidden');
                     return;
                 }
@@ -3872,19 +3908,42 @@ self.onmessage = async (e) => {
                     cat.allItems = data.map((item, index) => {
                         item.loaded = true;
                         item.recentOrder = typeof item.orderIndex !== 'undefined' ? item.orderIndex : 999999;
-                        item.seriesData = { totalExpected: 0, foundCount: 0, missing: 0, percent: 0, foundSet: new Set(), seasonMap: {} };
+                        item.seriesData = { totalExpected: 0, foundCount: 0, missing: 0, percent: 0, foundSet: new Set(), seasonMap: {}, totalSeasons: 0 };
                         
+                        // Pré-carrega metadados do cache se disponível para renderização instantânea
+                        if (item.id) {
+                            try {
+                                const cleanType = (item.type === 'movie' || item.type === 'series') ? item.type : 'series';
+                                const cached = localStorage.getItem(`fenix_meta_${cleanType}_${encodeURIComponent(item.id.trim())}`);
+                                if (cached) {
+                                    const parsed = JSON.parse(cached);
+                                    if (parsed && parsed.meta) {
+                                        item.title = parsed.meta.name || parsed.meta.title || item.title;
+                                        item.poster = parsed.meta.poster || item.poster;
+                                        item.year = parsed.meta.year || parsed.meta.releaseInfo || (parsed.meta.released ? parsed.meta.released.split('-')[0] : item.year);
+                                        if (item.type === 'series' && Array.isArray(parsed.meta.videos)) {
+                                            item.cinemetaVideos = parsed.meta.videos;
+                                        }
+                                    }
+                                }
+                            } catch (e) {}
+                        }
+
                         if (item.type === 'series') {
-                            if (item.nuviometaVideos || item.cinemetaVideos) {
+                            const videos = item.nuviometaVideos || item.cinemetaVideos;
+                            if (videos && Array.isArray(videos)) {
                                 let expectedReal = 0; 
-                                const videos = item.nuviometaVideos || item.cinemetaVideos; videos.forEach(v => {
+                                const seasonSet = new Set();
+                                videos.forEach(v => {
                                     if (v.season > 0) { 
                                         expectedReal++;
+                                        seasonSet.add(v.season);
                                         if(!item.seriesData.seasonMap[v.season]) item.seriesData.seasonMap[v.season] = { found: 0, expected: 0 };
                                         item.seriesData.seasonMap[v.season].expected++;
                                     }
                                 });
                                 item.seriesData.totalExpected = expectedReal; 
+                                item.seriesData.totalSeasons = seasonSet.size;
                             }   
 
                             const newStreams = [];
@@ -3912,12 +3971,29 @@ self.onmessage = async (e) => {
                                     });
                                 });
                                 item.streams = newStreams;
+                            } else if (item.streams && Array.isArray(item.streams)) {
+                                item.streams.forEach((stream) => {
+                                    const match = (stream.name || '').match(/S(\d+)E(\d+)/i);
+                                    if (match) {
+                                        const s = parseInt(match[1], 10);
+                                        const e = parseInt(match[2], 10);
+                                        const epId = `S${String(s).padStart(2, '0')}E${String(e).padStart(2, '0')}`;
+                                        if (!item.seriesData.seasonMap[s]) item.seriesData.seasonMap[s] = { found: 0, expected: 0 };
+                                        if (!foundIds.has(epId)) {
+                                            foundIds.add(epId);
+                                            item.seriesData.seasonMap[s].found = (item.seriesData.seasonMap[s].found || 0) + 1;
+                                        }
+                                    }
+                                });
                             }
                             item.seriesData.foundSet = foundIds;
                             item.seriesData.foundCount = foundIds.size;
+                            if (!item.seriesData.totalSeasons) {
+                                item.seriesData.totalSeasons = Object.keys(item.seriesData.seasonMap || {}).length;
+                            }
                             const total = item.seriesData.totalExpected;
                             const found = item.seriesData.foundCount;
-                            item.seriesData.missing = Math.max(0, total - found);
+                            item.seriesData.missing = total > 0 ? Math.max(0, total - found) : 0;
                             item.seriesData.percent = total > 0 ? Math.round((found / total) * 100) : 0;
                         } else {
                             if (!item.streams) item.streams = [];
@@ -4094,16 +4170,32 @@ self.onmessage = async (e) => {
 
                 let footerHtml = '';
                 if (item.type === 'series') {
-                    const { foundCount, totalExpected, missing, percent } = item.seriesData;
+                    const { foundCount, totalExpected, missing, percent, totalSeasons, seasonMap } = item.seriesData || {};
+                    const seasonCount = totalSeasons || Object.keys(seasonMap || {}).length;
+                    const seasonLabel = seasonCount > 0 ? `${seasonCount} ${seasonCount === 1 ? 'Temp' : 'Temps'}` : '';
+
                     let barColor = 'bg-zinc-500';
-                    let statusText = `<span class="text-zinc-500">Analizando</span>`;
+                    let statusText = `<span class="text-zinc-500">Analisando</span>`;
+                    let countHtml = '';
 
                     if (item.loaded) {
-                        if (missing === 0 && totalExpected > 0) { barColor = 'bg-emerald-500'; statusText = `<span class="text-emerald-500 font-semibold text-[10px]">Completo</span>`; } 
-                        else if (totalExpected > 0) { barColor = 'bg-amber-500'; statusText = `<span class="text-amber-500 font-semibold text-[10px]">Faltam ${missing}</span>`; } 
-                        else { statusText = `<span class="text-zinc-400 font-semibold text-[10px]">${foundCount} eps</span>`; }
+                        if (totalExpected > 0) {
+                            if (missing === 0) {
+                                barColor = 'bg-emerald-500';
+                                statusText = `<span class="text-emerald-500 font-semibold text-[10px]">${seasonLabel ? `${seasonLabel} • ` : ''}Completo</span>`;
+                            } else {
+                                barColor = 'bg-amber-500';
+                                statusText = `<span class="text-amber-500 font-semibold text-[10px]">${seasonLabel ? `${seasonLabel} • ` : ''}Faltam ${missing}</span>`;
+                            }
+                            countHtml = `<span class="text-zinc-400 text-[10px] font-mono">${foundCount}/${totalExpected}</span>`;
+                        } else {
+                            barColor = 'bg-indigo-500';
+                            statusText = `<span class="text-zinc-400 font-semibold text-[10px]">${seasonLabel || 'Série'}</span>`;
+                            countHtml = `<span class="text-zinc-400 text-[10px] font-mono">${foundCount} eps</span>`;
+                        }
                     }
-                    footerHtml = `<div class="mt-2.5"><div class="flex justify-between items-end mb-1.5">${statusText}<span class="text-zinc-500 text-[10px] font-mono">${foundCount}/${totalExpected || '?'}</span></div><div class="h-1 w-full bg-zinc-800 rounded-full overflow-hidden"><div class="h-full ${barColor} progress-fill" style="width: ${item.loaded ? percent : 5}%"></div></div></div>`;
+                    const fillPercent = (totalExpected > 0) ? percent : (foundCount > 0 ? 100 : 0);
+                    footerHtml = `<div class="mt-2.5"><div class="flex justify-between items-end mb-1.5">${statusText}${countHtml}</div><div class="h-1 w-full bg-zinc-800 rounded-full overflow-hidden"><div class="h-full ${barColor} progress-fill" style="width: ${item.loaded ? fillPercent : 5}%"></div></div></div>`;
                 } else {
                     const streamCount = item.streams ? item.streams.length : 0;
                     const hasLink = streamCount > 0;
@@ -4189,7 +4281,7 @@ self.onmessage = async (e) => {
             },
 
             fetchMissingMetadata: async () => {
-                const missing = cat.allItems.filter(i => !i.title && i.id && i.id.startsWith('tt') && !i._fetchingMeta);
+                const missing = cat.allItems.filter(i => (!i.title || !i.poster || (i.type === 'series' && (!i.seriesData || !i.seriesData.totalExpected))) && i.id && i.id.startsWith('tt') && !i._fetchingMeta);
                 if (missing.length === 0) return;
 
                 // Priorizar os itens que estão visíveis na tela atualmente para carregar os títulos e capas instantaneamente
@@ -4200,26 +4292,74 @@ self.onmessage = async (e) => {
                     return aVis - bVis;
                 });
 
-                const BATCH_SIZE = 20;
+                const BATCH_SIZE = 10;
                 for (let i = 0; i < missing.length; i += BATCH_SIZE) {
                     const batch = missing.slice(i, i + BATCH_SIZE);
                     await Promise.all(batch.map(async (item) => {
                         item._fetchingMeta = true;
                         try {
-                            const safeType = encodeURIComponent(String(item.type || 'series').trim());
-                            const safeId = encodeURIComponent(String(item.id || '').trim());
-                            const res = await fetch(`https://nuviometa.wasmer.app/meta/${safeType}/${safeId}.json`);
-                            if (res.ok) {
-                                const data = await res.json();
-                                if (data && data.meta) {
-                                    item.title = data.meta.name;
-                                    item.poster = data.meta.poster;
-                                    item.year = data.meta.year;
+                            const result = await fetchMediaMetadata(item.id, item.type || 'series');
+                            if (result && result.meta) {
+                                const meta = result.meta;
+                                item.title = meta.name || meta.title || item.title;
+                                item.poster = meta.poster || item.poster;
+                                item.year = meta.year || meta.releaseInfo || (meta.released ? meta.released.split('-')[0] : item.year);
+
+                                if (item.type === 'series' && Array.isArray(meta.videos) && meta.videos.length > 0) {
+                                    item.cinemetaVideos = meta.videos;
+                                    let expectedReal = 0;
+                                    const seasonSet = new Set();
+                                    meta.videos.forEach(v => {
+                                        if (v.season > 0) {
+                                            expectedReal++;
+                                            seasonSet.add(v.season);
+                                            if (!item.seriesData.seasonMap[v.season]) {
+                                                item.seriesData.seasonMap[v.season] = { found: 0, expected: 0 };
+                                            }
+                                            item.seriesData.seasonMap[v.season].expected = (item.seriesData.seasonMap[v.season].expected || 0) + 1;
+                                        }
+                                    });
+                                    item.seriesData.totalExpected = expectedReal;
+                                    item.seriesData.totalSeasons = seasonSet.size;
+                                    const found = item.seriesData.foundCount;
+                                    item.seriesData.missing = expectedReal > 0 ? Math.max(0, expectedReal - found) : 0;
+                                    item.seriesData.percent = expectedReal > 0 ? Math.round((found / expectedReal) * 100) : 0;
+                                }
+
+                                if (cat.currentOpenItem && cat.currentOpenItem.id === item.id) {
+                                    const titleEl = document.getElementById('modalTitle');
+                                    if (titleEl) titleEl.innerText = item.title || item.id;
+                                    const statsEl = document.getElementById('modalStats');
+                                    if (statsEl) {
+                                        if (item.type === 'series') {
+                                            const { foundCount, totalExpected, missing, totalSeasons, seasonMap } = item.seriesData || {};
+                                            const sCount = totalSeasons || Object.keys(seasonMap || {}).length;
+                                            const sText = sCount > 0 ? `${sCount} ${sCount === 1 ? 'Temporada' : 'Temporadas'}` : 'Série';
+                                            const yHtml = item.year ? `<span class="text-zinc-500 font-mono">${escapeHTML(item.year)}</span><span class="text-zinc-700">•</span>` : '';
+                                            if (totalExpected > 0) {
+                                                statsEl.innerHTML = `${yHtml}<span class="text-indigo-400 font-medium">${sText}</span><span class="text-zinc-700">•</span><span class="text-zinc-400">Disponível: <b class="text-white">${foundCount}</b> / ${totalExpected} eps</span>${missing > 0 ? `<span class="text-amber-500 ml-2 font-semibold">Faltam ${missing}</span>` : `<span class="text-emerald-500 ml-2 font-semibold">Completo</span>`}`;
+                                            } else {
+                                                statsEl.innerHTML = `${yHtml}<span class="text-indigo-400 font-medium">${sText}</span><span class="text-zinc-700">•</span><span class="text-zinc-400">Disponível: <b class="text-white">${foundCount}</b> eps</span>`;
+                                            }
+                                        }
+                                    }
+                                    const ph = document.getElementById('playerPlaceholder');
+                                    if (ph && item.poster && !ph.querySelector('img')) {
+                                        const img = document.createElement('img');
+                                        img.src = item.poster;
+                                        img.className = 'absolute inset-0 w-full h-full object-cover opacity-15 blur-md pointer-events-none';
+                                        ph.prepend(img);
+                                    }
                                 }
                             }
-                        } catch (e) { console.error("Erro nuviometa", item.id); }
+                        } catch (e) {
+                            console.error("Erro ao buscar metadados de", item.id, e);
+                        } finally {
+                            item._fetchingMeta = false;
+                        }
                     }));
                     cat.renderFiltered();
+                    cat.updateGlobalStats();
                     if (i + BATCH_SIZE < missing.length) {
                         await new Promise(r => setTimeout(r, 20));
                     }
@@ -4394,9 +4534,81 @@ self.onmessage = async (e) => {
                 content.innerHTML = '';
 
                 if (item.type === 'series') {
-                    const { foundCount, totalExpected, missing } = item.seriesData;
-                    statsEl.innerHTML = `<span class="text-zinc-400">Disponível: <b class="text-white">${foundCount}</b> / ${totalExpected || '?'}</span>${missing > 0 ? `<span class="text-amber-500 ml-3">Faltam ${missing}</span>` : `<span class="text-emerald-500 ml-3">Completo</span>`}`;
-                } else { statsEl.innerHTML = `<span class="text-zinc-500">${escapeHTML(item.year || '')} • Filme</span>`; }
+                    const { foundCount, totalExpected, missing, totalSeasons, seasonMap } = item.seriesData || {};
+                    const sCount = totalSeasons || Object.keys(seasonMap || {}).length;
+                    const seasonText = sCount > 0 ? `${sCount} ${sCount === 1 ? 'Temporada' : 'Temporadas'}` : 'Série';
+                    const yearHtml = item.year ? `<span class="text-zinc-500 font-mono">${escapeHTML(item.year)}</span><span class="text-zinc-700">•</span>` : '';
+                    
+                    if (totalExpected > 0) {
+                        statsEl.innerHTML = `${yearHtml}<span class="text-indigo-400 font-medium">${seasonText}</span><span class="text-zinc-700">•</span><span class="text-zinc-400">Disponível: <b class="text-white">${foundCount}</b> / ${totalExpected} eps</span>${missing > 0 ? `<span class="text-amber-500 ml-2 font-semibold">Faltam ${missing}</span>` : `<span class="text-emerald-500 ml-2 font-semibold">Completo</span>`}`;
+                    } else {
+                        statsEl.innerHTML = `${yearHtml}<span class="text-indigo-400 font-medium">${seasonText}</span><span class="text-zinc-700">•</span><span class="text-zinc-400">Disponível: <b class="text-white">${foundCount}</b> eps</span>`;
+                    }
+                } else { 
+                    const yearHtml = item.year ? `<span class="text-zinc-400 font-mono">${escapeHTML(item.year)}</span> • ` : '';
+                    statsEl.innerHTML = `<span class="text-zinc-500">${yearHtml}Filme</span>`; 
+                }
+
+                // Se o item ainda estiver sem título, poster ou episódios esperados, busca imediatamente
+                if ((!item.title || !item.poster || (item.type === 'series' && (!item.seriesData || !item.seriesData.totalExpected))) && item.id && item.id.startsWith('tt')) {
+                    fetchMediaMetadata(item.id, item.type || 'series').then(result => {
+                        if (result && result.meta) {
+                            const meta = result.meta;
+                            item.title = meta.name || meta.title || item.title;
+                            item.poster = meta.poster || item.poster;
+                            item.year = meta.year || meta.releaseInfo || (meta.released ? meta.released.split('-')[0] : item.year);
+
+                            if (item.type === 'series' && Array.isArray(meta.videos) && meta.videos.length > 0) {
+                                item.cinemetaVideos = meta.videos;
+                                let expectedReal = 0;
+                                const seasonSet = new Set();
+                                meta.videos.forEach(v => {
+                                    if (v.season > 0) {
+                                        expectedReal++;
+                                        seasonSet.add(v.season);
+                                        if (!item.seriesData.seasonMap[v.season]) {
+                                            item.seriesData.seasonMap[v.season] = { found: 0, expected: 0 };
+                                        }
+                                        item.seriesData.seasonMap[v.season].expected = (item.seriesData.seasonMap[v.season].expected || 0) + 1;
+                                    }
+                                });
+                                item.seriesData.totalExpected = expectedReal;
+                                item.seriesData.totalSeasons = seasonSet.size;
+                                const found = item.seriesData.foundCount;
+                                item.seriesData.missing = expectedReal > 0 ? Math.max(0, expectedReal - found) : 0;
+                                item.seriesData.percent = expectedReal > 0 ? Math.round((found / expectedReal) * 100) : 0;
+                            }
+
+                            if (cat.currentOpenItem && cat.currentOpenItem.id === item.id) {
+                                const titleEl = document.getElementById('modalTitle');
+                                if (titleEl) titleEl.innerText = item.title || item.id;
+                                const sEl = document.getElementById('modalStats');
+                                if (sEl) {
+                                    if (item.type === 'series') {
+                                        const { foundCount, totalExpected, missing, totalSeasons, seasonMap } = item.seriesData || {};
+                                        const sCount = totalSeasons || Object.keys(seasonMap || {}).length;
+                                        const sText = sCount > 0 ? `${sCount} ${sCount === 1 ? 'Temporada' : 'Temporadas'}` : 'Série';
+                                        const yHtml = item.year ? `<span class="text-zinc-500 font-mono">${escapeHTML(item.year)}</span><span class="text-zinc-700">•</span>` : '';
+                                        if (totalExpected > 0) {
+                                            sEl.innerHTML = `${yHtml}<span class="text-indigo-400 font-medium">${sText}</span><span class="text-zinc-700">•</span><span class="text-zinc-400">Disponível: <b class="text-white">${foundCount}</b> / ${totalExpected} eps</span>${missing > 0 ? `<span class="text-amber-500 ml-2 font-semibold">Faltam ${missing}</span>` : `<span class="text-emerald-500 ml-2 font-semibold">Completo</span>`}`;
+                                        } else {
+                                            sEl.innerHTML = `${yHtml}<span class="text-indigo-400 font-medium">${sText}</span><span class="text-zinc-700">•</span><span class="text-zinc-400">Disponível: <b class="text-white">${foundCount}</b> eps</span>`;
+                                        }
+                                    }
+                                }
+                                const ph = document.getElementById('playerPlaceholder');
+                                if (ph && item.poster && !ph.querySelector('img')) {
+                                    const img = document.createElement('img');
+                                    img.src = item.poster;
+                                    img.className = 'absolute inset-0 w-full h-full object-cover opacity-15 blur-md pointer-events-none';
+                                    ph.prepend(img);
+                                }
+                            }
+                            cat.renderFiltered();
+                            cat.updateGlobalStats();
+                        }
+                    }).catch(() => {});
+                }
 
                 cat.currentOpenItem = item;
 
