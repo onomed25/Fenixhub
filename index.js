@@ -1060,7 +1060,7 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
     };
 
     // Identifica quem está enviando (via Discord Token ou nick de uploader)
-    const uploaderNick = user ? (user.global_name || user.username) : (req.body.uploader_nick || req.headers['x-uploader-nick'] || null);
+    const uploaderNick = user ? (user.global_name || user.username) : (req.body.uploader_nick || req.headers['x-uploader-nick'] || (adminAuthed ? 'Admin' : null));
     const uploaderId = user ? user.id : null;
     const uploaderAvatar = user ? (user.avatar || null) : null;
     const roleStr = isAjudanteUser ? 'ajudante' : (adminAuthed ? 'admin' : 'membro');
@@ -1096,6 +1096,31 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
                     const epStreams = season[epNum] || [];
                     if (Array.isArray(epStreams)) {
                         epStreams.forEach(enforceColaboradorOnStream);
+                    }
+                });
+            });
+        }
+    }
+
+    // Se algum stream não possui colaborador definido, herda do objeto principal se válido
+    if (parsedConteudo.colaborador && !isPlaceholder(parsedConteudo.colaborador)) {
+        const inheritColaborador = (s) => {
+            if (s && typeof s === 'object' && (!s.colaborador || isPlaceholder(s.colaborador))) {
+                s.colaborador = parsedConteudo.colaborador;
+                if (parsedConteudo.colaborador_role) s.colaborador_role = parsedConteudo.colaborador_role;
+                if (parsedConteudo.colaborador_id) s.colaborador_id = parsedConteudo.colaborador_id;
+                if (parsedConteudo.colaborador_avatar) s.colaborador_avatar = parsedConteudo.colaborador_avatar;
+            }
+        };
+        if (Array.isArray(parsedConteudo.streams)) {
+            parsedConteudo.streams.forEach(inheritColaborador);
+        } else if (parsedConteudo.streams && typeof parsedConteudo.streams === 'object') {
+            Object.keys(parsedConteudo.streams).forEach(seasonNum => {
+                const season = parsedConteudo.streams[seasonNum] || {};
+                Object.keys(season).forEach(epNum => {
+                    const epStreams = season[epNum] || [];
+                    if (Array.isArray(epStreams)) {
+                        epStreams.forEach(inheritColaborador);
                     }
                 });
             });
@@ -1878,17 +1903,17 @@ app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async
             const pColabRole = pendingConteudo.colaborador_role;
 
             if (pColab) {
-                if (!conteudoToSave.colaborador) conteudoToSave.colaborador = pColab;
-                if (!conteudoToSave.colaborador_id && pColabId) conteudoToSave.colaborador_id = pColabId;
-                if (!conteudoToSave.colaborador_avatar && pColabAvatar) conteudoToSave.colaborador_avatar = pColabAvatar;
-                if (!conteudoToSave.colaborador_role && pColabRole) conteudoToSave.colaborador_role = pColabRole;
+                if (!conteudoToSave.colaborador || isPlaceholder(conteudoToSave.colaborador)) conteudoToSave.colaborador = pColab;
+                if ((!conteudoToSave.colaborador_id || isPlaceholder(conteudoToSave.colaborador_id)) && pColabId) conteudoToSave.colaborador_id = pColabId;
+                if ((!conteudoToSave.colaborador_avatar || isPlaceholder(conteudoToSave.colaborador_avatar)) && pColabAvatar) conteudoToSave.colaborador_avatar = pColabAvatar;
+                if ((!conteudoToSave.colaborador_role || isPlaceholder(conteudoToSave.colaborador_role)) && pColabRole) conteudoToSave.colaborador_role = pColabRole;
 
                 const injectColab = (s) => {
                     if (s && typeof s === 'object') {
-                        if (!s.colaborador) s.colaborador = pColab;
-                        if (!s.colaborador_id && pColabId) s.colaborador_id = pColabId;
-                        if (!s.colaborador_avatar && pColabAvatar) s.colaborador_avatar = pColabAvatar;
-                        if (!s.colaborador_role && pColabRole) s.colaborador_role = pColabRole;
+                        if (!s.colaborador || isPlaceholder(s.colaborador)) s.colaborador = pColab;
+                        if ((!s.colaborador_id || isPlaceholder(s.colaborador_id)) && pColabId) s.colaborador_id = pColabId;
+                        if ((!s.colaborador_avatar || isPlaceholder(s.colaborador_avatar)) && pColabAvatar) s.colaborador_avatar = pColabAvatar;
+                        if ((!s.colaborador_role || isPlaceholder(s.colaborador_role)) && pColabRole) s.colaborador_role = pColabRole;
                     }
                 };
 
@@ -1995,17 +2020,17 @@ app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async
         const pColabRole = pendingConteudo.colaborador_role;
 
         if (pColab) {
-            if (!conteudoToSave.colaborador) conteudoToSave.colaborador = pColab;
-            if (!conteudoToSave.colaborador_id && pColabId) conteudoToSave.colaborador_id = pColabId;
-            if (!conteudoToSave.colaborador_avatar && pColabAvatar) conteudoToSave.colaborador_avatar = pColabAvatar;
-            if (!conteudoToSave.colaborador_role && pColabRole) conteudoToSave.colaborador_role = pColabRole;
+            if (!conteudoToSave.colaborador || isPlaceholder(conteudoToSave.colaborador)) conteudoToSave.colaborador = pColab;
+            if ((!conteudoToSave.colaborador_id || isPlaceholder(conteudoToSave.colaborador_id)) && pColabId) conteudoToSave.colaborador_id = pColabId;
+            if ((!conteudoToSave.colaborador_avatar || isPlaceholder(conteudoToSave.colaborador_avatar)) && pColabAvatar) conteudoToSave.colaborador_avatar = pColabAvatar;
+            if ((!conteudoToSave.colaborador_role || isPlaceholder(conteudoToSave.colaborador_role)) && pColabRole) conteudoToSave.colaborador_role = pColabRole;
 
             const injectColab = (s) => {
                 if (s && typeof s === 'object') {
-                    if (!s.colaborador) s.colaborador = pColab;
-                    if (!s.colaborador_id && pColabId) s.colaborador_id = pColabId;
-                    if (!s.colaborador_avatar && pColabAvatar) s.colaborador_avatar = pColabAvatar;
-                    if (!s.colaborador_role && pColabRole) s.colaborador_role = pColabRole;
+                    if (!s.colaborador || isPlaceholder(s.colaborador)) s.colaborador = pColab;
+                    if ((!s.colaborador_id || isPlaceholder(s.colaborador_id)) && pColabId) s.colaborador_id = pColabId;
+                    if ((!s.colaborador_avatar || isPlaceholder(s.colaborador_avatar)) && pColabAvatar) s.colaborador_avatar = pColabAvatar;
+                    if ((!s.colaborador_role || isPlaceholder(s.colaborador_role)) && pColabRole) s.colaborador_role = pColabRole;
                 }
             };
 

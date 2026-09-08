@@ -3245,13 +3245,24 @@ self.onmessage = async (e) => {
                 delete gen.currentData.overview;
                 delete gen.currentData.year;
                 
-                const nick = document.getElementById('uploaderNick')?.value.trim();
+                const isPlaceholderNick = (n) => {
+                    if (!n || typeof n !== 'string') return true;
+                    const clean = n.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+                    return clean === 'aieatorlo' || clean === 'aleatorio' || clean === 'aleatorlo' || clean === 'aieatorio' || clean === 'desconhecido' || clean === 'null' || clean === 'undefined';
+                };
+
+                const nick = document.getElementById('uploaderNick')?.value.trim()
+                    || localStorage.getItem('discord_global_name')
+                    || localStorage.getItem('discord_username')
+                    || localStorage.getItem('fenix_uploader_nick')
+                    || (sessionStorage.getItem('fenixflix_senha') ? 'Admin' : '');
+
                 if (nick) {
                     gen.currentData.colaborador = nick;
-                    // Injetar nos streams que ainda não possuem colaborador
+                    // Injetar nos streams que ainda não possuem colaborador ou possuem placeholder
                     if (gen.currentData.type === 'movie' && Array.isArray(gen.currentData.streams)) {
                         gen.currentData.streams.forEach(s => {
-                            if (!s.colaborador) s.colaborador = nick;
+                            if (!s.colaborador || isPlaceholderNick(s.colaborador)) s.colaborador = nick;
                         });
                     } else if (gen.currentData.type === 'series' && gen.currentData.streams && typeof gen.currentData.streams === 'object') {
                         Object.keys(gen.currentData.streams).forEach(seasonNum => {
@@ -3260,7 +3271,7 @@ self.onmessage = async (e) => {
                                 const epStreams = season[epNum] || [];
                                 if (Array.isArray(epStreams)) {
                                     epStreams.forEach(s => {
-                                        if (!s.colaborador) s.colaborador = nick;
+                                        if (!s.colaborador || isPlaceholderNick(s.colaborador)) s.colaborador = nick;
                                     });
                                 }
                             });
@@ -3275,6 +3286,10 @@ self.onmessage = async (e) => {
                     const formData = new FormData();
                     formData.append("nome", nomeArquivo);
                     formData.append("conteudo", JSON.stringify(gen.currentData));
+                    if (nick) {
+                        formData.append("uploader_nick", nick);
+                    }
+                    formData.append("override_colaborador", "true");
                     
                     if (window.forcePendenteForEdit) {
                         formData.append("force_pendente", "true");
@@ -3964,7 +3979,14 @@ self.onmessage = async (e) => {
                                             
                                             sources.forEach((source, index) => {
                                                 const linkName = source.name || source.description || `Opção ${index + 1}`;
-                                                newStreams.push({ name: `${epId} - ${linkName}`, url: source.url });
+                                                newStreams.push({ 
+                                                    name: `${epId} - ${linkName}`, 
+                                                    url: source.url,
+                                                    colaborador: source.colaborador || item.colaborador,
+                                                    colaborador_role: source.colaborador_role || item.colaborador_role,
+                                                    colaborador_id: source.colaborador_id || item.colaborador_id,
+                                                    colaborador_avatar: source.colaborador_avatar || item.colaborador_avatar
+                                                });
                                             });
                                             foundIds.add(epId);
                                         }
@@ -3973,6 +3995,12 @@ self.onmessage = async (e) => {
                                 item.streams = newStreams;
                             } else if (item.streams && Array.isArray(item.streams)) {
                                 item.streams.forEach((stream) => {
+                                    if (!stream.colaborador && item.colaborador) {
+                                        stream.colaborador = item.colaborador;
+                                        stream.colaborador_role = item.colaborador_role;
+                                        stream.colaborador_id = item.colaborador_id;
+                                        stream.colaborador_avatar = item.colaborador_avatar;
+                                    }
                                     const match = (stream.name || '').match(/S(\d+)E(\d+)/i);
                                     if (match) {
                                         const s = parseInt(match[1], 10);
@@ -4699,8 +4727,10 @@ self.onmessage = async (e) => {
                         
                         item.streams.forEach((stream, index) => {
                             const parsed = cat.parseStreamName(stream.name);
-                            const roleBadge = stream.colaborador_role === 'ajudante' ? '<i class="fa-solid fa-shield-halved text-indigo-400" title="Ajudante"></i>' : '<i class="fa-solid fa-user text-zinc-500" title="Membro"></i>';
-                            const colabName = stream.colaborador ? escapeHTML(stream.colaborador) : 'Desconhecido';
+                            const colabRole = stream.colaborador_role || item.colaborador_role;
+                            const roleBadge = colabRole === 'ajudante' ? '<i class="fa-solid fa-shield-halved text-indigo-400" title="Ajudante"></i>' : '<i class="fa-solid fa-user text-zinc-500" title="Membro"></i>';
+                            const rawColab = stream.colaborador || item.colaborador;
+                            const colabName = rawColab ? escapeHTML(rawColab) : 'Desconhecido';
                             playerHtml += `
                                 <button onclick="cat.playStream(${index}, this)" class="stream-option-btn group flex flex-col p-3.5 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-850 hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-500/5 text-left transition-all duration-300">
                                     <div class="flex items-center justify-between w-full mb-2">
@@ -4743,7 +4773,11 @@ self.onmessage = async (e) => {
                                 seasonsMap[s][e].push({
                                     index: index,
                                     audio: parsed.audio,
-                                    quality: parsed.quality
+                                    quality: parsed.quality,
+                                    colaborador: stream.colaborador || item.colaborador,
+                                    colaborador_role: stream.colaborador_role || item.colaborador_role,
+                                    colaborador_id: stream.colaborador_id || item.colaborador_id,
+                                    colaborador_avatar: stream.colaborador_avatar || item.colaborador_avatar
                                 });
                             }
                         });
@@ -4936,8 +4970,10 @@ self.onmessage = async (e) => {
                     } else {
                         optContainer.classList.remove('hidden');
                         optList.innerHTML = streams.map(s => {
-                            const roleBadge = s.colaborador_role === 'ajudante' ? '<i class="fa-solid fa-shield-halved text-indigo-400" title="Ajudante"></i>' : '<i class="fa-solid fa-user text-zinc-500" title="Membro"></i>';
-                            const colabName = s.colaborador ? escapeHTML(s.colaborador) : 'Desconhecido';
+                            const colabRole = s.colaborador_role || cat.currentOpenItem?.colaborador_role;
+                            const roleBadge = colabRole === 'ajudante' ? '<i class="fa-solid fa-shield-halved text-indigo-400" title="Ajudante"></i>' : '<i class="fa-solid fa-user text-zinc-500" title="Membro"></i>';
+                            const rawColab = s.colaborador || cat.currentOpenItem?.colaborador;
+                            const colabName = rawColab ? escapeHTML(rawColab) : 'Desconhecido';
                             return `
                             <button onclick="cat.playStream(${s.index}, this)" class="stream-option-btn group flex flex-col p-3.5 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-850 hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-500/5 text-left transition-all duration-300">
                                 <div class="flex items-center justify-between w-full mb-2">
@@ -6290,7 +6326,7 @@ self.onmessage = async (e) => {
                             s.url = urlVal;
                             s.name = `${audioVal}\n${qualityVal}`;
 
-                            if (!s.colaborador && pendente.conteudo.colaborador) {
+                            if ((!s.colaborador || isPlaceholderNick(s.colaborador)) && pendente.conteudo.colaborador) {
                                 s.colaborador = pendente.conteudo.colaborador;
                                 s.colaborador_id = pendente.conteudo.colaborador_id;
                                 s.colaborador_avatar = pendente.conteudo.colaborador_avatar;
@@ -6309,7 +6345,7 @@ self.onmessage = async (e) => {
                                 s.url = urlVal;
                                 s.name = `${audioVal}\n${qualityVal}`;
 
-                                if (!s.colaborador && pendente.conteudo.colaborador) {
+                                if ((!s.colaborador || isPlaceholderNick(s.colaborador)) && pendente.conteudo.colaborador) {
                                     s.colaborador = pendente.conteudo.colaborador;
                                     s.colaborador_id = pendente.conteudo.colaborador_id;
                                     s.colaborador_avatar = pendente.conteudo.colaborador_avatar;
@@ -6326,7 +6362,7 @@ self.onmessage = async (e) => {
                     }
                 });
 
-                if (!finalContent.colaborador && pendente.conteudo.colaborador) {
+                if ((!finalContent.colaborador || isPlaceholderNick(finalContent.colaborador)) && pendente.conteudo.colaborador) {
                     finalContent.colaborador = pendente.conteudo.colaborador;
                     finalContent.colaborador_id = pendente.conteudo.colaborador_id;
                     finalContent.colaborador_avatar = pendente.conteudo.colaborador_avatar;
