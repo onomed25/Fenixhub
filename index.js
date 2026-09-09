@@ -1064,6 +1064,7 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
     const uploaderNick = user ? (user.global_name || user.username) : (req.body.uploader_nick || req.headers['x-uploader-nick'] || (adminAuthed ? 'Admin' : null));
     const uploaderId = user ? user.id : null;
     const uploaderAvatar = user ? (user.avatar || null) : null;
+    const roleStr = isAjudanteUser ? 'ajudante' : (adminAuthed ? 'admin' : (user ? 'membro' : 'colaborador'));
     const isEdit = req.body.is_edit === 'true' || req.query.is_edit === 'true' || req.body.substituir === 'true' || req.query.substituir === 'true' || Boolean(parsedConteudo.is_edit) || Boolean(parsedConteudo.substituir);
     const forceOverride = req.body.override_colaborador === 'true' || req.query.override_colaborador === 'true';
     const hasOriginalColab = parsedConteudo.colaborador && !isPlaceholder(parsedConteudo.colaborador);
