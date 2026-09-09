@@ -46,6 +46,7 @@ function clearDiscordSession() {
                 const streamPath = url.substring(pathIndex);
                 const bases = [
                     "https://husky-denny-fenixflixaddon-ec8e842b.koyeb.app",
+                    "https://passing-melinda-onomed1-d0cbec40.koyeb.app",
                     "https://stream.fenixhub.online"
                 ];
                 const base = bases[Math.floor(Math.random() * bases.length)];
@@ -1823,6 +1824,53 @@ self.onmessage = async (e) => {
                 select.appendChild(optCustom);
             },
             
+            countCurrentStreams: () => {
+                if (!gen.currentData || !gen.currentData.streams) return 0;
+                if (Array.isArray(gen.currentData.streams)) return gen.currentData.streams.length;
+                let count = 0;
+                for (const s in gen.currentData.streams) {
+                    for (const e in gen.currentData.streams[s]) {
+                        if (Array.isArray(gen.currentData.streams[s][e])) {
+                            count += gen.currentData.streams[s][e].length;
+                        }
+                    }
+                }
+                return count;
+            },
+
+            applyQualityToAllCurrentStreams: (newQuality) => {
+                if (!gen.currentData || !gen.currentData.streams || !newQuality) return;
+                let updated = 0;
+                if (Array.isArray(gen.currentData.streams)) {
+                    gen.currentData.streams.forEach(s => {
+                        if (s && s.name) {
+                            const parts = s.name.split('\n');
+                            const audio = parts[0] || 'Dublado';
+                            s.name = `${audio}\n${newQuality}`;
+                            updated++;
+                        }
+                    });
+                } else if (typeof gen.currentData.streams === 'object') {
+                    for (const s in gen.currentData.streams) {
+                        for (const e in gen.currentData.streams[s]) {
+                            const list = gen.currentData.streams[s][e];
+                            if (Array.isArray(list)) {
+                                list.forEach(stream => {
+                                    if (stream && stream.name) {
+                                        const parts = stream.name.split('\n');
+                                        const audio = parts[0] || 'Dublado';
+                                        stream.name = `${audio}\n${newQuality}`;
+                                        updated++;
+                                    }
+                                });
+                            }
+                        }
+                    }
+                }
+                gen.updateDisplay();
+                showToast(`Qualidade de todos os ${updated} episódios/links alterada para ${newQuality}!`, "success");
+            },
+
             handleQualityChange: () => {
                 const select = document.getElementById('videoQuality');
                 if (!select) return;
@@ -1844,6 +1892,18 @@ self.onmessage = async (e) => {
                         select.value = val;
                     } else {
                         select.selectedIndex = 0;
+                        return;
+                    }
+                }
+
+                const newQuality = select.value;
+                if (!newQuality || newQuality === 'Nenhuma' || newQuality === '__ADD_NEW__') return;
+
+                const existingCount = gen.countCurrentStreams();
+                if (existingCount > 0) {
+                    const applyAll = confirm(`Deseja alterar a qualidade de todos os ${existingCount} episódios/links já adicionados para "${newQuality}"?`);
+                    if (applyAll) {
+                        gen.applyQualityToAllCurrentStreams(newQuality);
                     }
                 }
             },
@@ -2943,13 +3003,19 @@ self.onmessage = async (e) => {
                     return clean;
                 }
 
-                const prefix1 = "https://husky-denny-fenixflixaddon-ec8e842b.koyeb.app";
-                const prefix2 = "http://husky-denny-fenixflixaddon-ec8e842b.koyeb.app";
-                
-                if (clean.startsWith(prefix1)) {
-                    clean = clean.substring(prefix1.length);
-                } else if (clean.startsWith(prefix2)) {
-                    clean = clean.substring(prefix2.length);
+                const knownBases = [
+                    "https://husky-denny-fenixflixaddon-ec8e842b.koyeb.app",
+                    "http://husky-denny-fenixflixaddon-ec8e842b.koyeb.app",
+                    "https://passing-melinda-onomed1-d0cbec40.koyeb.app",
+                    "http://passing-melinda-onomed1-d0cbec40.koyeb.app",
+                    "https://stream.fenixhub.online",
+                    "http://stream.fenixhub.online"
+                ];
+                for (const kb of knownBases) {
+                    if (clean.startsWith(kb)) {
+                        clean = clean.substring(kb.length);
+                        break;
+                    }
                 }
                 
                 if (clean.startsWith('http') && (clean.includes('koyeb.app') || clean.includes('onrender.com') || clean.includes('telegram'))) {
@@ -3430,6 +3496,74 @@ self.onmessage = async (e) => {
                 gen.renderVisualEditorContent();
             },
 
+            addBatchEpisodesToVisualEditor: () => {
+                if (!gen.editData) return;
+                const type = gen.editData.type || 'movie';
+                const defaultAudio = document.getElementById('audioLanguage')?.value || 'Dublado';
+                const defaultQuality = document.getElementById('videoQuality')?.value || '1080p';
+                const defaultName = `${defaultAudio}\n${defaultQuality}`;
+
+                if (type === 'movie') {
+                    const countStr = prompt("Quantos links/opções de vídeo deseja adicionar?", "3");
+                    if (!countStr) return;
+                    const count = parseInt(countStr, 10);
+                    if (isNaN(count) || count <= 0) return showToast("Quantidade inválida.", "warning");
+
+                    if (!Array.isArray(gen.editData.streams)) gen.editData.streams = [];
+                    for (let i = 0; i < count; i++) {
+                        gen.editData.streams.push({
+                            url: '',
+                            name: defaultName
+                        });
+                    }
+                    gen.renderVisualEditorContent();
+                    showToast(`${count} opções adicionadas!`, "success");
+                    return;
+                }
+
+                if (!gen.editData.streams || typeof gen.editData.streams !== 'object') {
+                    gen.editData.streams = {};
+                }
+                const seasons = Object.keys(gen.editData.streams);
+                const suggestedSeason = seasons.length > 0 ? seasons[seasons.length - 1] : '1';
+
+                const seasonInput = prompt("Qual temporada você deseja adicionar os episódios? (Ex: 1):", suggestedSeason);
+                if (!seasonInput) return;
+                const seasonNum = seasonInput.trim();
+                if (!seasonNum) return;
+
+                if (!gen.editData.streams[seasonNum]) {
+                    gen.editData.streams[seasonNum] = {};
+                }
+
+                const existingEps = Object.keys(gen.editData.streams[seasonNum]).map(Number).filter(n => !isNaN(n));
+                const nextSuggestedEp = existingEps.length > 0 ? (Math.max(...existingEps) + 1) : 1;
+
+                const countInput = prompt(`Quantos episódios deseja criar de uma vez para a Temporada ${seasonNum}? (Ex: 12):`, "12");
+                if (!countInput) return;
+                const count = parseInt(countInput, 10);
+                if (isNaN(count) || count <= 0) return showToast("Quantidade inválida.", "warning");
+
+                const startInput = prompt(`A partir de qual número de episódio iniciar?`, nextSuggestedEp.toString());
+                if (!startInput) return;
+                const startEp = parseInt(startInput, 10);
+                if (isNaN(startEp) || startEp <= 0) return showToast("Número inicial inválido.", "warning");
+
+                for (let i = 0; i < count; i++) {
+                    const epNum = (startEp + i).toString();
+                    if (!gen.editData.streams[seasonNum][epNum]) {
+                        gen.editData.streams[seasonNum][epNum] = [];
+                    }
+                    gen.editData.streams[seasonNum][epNum].push({
+                        url: '',
+                        name: defaultName
+                    });
+                }
+
+                gen.renderVisualEditorContent();
+                showToast(`${count} episódios adicionados com sucesso à Temporada ${seasonNum}!`, "success");
+            },
+
             toggleBulkPanel: () => {
                 const controls = document.getElementById('bulkEditControls');
                 const chevron = document.getElementById('bulkToggleChevron');
@@ -3677,94 +3811,106 @@ self.onmessage = async (e) => {
                         `gen.removeEditData('series', ${index}, '${season}', '${ep}')` : 
                         `gen.removeEditData('movie', ${index})`;
 
-                    let headerHtml = '';
-                    if (isSeries) {
-                        headerHtml = `
-                            <div class="flex flex-col">
-                                <div class="flex items-center gap-2 mb-1">
-                                    <div class="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 focus-within:border-indigo-500 transition-colors shadow-inner w-20">
-                                        <span class="text-indigo-500/70 font-bold text-[10px] uppercase tracking-wider mr-1">Temp</span>
-                                        <input type="number" min="1" class="stream-edit-input w-full bg-transparent text-indigo-300 font-bold text-sm outline-none text-center" value="${season}" onchange="gen.changeSeasonNum('${season}', '${ep}', ${index}, this.value)">
-                                    </div>
-                                    <div class="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 focus-within:border-indigo-500 transition-colors shadow-inner w-20">
-                                        <span class="text-indigo-500/70 font-bold text-[10px] uppercase tracking-wider mr-1">Epis</span>
-                                        <input type="number" min="1" class="stream-edit-input w-full bg-transparent text-indigo-300 font-bold text-sm outline-none text-center" value="${ep}" onchange="gen.changeEpNum('${season}', '${ep}', ${index}, this.value)">
-                                    </div>
+                const checkbox = isSeries ? 
+                    `<input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-indigo-500 focus:ring-indigo-500 cursor-pointer shrink-0" data-type="series" data-season="${season}" data-ep="${ep}" data-index="${index}">` : 
+                    `<input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-indigo-500 focus:ring-indigo-500 cursor-pointer shrink-0" data-type="movie" data-index="${index}">`;
+
+                let headerHtml = '';
+                if (isSeries) {
+                    headerHtml = `
+                        <div class="flex flex-col">
+                            <div class="flex items-center gap-2 mb-1">
+                                <div class="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 focus-within:border-indigo-500 transition-colors shadow-inner w-20">
+                                    <span class="text-indigo-500/70 font-bold text-[10px] uppercase tracking-wider mr-1">Temp</span>
+                                    <input type="number" min="1" class="stream-edit-input w-full bg-transparent text-indigo-300 font-bold text-sm outline-none text-center" value="${season}" onchange="gen.changeSeasonNum('${season}', '${ep}', ${index}, this.value)">
                                 </div>
-                                <span class="text-zinc-500 text-xs flex items-center gap-1.5 mt-0.5">
-                                    <i class="fa-solid fa-user-astronaut text-[10px]"></i> ${escapeHTML(stream.colaborador || 'fenixflix')}
-                                </span>
+                                <div class="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 focus-within:border-indigo-500 transition-colors shadow-inner w-20">
+                                    <span class="text-indigo-500/70 font-bold text-[10px] uppercase tracking-wider mr-1">Epis</span>
+                                    <input type="number" min="1" class="stream-edit-input w-full bg-transparent text-indigo-300 font-bold text-sm outline-none text-center" value="${ep}" onchange="gen.changeEpNum('${season}', '${ep}', ${index}, this.value)">
+                                </div>
                             </div>
-                        `;
-                    } else {
-                        headerHtml = `
-                            <div class="flex flex-col">
-                                <span class="font-bold text-indigo-400 text-sm flex items-center gap-1.5"><i class="fa-solid fa-film text-xs text-indigo-500"></i> Opção de Filme ${index + 1}</span>
-                                <span class="text-zinc-500 text-xs flex items-center gap-1.5 mt-0.5">
-                                    <i class="fa-solid fa-user-astronaut text-[10px]"></i> ${escapeHTML(stream.colaborador || 'fenixflix')}
-                                </span>
-                            </div>
-                        `;
-                    }
-
-                    return `
-                    <div class="stream-card p-4 bg-zinc-900/60 border border-zinc-800/80 rounded-xl flex flex-col gap-3 relative hover:border-zinc-700 transition-colors shadow-sm border-l-2 border-indigo-500">
-                        <div class="flex justify-between items-start">
-                            ${headerHtml}
-                            <button onclick="${onRemove}" class="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 w-8 h-8 rounded-lg flex items-center justify-center transition" title="Remover"><i class="fa-solid fa-trash-can text-sm"></i></button>
+                            <span class="text-zinc-500 text-xs flex items-center gap-1.5 mt-0.5">
+                                <i class="fa-solid fa-user-astronaut text-[10px]"></i> ${escapeHTML(stream.colaborador || 'fenixflix')}
+                            </span>
                         </div>
-                        
-                        <div class="grid grid-cols-2 gap-3 mt-1">
-                            <div>
-                                <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">Idioma / Áudio</label>
-                                <select class="stream-edit-input w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-500 transition-colors" onchange="${onAudioChange}">
-                                    ${audioOpts}
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">Qualidade</label>
-                                <select class="stream-edit-input w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-500 transition-colors" onchange="${onQualityChange}">
-                                    ${qualityOpts}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="mt-1">
-                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">Link / URL do Vídeo</label>
-                            <div class="flex gap-2">
-                                <input type="text" class="stream-edit-input flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-indigo-300 font-mono outline-none focus:border-indigo-500 transition-colors" value="${escapeHTML(stream.url || '')}" onchange="${onUrlChange}">
-                                <button type="button" onclick="gen.playInVisualEditor(this.parentElement.querySelector('input').value)" class="shrink-0 px-4 py-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg hover:bg-indigo-500/20 text-sm font-bold flex items-center justify-center gap-2 transition-colors">
-                                    <i class="fa-solid fa-play"></i> Testar
-                                </button>
-                            </div>
-                        </div>
-                    </div>`;
-                };
-
-                // Contagem total
-                let totalItemsCount = 0;
-                if (gen.editData.type === 'movie') {
-                    totalItemsCount = (gen.editData.streams || []).length;
+                    `;
                 } else {
-                    const streamsObj = gen.editData.streams || {};
-                    Object.keys(streamsObj).forEach(s => {
-                        Object.keys(streamsObj[s] || {}).forEach(e => {
-                            totalItemsCount += (streamsObj[s][e] || []).length;
-                        });
-                    });
+                    headerHtml = `
+                        <div class="flex flex-col">
+                            <span class="font-bold text-indigo-400 text-sm flex items-center gap-1.5"><i class="fa-solid fa-film text-xs text-indigo-500"></i> Opção de Filme ${index + 1}</span>
+                            <span class="text-zinc-500 text-xs flex items-center gap-1.5 mt-0.5">
+                                <i class="fa-solid fa-user-astronaut text-[10px]"></i> ${escapeHTML(stream.colaborador || 'fenixflix')}
+                            </span>
+                        </div>
+                    `;
                 }
 
-                // Header com botão de adicionar
-                html += `
-                    <div class="flex justify-between items-center pb-2 border-b border-zinc-800/80 mb-2">
-                        <h4 class="font-bold text-white text-base flex items-center gap-2">
-                            <i class="fa-solid fa-list-check text-indigo-500"></i> ${totalItemsCount} Opção(ões) Encontrada(s)
-                        </h4>
-                        <button onclick="gen.addNewStreamToVisualEditor()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-lg shadow-indigo-600/20">
-                            <i class="fa-solid fa-plus text-[10px]"></i> Adicionar Link
+                return `
+                <div class="stream-card p-4 bg-zinc-900/60 border border-zinc-800/80 rounded-xl flex flex-col gap-3 relative hover:border-zinc-700 transition-colors shadow-sm border-l-2 border-indigo-500">
+                    <div class="flex justify-between items-start">
+                        <div class="flex items-center gap-3">
+                            ${checkbox}
+                            ${headerHtml}
+                        </div>
+                        <button onclick="${onRemove}" class="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 w-8 h-8 rounded-lg flex items-center justify-center transition" title="Remover"><i class="fa-solid fa-trash-can text-sm"></i></button>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3 mt-1">
+                        <div>
+                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">Idioma / Áudio</label>
+                            <select class="stream-edit-input w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-500 transition-colors" onchange="${onAudioChange}">
+                                ${audioOpts}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">Qualidade</label>
+                            <select class="stream-edit-input w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:border-indigo-500 transition-colors" onchange="${onQualityChange}">
+                                ${qualityOpts}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mt-1">
+                        <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 block">Link / URL do Vídeo</label>
+                        <div class="flex gap-2">
+                            <input type="text" class="stream-edit-input flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-indigo-300 font-mono outline-none focus:border-indigo-500 transition-colors" value="${escapeHTML(stream.url || '')}" onchange="${onUrlChange}">
+                            <button type="button" onclick="gen.playInVisualEditor(this.parentElement.querySelector('input').value)" class="shrink-0 px-4 py-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg hover:bg-indigo-500/20 text-sm font-bold flex items-center justify-center gap-2 transition-colors">
+                                <i class="fa-solid fa-play"></i> Testar
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+            };
+
+            // Contagem total
+            let totalItemsCount = 0;
+            if (gen.editData.type === 'movie') {
+                totalItemsCount = (gen.editData.streams || []).length;
+            } else {
+                const streamsObj = gen.editData.streams || {};
+                Object.keys(streamsObj).forEach(s => {
+                    Object.keys(streamsObj[s] || {}).forEach(e => {
+                        totalItemsCount += (streamsObj[s][e] || []).length;
+                    });
+                });
+            }
+
+            // Header com botões de adicionar
+            html += `
+                <div class="flex justify-between items-center pb-3 border-b border-zinc-800/80 mb-3 gap-2">
+                    <h4 class="font-bold text-white text-sm sm:text-base flex items-center gap-2 truncate">
+                        <i class="fa-solid fa-list-check text-indigo-500"></i> ${totalItemsCount} Opção(ões)
+                    </h4>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button type="button" onclick="gen.addBatchEpisodesToVisualEditor()" class="bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition" title="Criar vários episódios de uma vez">
+                            <i class="fa-solid fa-layer-group text-[10px]"></i> + Vários Eps
+                        </button>
+                        <button type="button" onclick="gen.addNewStreamToVisualEditor()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-lg shadow-indigo-600/20">
+                            <i class="fa-solid fa-plus text-[10px]"></i> +1 Link
                         </button>
                     </div>
-                `;
+                </div>
+            `;
 
                 if (gen.editData.type === 'movie') {
                     const streams = gen.editData.streams || [];
@@ -3922,7 +4068,7 @@ self.onmessage = async (e) => {
 
                     cat.allItems = data.map((item, index) => {
                         item.loaded = true;
-                        item.recentOrder = typeof item.orderIndex !== 'undefined' ? item.orderIndex : 999999;
+                        item.recentOrder = typeof item.orderIndex !== 'undefined' ? item.orderIndex : index;
                         item.seriesData = { totalExpected: 0, foundCount: 0, missing: 0, percent: 0, foundSet: new Set(), seasonMap: {}, totalSeasons: 0 };
                         
                         // Pré-carrega metadados do cache se disponível para renderização instantânea
@@ -4053,14 +4199,84 @@ self.onmessage = async (e) => {
                 cat.sort(cat.currentSort);
             },
 
+            getItemTimestamp: (item) => {
+                if (!item) return 0;
+                if (typeof item._computedTimestamp === 'number') return item._computedTimestamp;
+
+                let maxTimestamp = 0;
+                if (item.criado_em) {
+                    const t = new Date(item.criado_em).getTime();
+                    if (!isNaN(t) && t > maxTimestamp) maxTimestamp = t;
+                }
+                if (item.atualizado_em) {
+                    const t = new Date(item.atualizado_em).getTime();
+                    if (!isNaN(t) && t > maxTimestamp) maxTimestamp = t;
+                }
+
+                if (Array.isArray(item.streams)) {
+                    for (let i = 0; i < item.streams.length; i++) {
+                        const s = item.streams[i];
+                        if (s && s.criado_em) {
+                            const t = new Date(s.criado_em).getTime();
+                            if (!isNaN(t) && t > maxTimestamp) maxTimestamp = t;
+                        }
+                    }
+                } else if (item.streams && typeof item.streams === 'object') {
+                    for (const sKey in item.streams) {
+                        const season = item.streams[sKey];
+                        if (season && typeof season === 'object') {
+                            for (const epKey in season) {
+                                const epStreams = season[epKey];
+                                if (Array.isArray(epStreams)) {
+                                    for (let k = 0; k < epStreams.length; k++) {
+                                        const s = epStreams[k];
+                                        if (s && s.criado_em) {
+                                            const t = new Date(s.criado_em).getTime();
+                                            if (!isNaN(t) && t > maxTimestamp) maxTimestamp = t;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item._computedTimestamp = maxTimestamp;
+                return maxTimestamp;
+            },
+
             sort: (mode) => {
                 cat.visibleCount = 36;
                 cat.currentSort = mode;
-                if (mode === 'newest') cat.filteredItems.sort((a, b) => a.recentOrder - b.recentOrder);
-                else if (mode === 'oldest') cat.filteredItems.sort((a, b) => b.recentOrder - a.recentOrder);
-                else if (mode === 'views') cat.filteredItems.sort((a, b) => (parseInt(b.views) || 0) - (parseInt(a.views) || 0));
-                else if (mode === 'year') cat.filteredItems.sort((a, b) => { const yA = parseInt(a.year) || 0; const yB = parseInt(b.year) || 0; return yB - yA; });
-                else if (mode === 'name') cat.filteredItems.sort((a, b) => (a.title||a.id).localeCompare(b.title||b.id));
+                if (mode === 'newest') {
+                    cat.filteredItems.sort((a, b) => {
+                        const tA = cat.getItemTimestamp(a);
+                        const tB = cat.getItemTimestamp(b);
+                        if (tA > 0 && tB > 0 && tA !== tB) {
+                            return tB - tA; // Mais recente primeiro
+                        }
+                        if (tA > 0 && tB <= 0) return -1;
+                        if (tB > 0 && tA <= 0) return 1;
+                        return (a.recentOrder ?? 0) - (b.recentOrder ?? 0);
+                    });
+                } else if (mode === 'oldest') {
+                    cat.filteredItems.sort((a, b) => {
+                        const tA = cat.getItemTimestamp(a);
+                        const tB = cat.getItemTimestamp(b);
+                        if (tA > 0 && tB > 0 && tA !== tB) {
+                            return tA - tB; // Mais antigo primeiro
+                        }
+                        if (tA > 0 && tB <= 0) return 1;
+                        if (tB > 0 && tA <= 0) return -1;
+                        return (b.recentOrder ?? 0) - (a.recentOrder ?? 0);
+                    });
+                } else if (mode === 'views') {
+                    cat.filteredItems.sort((a, b) => (parseInt(b.views) || 0) - (parseInt(a.views) || 0));
+                } else if (mode === 'year') {
+                    cat.filteredItems.sort((a, b) => { const yA = parseInt(a.year) || 0; const yB = parseInt(b.year) || 0; return yB - yA; });
+                } else if (mode === 'name') {
+                    cat.filteredItems.sort((a, b) => (a.title||a.id).localeCompare(b.title||b.id));
+                }
                 cat.renderFiltered();
             },
 
@@ -4238,8 +4454,15 @@ self.onmessage = async (e) => {
                     <button onclick="event.stopPropagation(); cat.deleteItem(${jsId})" class="bg-zinc-900/90 text-red-400 hover:text-red-300 p-2 rounded-lg backdrop-blur-md border border-zinc-700/50 transition"><i class="fa-solid fa-trash text-[10px]"></i></button>
                 ` : '';
 
+                const pendenteBadge = item.is_pendente ? `
+                    <div class="absolute top-2 right-2 z-30 bg-amber-500/90 text-black text-[9px] font-bold px-2 py-0.5 rounded-full shadow-md backdrop-blur-sm flex items-center gap-1">
+                        <i class="fa-solid fa-clock"></i> Moderação
+                    </div>
+                ` : '';
+
                 return `
-                <div class="group bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 hover:border-zinc-700 transition-all flex flex-col h-full cursor-pointer relative">
+                <div class="group bg-zinc-900 rounded-2xl overflow-hidden border ${item.is_pendente ? 'border-amber-500/50' : 'border-zinc-800'} hover:border-zinc-700 transition-all flex flex-col h-full cursor-pointer relative">
+                    ${pendenteBadge}
                     <div class="absolute top-2 left-2 flex-col gap-1.5 z-30 hidden group-hover:flex">
                         ${adminButtons}
                         <button onclick="event.stopPropagation(); cat.downloadJson(${jsId})" class="bg-zinc-900/90 text-zinc-300 hover:text-white p-2 rounded-lg backdrop-blur-md border border-zinc-700/50 transition"><i class="fa-solid fa-download text-[10px]"></i></button>
@@ -4254,21 +4477,139 @@ self.onmessage = async (e) => {
                 </div>`;
             },
 
-            filter: (type) => {
+            filter: async (type) => {
                 const selectEl = document.getElementById('cat-filter-type');
                 if (selectEl && selectEl.value !== type) {
                     selectEl.value = type;
                 }
 
+                const myUploadsBtn = document.getElementById('btn-my-uploads');
+                if (myUploadsBtn) {
+                    if (type === 'my_uploads') {
+                        myUploadsBtn.classList.add('bg-indigo-600/30', 'border-indigo-500/50', 'text-white');
+                        myUploadsBtn.classList.remove('bg-obsidian-900/60', 'text-zinc-400', 'border-white/5');
+                    } else {
+                        myUploadsBtn.classList.remove('bg-indigo-600/30', 'border-indigo-500/50', 'text-white');
+                        myUploadsBtn.classList.add('bg-obsidian-900/60', 'text-zinc-400', 'border-white/5');
+                    }
+                }
+
                 if (type === 'all') {
                     cat.filteredItems = [...cat.allItems]; 
                 } else if (type === 'my_uploads') {
-                    const currentUser = localStorage.getItem('discord_username') || localStorage.getItem('discord_global_name');
-                    cat.filteredItems = cat.allItems.filter(i => i.colaborador === currentUser);
+                    const discordToken = localStorage.getItem('discord_token');
+                    const discordId = localStorage.getItem('discord_id');
+                    const discordUsername = localStorage.getItem('discord_username');
+                    const discordGlobalName = localStorage.getItem('discord_global_name');
+                    const fenixNick = localStorage.getItem('fenix_uploader_nick');
+                    const isAdminLogged = sessionStorage.getItem('fenixflix_senha') !== null;
+
+                    const hasAuth = Boolean(discordToken || discordId || discordUsername || discordGlobalName || fenixNick || isAdminLogged);
+                    if (!hasAuth) {
+                        showToast("Entre com o Discord para visualizar seus envios!", "info");
+                        const discordLoginBtn = document.getElementById('discordLoginBtn');
+                        if (discordLoginBtn) {
+                            discordLoginBtn.classList.add('ring-2', 'ring-indigo-500', 'animate-pulse');
+                            setTimeout(() => discordLoginBtn.classList.remove('ring-2', 'ring-indigo-500', 'animate-pulse'), 3000);
+                        }
+                        if (selectEl) selectEl.value = 'all';
+                        if (myUploadsBtn) {
+                            myUploadsBtn.classList.remove('bg-indigo-600/30', 'border-indigo-500/50', 'text-white');
+                            myUploadsBtn.classList.add('bg-obsidian-900/60', 'text-zinc-400', 'border-white/5');
+                        }
+                        cat.filteredItems = [...cat.allItems];
+                        cat.sort(cat.currentSort);
+                        return;
+                    }
+
+                    const targetNames = new Set([
+                        discordUsername,
+                        discordGlobalName,
+                        fenixNick
+                    ].filter(Boolean).map(s => String(s).trim().toLowerCase()));
+
+                    const targetId = discordId ? String(discordId).trim() : null;
+
+                    const isItemFromUser = (i) => {
+                        if (!i) return false;
+                        if (targetId && i.colaborador_id && String(i.colaborador_id).trim() === targetId) return true;
+                        if (i.colaborador && typeof i.colaborador === 'string') {
+                            const cLower = i.colaborador.trim().toLowerCase();
+                            if (targetNames.has(cLower)) return true;
+                            if (isAdminLogged && cLower === 'admin') return true;
+                        }
+                        if (Array.isArray(i.streams)) {
+                            for (let idx = 0; idx < i.streams.length; idx++) {
+                                const s = i.streams[idx];
+                                if (!s || typeof s !== 'object') continue;
+                                if (targetId && s.colaborador_id && String(s.colaborador_id).trim() === targetId) return true;
+                                if (s.colaborador && typeof s.colaborador === 'string') {
+                                    const scLower = s.colaborador.trim().toLowerCase();
+                                    if (targetNames.has(scLower)) return true;
+                                    if (isAdminLogged && scLower === 'admin') return true;
+                                }
+                            }
+                        } else if (i.streams && typeof i.streams === 'object') {
+                            for (const sKey in i.streams) {
+                                const season = i.streams[sKey];
+                                if (season && typeof season === 'object') {
+                                    for (const epKey in season) {
+                                        const epStreams = season[epKey];
+                                        if (Array.isArray(epStreams)) {
+                                            for (let idx = 0; idx < epStreams.length; idx++) {
+                                                const s = epStreams[idx];
+                                                if (!s || typeof s !== 'object') continue;
+                                                if (targetId && s.colaborador_id && String(s.colaborador_id).trim() === targetId) return true;
+                                                if (s.colaborador && typeof s.colaborador === 'string') {
+                                                    const scLower = s.colaborador.trim().toLowerCase();
+                                                    if (targetNames.has(scLower)) return true;
+                                                    if (isAdminLogged && scLower === 'admin') return true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return false;
+                    };
+
+                    let matched = cat.allItems.filter(isItemFromUser);
+
+                    // Buscar envios pendentes do usuário se houver token Discord
+                    if (discordToken) {
+                        try {
+                            const pendRes = await fetch(API_URL + '/api/meus-pendentes', {
+                                headers: { 'Authorization': `Bearer ${discordToken}` }
+                            });
+                            if (pendRes.ok) {
+                                const pendData = await pendRes.json();
+                                if (Array.isArray(pendData) && pendData.length > 0) {
+                                    const existingIds = new Set(matched.map(m => m.id));
+                                    pendData.forEach((pItem, pIdx) => {
+                                        if (pItem && pItem.id && !existingIds.has(pItem.id)) {
+                                            pItem.loaded = true;
+                                            pItem.is_pendente = true;
+                                            pItem.recentOrder = -1 - pIdx;
+                                            if (pItem.type === 'series' && !pItem.seriesData) {
+                                                pItem.seriesData = { totalExpected: 0, foundCount: 0, missing: 0, percent: 0, foundSet: new Set(), seasonMap: {}, totalSeasons: 0 };
+                                            }
+                                            matched.unshift(pItem);
+                                            existingIds.add(pItem.id);
+                                        }
+                                    });
+                                }
+                            }
+                        } catch (err) {
+                            console.warn("Aviso ao buscar meus pendentes:", err);
+                        }
+                    }
+
+                    cat.filteredItems = matched;
                 } else if (type === 'missing_all') {
                     cat.filteredItems = cat.allItems.filter(i => {
                         if (i.type === 'movie') return !i.streams || i.streams.length === 0;
-                        if (i.type === 'series') return i.seriesData.missing > 0;
+                        if (i.type === 'series') return i.seriesData && i.seriesData.missing > 0;
                         return false;
                     });
                 } else {
@@ -4276,6 +4617,12 @@ self.onmessage = async (e) => {
                 }
 
                 cat.sort(cat.currentSort);
+            },
+
+            toggleMyUploads: () => {
+                const selectEl = document.getElementById('cat-filter-type');
+                const isCurrentlyMyUploads = selectEl && selectEl.value === 'my_uploads';
+                cat.filter(isCurrentlyMyUploads ? 'all' : 'my_uploads');
             },
 
             renderFiltered: (append = false) => {

@@ -134,7 +134,10 @@ async function fetchCatalogFromHf(forceRefresh = false) {
         });
         if (fileRes.ok) {
             const data = await fileRes.json();
-            const items = Array.isArray(data) ? data : (data.items || data.catalog || [data]);
+            const rawList = Array.isArray(data) ? data : (data.items || data.catalog || [data]);
+            const items = rawList.map(i => ({ ...i }));
+            items.sort((a, b) => getItemTimestampHf(b) - getItemTimestampHf(a));
+            items.forEach((item, idx) => { item.orderIndex = idx; });
             hfCatalogCache = items;
             lastFetchTime = now;
             return items;
@@ -191,9 +194,53 @@ async function fetchCatalogFromHf(forceRefresh = false) {
         }
     }
 
+    items.sort((a, b) => getItemTimestampHf(b) - getItemTimestampHf(a));
+    items.forEach((item, idx) => {
+        item.orderIndex = idx;
+    });
+
     hfCatalogCache = items;
     lastFetchTime = now;
     return items;
+}
+
+function getItemTimestampHf(item) {
+    if (!item) return 0;
+    if (item.criado_em) {
+        const t = new Date(item.criado_em).getTime();
+        if (!isNaN(t) && t > 0) return t;
+    }
+    if (item.atualizado_em) {
+        const t = new Date(item.atualizado_em).getTime();
+        if (!isNaN(t) && t > 0) return t;
+    }
+    let max = 0;
+    if (Array.isArray(item.streams)) {
+        for (const s of item.streams) {
+            if (s && s.criado_em) {
+                const t = new Date(s.criado_em).getTime();
+                if (!isNaN(t) && t > max) max = t;
+            }
+        }
+    } else if (item.streams && typeof item.streams === 'object') {
+        for (const sKey in item.streams) {
+            const season = item.streams[sKey];
+            if (season && typeof season === 'object') {
+                for (const epKey in season) {
+                    const epStreams = season[epKey];
+                    if (Array.isArray(epStreams)) {
+                        for (const s of epStreams) {
+                            if (s && s.criado_em) {
+                                const t = new Date(s.criado_em).getTime();
+                                if (!isNaN(t) && t > max) max = t;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return max;
 }
 
 /**

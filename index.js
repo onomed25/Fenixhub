@@ -958,6 +958,7 @@ app.get(['/v/:arg1/:arg2', '/v/:arg1', '/api/stream/hf/:arg1/:arg2', '/api/strea
 // ============================================================================
 const defaultStreamBackends = [
     'https://husky-denny-fenixflixaddon-ec8e842b.koyeb.app',
+    'https://passing-melinda-onomed1-d0cbec40.koyeb.app',
     'https://stream.fenixhub.online'
 ];
 
@@ -1298,13 +1299,20 @@ app.get('/api/catalog', async (req, res) => {
     if (!useHfDirectly) {
         try {
             const query = `
-                SELECT conteudo 
+                SELECT conteudo, criado_em 
                 FROM arquivos_json 
                 ${privileged ? '' : 'WHERE is_oculto = FALSE AND is_pendente = FALSE'} 
                 ORDER BY criado_em DESC;
             `;
             const result = await pool.query(query);
-            const catalog = result.rows.map(r => typeof r.conteudo === 'string' ? JSON.parse(r.conteudo) : r.conteudo);
+            const catalog = result.rows.map((r, idx) => {
+                const item = typeof r.conteudo === 'string' ? JSON.parse(r.conteudo) : { ...r.conteudo };
+                if (r.criado_em && !item.criado_em) {
+                    item.criado_em = r.criado_em;
+                }
+                item.orderIndex = idx;
+                return item;
+            });
             
             catalogCache[cacheKey] = catalog;
             catalogCache[timestampKey] = now;
@@ -1324,6 +1332,9 @@ app.get('/api/catalog', async (req, res) => {
     try {
         const hfItems = await fetchCatalogFromHf(false);
         const filtered = privileged ? hfItems : hfItems.filter(i => !i.is_oculto && !i.is_pendente);
+        filtered.forEach((item, idx) => {
+            if (typeof item.orderIndex === 'undefined') item.orderIndex = idx;
+        });
 
         catalogCache[cacheKey] = filtered;
         catalogCache[timestampKey] = now;
@@ -1783,12 +1794,29 @@ app.get('/api/meus-pendentes', async (req, res) => {
     const user = getAuthUser(req);
     if (!user || !user.id) return res.json([]);
 
+    const username = (user.username || '').trim().toLowerCase();
+    const globalName = (user.global_name || '').trim().toLowerCase();
+
     if (process.env.DATABASE_SOURCE === 'huggingface') {
         try {
             const pendentes = await fetchPendingFromHf();
             const meus = pendentes
-                .filter(p => p.conteudo && String(p.conteudo.colaborador_id) === String(user.id))
-                .map(p => ({ nome_do_json: p.nome_do_json }));
+                .filter(p => {
+                    if (!p || !p.conteudo) return false;
+                    const c = p.conteudo;
+                    if (c.colaborador_id && String(c.colaborador_id) === String(user.id)) return true;
+                    if (c.colaborador) {
+                        const colLower = String(c.colaborador).trim().toLowerCase();
+                        if (colLower && (colLower === username || colLower === globalName)) return true;
+                    }
+                    return false;
+                })
+                .map(p => {
+                    const item = typeof p.conteudo === 'string' ? JSON.parse(p.conteudo) : { ...p.conteudo };
+                    item.nome_do_json = p.nome_do_json;
+                    item.is_pendente = true;
+                    return item;
+                });
             return res.json(meus);
         } catch (err) {
             console.error('[HF Meus Pendentes Error]:', err.message);
@@ -1798,11 +1826,21 @@ app.get('/api/meus-pendentes', async (req, res) => {
 
     try {
         const query = `
-            SELECT nome_do_json FROM envios_pendentes 
-            WHERE conteudo->>'colaborador_id' = $1;
+            SELECT nome_do_json, conteudo, criado_em FROM envios_pendentes 
+            WHERE conteudo->>'colaborador_id' = $1
+               OR lower(conteudo->>'colaborador') = $2
+               OR lower(conteudo->>'colaborador') = $3
+            ORDER BY criado_em DESC;
         `;
-        const result = await pool.query(query, [user.id]);
-        res.json(result.rows);
+        const result = await pool.query(query, [String(user.id), username, globalName]);
+        const items = result.rows.map(r => {
+            const item = typeof r.conteudo === 'string' ? JSON.parse(r.conteudo) : { ...r.conteudo };
+            item.nome_do_json = r.nome_do_json;
+            if (r.criado_em && !item.criado_em) item.criado_em = r.criado_em;
+            item.is_pendente = true;
+            return item;
+        });
+        res.json(items);
     } catch (err) {
         console.error('Erro ao buscar meus pendentes:', err.message);
         res.status(500).json({ erro: 'Erro ao carregar pendentes do usuário.' });

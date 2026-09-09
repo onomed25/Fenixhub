@@ -415,7 +415,12 @@
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs font-medium text-zinc-500 mb-2">Qualidade</label>
+                                <div class="flex justify-between items-center mb-2">
+                                    <label class="block text-xs font-medium text-zinc-500">Qualidade</label>
+                                    <button type="button" onclick="gen.openVisualEditor()" class="text-[10px] text-indigo-400 hover:text-indigo-300 font-medium transition flex items-center gap-1" title="Gerir episódios e aplicar qualidade em massa">
+                                        <i class="fa-solid fa-sliders"></i> Gerir / Em Massa
+                                    </button>
+                                </div>
                                 <select id="videoQuality" onchange="gen.handleQualityChange()" class="input-unified w-full p-3 rounded-lg text-sm appearance-none">
                                     <!-- Carregado via JS -->
                                 </select>
@@ -743,6 +748,9 @@
                 </div>
                 
                 <div class="flex gap-2 w-full lg:w-auto overflow-x-auto pb-2 lg:pb-0 scrollbar-hide items-center">
+                    <button id="btn-my-uploads" onclick="cat.toggleMyUploads()" class="bg-obsidian-900/60 text-zinc-400 border border-white/5 hover:text-white hover:bg-obsidian-800 px-4 py-3 rounded-2xl text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-2 shadow-lg backdrop-blur-md" title="Filtrar meus envios">
+                        <i class="fa-solid fa-user-check text-indigo-400"></i> Meus Envios
+                    </button>
                     <button onclick="cat.init()" class="bg-obsidian-900/60 text-zinc-400 border border-white/5 hover:text-white hover:bg-obsidian-800 px-4 py-3 rounded-2xl text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-2 mr-2 shadow-lg backdrop-blur-md">
                         <i class="fa-solid fa-rotate"></i> Atualizar
                     </button>
@@ -1153,7 +1161,50 @@
                 </div>
                 
                 <!-- Lado Direito: Lista e Edição de Streams -->
-                <div id="visualEditorContent" class="w-full md:w-[55%] p-4 md:p-6 overflow-y-auto custom-scrollbar bg-[#0f0f11] space-y-4">
+                <div class="w-full md:w-[55%] flex flex-col bg-[#0f0f11] overflow-hidden">
+                    <!-- Painel de Edição em Massa -->
+                    <div id="bulkEditContainer" class="bg-zinc-950/80 border-b border-zinc-800/80 p-3 sm:p-4 space-y-2.5 shrink-0">
+                        <div class="flex items-center justify-between gap-2">
+                            <button type="button" onclick="gen.toggleBulkPanel()" class="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2 hover:text-white transition">
+                                <i class="fa-solid fa-layer-group text-indigo-400"></i> Modificar Todos em Massa
+                                <i id="bulkToggleChevron" class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200"></i>
+                            </button>
+                            <div class="flex gap-1.5">
+                                <button type="button" onclick="gen.selectAllBulk(true)" class="text-[10px] bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-lg transition font-medium">Selecionar Todos</button>
+                                <button type="button" onclick="gen.selectAllBulk(false)" class="text-[10px] bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-lg transition font-medium">Limpar</button>
+                            </div>
+                        </div>
+                        <div id="bulkEditControls" class="hidden grid grid-cols-1 sm:grid-cols-4 gap-2.5 bg-zinc-900/60 p-3 rounded-xl border border-white/5 transition-all mt-2">
+                            <div>
+                                <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Novo Áudio</label>
+                                <select id="bulkAudio" class="input-unified w-full p-2 rounded-lg text-xs appearance-none">
+                                    <option value="">(Manter original)</option>
+                                    <option value="Dublado">Dublado</option>
+                                    <option value="Português (PT-BR)">Português (PT-BR)</option>
+                                    <option value="English">English</option>
+                                    <option value="Legendado">Legendado</option>
+                                    <option value="Dual Áudio">Dual Áudio</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nova Qualidade</label>
+                                <select id="bulkQuality" class="input-unified w-full p-2 rounded-lg text-xs appearance-none">
+                                    <!-- Preenchido via JS -->
+                                </select>
+                            </div>
+                            <div id="bulkSeasonCol">
+                                <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Mover Temp.</label>
+                                <input type="number" id="bulkSeason" class="input-unified w-full p-2 rounded-lg text-xs text-indigo-300 bg-zinc-950 border border-zinc-800" placeholder="Ex: 2" min="1">
+                            </div>
+                            <div class="flex items-end">
+                                <button type="button" onclick="gen.applyBulkEdit()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg transition text-xs font-bold uppercase tracking-wide shadow-md">
+                                    Aplicar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="visualEditorContent" class="flex-1 p-4 md:p-6 overflow-y-auto custom-scrollbar space-y-4">
+                    </div>
                 </div>
             </div>
             
