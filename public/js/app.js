@@ -1871,6 +1871,32 @@ self.onmessage = async (e) => {
                 showToast(`Qualidade de todos os ${updated} episódios/links alterada para ${newQuality}!`, "success");
             },
 
+            sanitizeQualities: (data) => {
+                if (!data || !data.streams) return;
+                const defaultQual = document.getElementById('videoQuality')?.value || '1080p';
+                const safeQual = (defaultQual && defaultQual !== 'Nenhuma' && defaultQual !== '__ADD_NEW__') ? defaultQual : '1080p';
+
+                const fixStream = (s) => {
+                    if (!s || typeof s !== 'object') return;
+                    const parts = (s.name || '').split('\n');
+                    const audio = parts[0] ? parts[0].trim() : 'Dublado';
+                    const q = (parts[1] && parts[1].trim() && parts[1].trim() !== 'Nenhuma') ? parts[1].trim() : safeQual;
+                    s.name = `${audio}\n${q}`;
+                };
+
+                if (data.type === 'movie' && Array.isArray(data.streams)) {
+                    data.streams.forEach(fixStream);
+                } else if (data.type === 'series' && typeof data.streams === 'object') {
+                    Object.keys(data.streams).forEach(season => {
+                        const seasonObj = data.streams[season] || {};
+                        Object.keys(seasonObj).forEach(ep => {
+                            const epStreams = seasonObj[ep] || [];
+                            if (Array.isArray(epStreams)) epStreams.forEach(fixStream);
+                        });
+                    });
+                }
+            },
+
             handleQualityChange: () => {
                 const select = document.getElementById('videoQuality');
                 if (!select) return;
@@ -3031,11 +3057,13 @@ self.onmessage = async (e) => {
 
                 const type = document.querySelector('input[name="contentType"]:checked').value;
                 const baseAudio = document.getElementById('audioLanguage').value;
-                const quality = document.getElementById('videoQuality').value.trim();
+                let quality = (document.getElementById('videoQuality')?.value || '').trim();
                 const rawText = document.getElementById('manualLinks').value;
                 
-                if (!quality || quality === 'Nenhuma') {
-                    return showToast("A qualidade do vídeo é obrigatória! Selecione uma opção (ex: 1080p, 720p).", "error");
+                if (!quality || quality === 'Nenhuma' || quality === '__ADD_NEW__') {
+                    quality = '1080p';
+                    const qSelect = document.getElementById('videoQuality');
+                    if (qSelect) qSelect.value = '1080p';
                 }
                 if (!rawText.trim()) return showToast("Cole os links primeiro.", "error");
 
@@ -3354,6 +3382,9 @@ self.onmessage = async (e) => {
                 }
                 
                 try {
+                    if (gen.currentData) {
+                        gen.sanitizeQualities(gen.currentData);
+                    }
                     const imdbId = gen.currentData.id;
                     const nomeArquivo = (imdbId && imdbId.startsWith('tt')) ? imdbId : 'json-' + Date.now();
 
@@ -3471,6 +3502,9 @@ self.onmessage = async (e) => {
             },
 
             saveVisualEditor: async () => {
+                if (gen.editData) {
+                    gen.sanitizeQualities(gen.editData);
+                }
                 gen.currentData = JSON.parse(JSON.stringify(gen.editData));
                 gen.updateDisplay(); 
                 gen.closeVisualEditor();
@@ -3578,21 +3612,58 @@ self.onmessage = async (e) => {
                 showToast(`${count} episódios adicionados com sucesso à Temporada ${seasonNum}!`, "success");
             },
 
+            deduplicateManualLinks: () => {
+                const textarea = document.getElementById('manualLinks');
+                if (!textarea || !textarea.value.trim()) {
+                    return showToast("Nenhum link no campo para verificar duplicados.", "info");
+                }
+                const lines = textarea.value.split('\n');
+                const seen = new Set();
+                const uniqueLines = [];
+                let removed = 0;
+
+                lines.forEach(line => {
+                    const trimmed = line.trim();
+                    if (!trimmed) return;
+                    const clean = gen.cleanUrl(trimmed);
+                    const key = clean ? clean.toLowerCase().replace(/\/+$/, '') : trimmed.toLowerCase();
+                    if (seen.has(key)) {
+                        removed++;
+                        return;
+                    }
+                    seen.add(key);
+                    uniqueLines.push(trimmed);
+                });
+
+                textarea.value = uniqueLines.join('\n');
+                if (removed > 0) {
+                    showToast(`${removed} link(s) duplicado(s) removido(s) do campo!`, "success");
+                } else {
+                    showToast("Nenhum link duplicado encontrado no campo.", "info");
+                }
+            },
+
             removeDuplicateStreams: () => {
                 if (!gen.editData) return;
                 const type = gen.editData.type || 'movie';
                 let removedCount = 0;
+
+                const getNormKey = (s) => {
+                    const url = (s.url || '').trim().toLowerCase().replace(/\/+$/, '');
+                    const name = (s.name || '').trim().toLowerCase();
+                    return url ? `${url}::${name}` : '';
+                };
 
                 if (type === 'movie') {
                     if (Array.isArray(gen.editData.streams)) {
                         const seen = new Set();
                         const unique = [];
                         gen.editData.streams.forEach(s => {
-                            const url = (s.url || '').trim();
-                            if (!url) {
+                            const key = getNormKey(s);
+                            if (!key) {
                                 unique.push(s);
-                            } else if (!seen.has(url)) {
-                                seen.add(url);
+                            } else if (!seen.has(key)) {
+                                seen.add(key);
                                 unique.push(s);
                             } else {
                                 removedCount++;
@@ -3609,11 +3680,11 @@ self.onmessage = async (e) => {
                                 const seen = new Set();
                                 const unique = [];
                                 epStreams.forEach(s => {
-                                    const url = (s.url || '').trim();
-                                    if (!url) {
+                                    const key = getNormKey(s);
+                                    if (!key) {
                                         unique.push(s);
-                                    } else if (!seen.has(url)) {
-                                        seen.add(url);
+                                    } else if (!seen.has(key)) {
+                                        seen.add(key);
                                         unique.push(s);
                                     } else {
                                         removedCount++;
@@ -3631,6 +3702,129 @@ self.onmessage = async (e) => {
                 } else {
                     showToast("Nenhum link duplicado encontrado.", "info");
                 }
+            },
+
+            selectByAudio: (targetAudio) => {
+                const checkboxes = document.querySelectorAll('.bulk-select-checkbox');
+                let count = 0;
+                const target = (targetAudio || '').trim().toLowerCase();
+                checkboxes.forEach(cb => {
+                    const audio = (cb.getAttribute('data-audio') || '').toLowerCase();
+                    const match = target ? (audio === target || audio.startsWith(target)) : true;
+                    cb.checked = match;
+                    if (match) count++;
+                });
+                showToast(`${count} link(s) com áudio "${targetAudio}" selecionado(s).`, "info");
+            },
+
+            deleteSelectedBulk: () => {
+                if (!gen.editData) return;
+                const checkboxes = Array.from(document.querySelectorAll('.bulk-select-checkbox:checked'));
+                if (checkboxes.length === 0) {
+                    return showToast("Nenhum episódio/link selecionado para apagar.", "warning");
+                }
+
+                if (!confirm(`Deseja realmente apagar os ${checkboxes.length} link(s)/episódio(s) selecionado(s)?`)) {
+                    return;
+                }
+
+                const type = gen.editData.type || 'movie';
+                let deletedCount = 0;
+
+                if (type === 'movie' && Array.isArray(gen.editData.streams)) {
+                    const indicesToDelete = new Set(checkboxes.map(cb => parseInt(cb.getAttribute('data-index'))));
+                    gen.editData.streams = gen.editData.streams.filter((_, idx) => {
+                        if (indicesToDelete.has(idx)) {
+                            deletedCount++;
+                            return false;
+                        }
+                        return true;
+                    });
+                } else if (type === 'series' && gen.editData.streams && typeof gen.editData.streams === 'object') {
+                    const toDelete = new Map();
+                    checkboxes.forEach(cb => {
+                        const s = cb.getAttribute('data-season');
+                        const e = cb.getAttribute('data-ep');
+                        const idx = parseInt(cb.getAttribute('data-index'));
+                        const key = `${s}:${e}`;
+                        if (!toDelete.has(key)) toDelete.set(key, new Set());
+                        toDelete.get(key).add(idx);
+                    });
+
+                    toDelete.forEach((indicesSet, key) => {
+                        const [s, e] = key.split(':');
+                        if (gen.editData.streams[s] && Array.isArray(gen.editData.streams[s][e])) {
+                            gen.editData.streams[s][e] = gen.editData.streams[s][e].filter((_, idx) => {
+                                if (indicesSet.has(idx)) {
+                                    deletedCount++;
+                                    return false;
+                                }
+                                return true;
+                            });
+                            if (gen.editData.streams[s][e].length === 0) {
+                                delete gen.editData.streams[s][e];
+                            }
+                        }
+                        if (gen.editData.streams[s] && Object.keys(gen.editData.streams[s]).length === 0) {
+                            delete gen.editData.streams[s];
+                        }
+                    });
+                }
+
+                gen.renderVisualEditorContent();
+                showToast(`${deletedCount} link(s) apagado(s) com sucesso!`, "success");
+            },
+
+            deleteByAudio: (audioName = 'Dublado') => {
+                if (!gen.editData) return;
+                const type = gen.editData.type || 'movie';
+                const target = audioName.trim().toLowerCase();
+                let matchCount = 0;
+
+                const isTargetAudio = (stream) => {
+                    const parts = (stream?.name || '').split('\n');
+                    const audio = (parts[0] || '').trim().toLowerCase();
+                    return audio === target || audio.startsWith(target);
+                };
+
+                if (type === 'movie' && Array.isArray(gen.editData.streams)) {
+                    matchCount = gen.editData.streams.filter(isTargetAudio).length;
+                } else if (type === 'series' && gen.editData.streams) {
+                    Object.values(gen.editData.streams).forEach(sObj => {
+                        Object.values(sObj || {}).forEach(epList => {
+                            if (Array.isArray(epList)) {
+                                matchCount += epList.filter(isTargetAudio).length;
+                            }
+                        });
+                    });
+                }
+
+                if (matchCount === 0) {
+                    return showToast(`Nenhum link com áudio "${audioName}" encontrado.`, "info");
+                }
+
+                if (!confirm(`Deseja apagar todos os ${matchCount} links com áudio "${audioName}"?`)) {
+                    return;
+                }
+
+                if (type === 'movie') {
+                    gen.editData.streams = gen.editData.streams.filter(s => !isTargetAudio(s));
+                } else {
+                    Object.keys(gen.editData.streams).forEach(s => {
+                        Object.keys(gen.editData.streams[s] || {}).forEach(e => {
+                            gen.editData.streams[s][e] = (gen.editData.streams[s][e] || []).filter(str => !isTargetAudio(str));
+                            if (gen.editData.streams[s][e].length === 0) {
+                                delete gen.editData.streams[s][e];
+                            }
+                        });
+                        if (Object.keys(gen.editData.streams[s] || {}).length === 0) {
+                            delete gen.editData.streams[s];
+                        }
+                    });
+                }
+
+                gen.renderVisualEditorContent();
+                showToast(`${matchCount} link(s) "${audioName}" apagado(s) com sucesso!`, "success");
             },
 
             toggleBulkPanel: () => {
@@ -3881,8 +4075,8 @@ self.onmessage = async (e) => {
                         `gen.removeEditData('movie', ${index})`;
 
                 const checkbox = isSeries ? 
-                    `<input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-indigo-500 focus:ring-indigo-500 cursor-pointer shrink-0" data-type="series" data-season="${season}" data-ep="${ep}" data-index="${index}">` : 
-                    `<input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-indigo-500 focus:ring-indigo-500 cursor-pointer shrink-0" data-type="movie" data-index="${index}">`;
+                    `<input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-indigo-500 focus:ring-indigo-500 cursor-pointer shrink-0" data-type="series" data-season="${season}" data-ep="${ep}" data-index="${index}" data-audio="${escapeHTML(audio)}">` : 
+                    `<input type="checkbox" class="bulk-select-checkbox w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-indigo-500 focus:ring-indigo-500 cursor-pointer shrink-0" data-type="movie" data-index="${index}" data-audio="${escapeHTML(audio)}">`;
 
                 let headerHtml = '';
                 if (isSeries) {
@@ -3971,6 +4165,9 @@ self.onmessage = async (e) => {
                         <i class="fa-solid fa-list-check text-indigo-500"></i> ${totalItemsCount} Opção(ões)
                     </h4>
                     <div class="flex items-center gap-2 shrink-0">
+                        <button type="button" onclick="gen.deleteByAudio('Dublado')" class="bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition" title="Apagar todos os links Dublados">
+                            <i class="fa-solid fa-volume-xmark text-[10px]"></i> Apagar Dublados
+                        </button>
                         <button type="button" onclick="gen.removeDuplicateStreams()" class="bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition" title="Remover links duplicados">
                             <i class="fa-solid fa-clone text-[10px]"></i> Limpar Duplicados
                         </button>
@@ -4382,6 +4579,17 @@ self.onmessage = async (e) => {
                     streams: item.type === 'series' ? {} : JSON.parse(JSON.stringify(item.streams || []))
                 };
 
+                if (item.type === 'movie' && Array.isArray(exportData.streams)) {
+                    exportData.streams.forEach(s => {
+                        if (s && typeof s === 'object') {
+                            const parts = (s.name || '').split('\n');
+                            const audio = parts[0] ? parts[0].trim() : 'Dublado';
+                            const qual = (parts[1] && parts[1].trim() && parts[1].trim() !== 'Nenhuma') ? parts[1].trim() : '1080p';
+                            s.name = `${audio}\n${qual}`;
+                        }
+                    });
+                }
+
                 if (item.type === 'series' && Array.isArray(item.streams)) {
                     item.streams.forEach(str => {
                         const match = str.name.match(/S(\d+)E(\d+)|T(\d+)EP?(\d+)/i);
@@ -4392,6 +4600,9 @@ self.onmessage = async (e) => {
                             if(!exportData.streams[s][e]) exportData.streams[s][e] = [];
                             
                             let nomeLimpo = str.name.replace(/S\d+E\d+\s*(-\s*)?/i, '').trim();
+                            if (!nomeLimpo.includes('\n')) {
+                                nomeLimpo = `${nomeLimpo || 'Dublado'}\n1080p`;
+                            }
                             exportData.streams[s][e].push({
                                 name: nomeLimpo,
                                 url: str.url,
@@ -6714,24 +6925,6 @@ self.onmessage = async (e) => {
 
                 const newStreamsProcessed = new Set();
 
-                let missingQuality = false;
-                inputs.forEach(input => {
-                    const idx = input.getAttribute('data-idx');
-                    const season = input.getAttribute('data-season') || null;
-                    const ep = input.getAttribute('data-ep') || null;
-                    const selector = type === 'movie' ? `[data-idx="${idx}"]` : `[data-season="${season}"][data-ep="${ep}"][data-idx="${idx}"]`;
-                    const isChecked = modal.querySelector(`.approve-checkbox${selector}`)?.checked;
-                    const urlVal = (modal.querySelector(`.url-input${selector}`)?.value || '').trim();
-                    const qualityVal = (modal.querySelector(`.quality-input${selector}`)?.value || '').trim();
-                    if (isChecked && urlVal && (!qualityVal || qualityVal === 'Nenhuma')) {
-                        missingQuality = true;
-                    }
-                });
-
-                if (missingQuality) {
-                    return showToast("A qualidade do vídeo é obrigatória para todos os links aprovados! Defina a qualidade (ex: 1080p, 720p) antes de salvar.", "error");
-                }
-
                 inputs.forEach(input => {
                     const idx = input.getAttribute('data-idx');
                     const season = input.getAttribute('data-season') || null;
@@ -6741,7 +6934,8 @@ self.onmessage = async (e) => {
                     
                     let urlVal = (modal.querySelector(`.url-input${selector}`)?.value || '').trim();
                     const audioVal = modal.querySelector(`.audio-input${selector}`)?.value || 'Dublado';
-                    const qualityVal = modal.querySelector(`.quality-input${selector}`)?.value || '1080p';
+                    const rawQ = (modal.querySelector(`.quality-input${selector}`)?.value || '').trim();
+                    const qualityVal = (rawQ && rawQ !== 'Nenhuma') ? rawQ : '1080p';
                     const isChecked = modal.querySelector(`.approve-checkbox${selector}`)?.checked;
                     
                     const newSeason = type === 'series' ? (modal.querySelector(`.season-input${selector}`)?.value || season || '1') : null;
@@ -6992,35 +7186,6 @@ self.onmessage = async (e) => {
         }
 
         async function approveFile(nome) {
-            const pendente = window.currentPendentes?.find(p => p.nome_do_json === nome);
-            if (pendente && pendente.conteudo) {
-                const checkMissingQuality = (streams, type) => {
-                    if (type === 'movie' && Array.isArray(streams)) {
-                        return streams.some(s => {
-                            const parts = (s?.name || '').split('\n');
-                            return !parts[1] || parts[1].trim() === '' || parts[1].trim() === 'Nenhuma';
-                        });
-                    }
-                    if (type === 'series' && streams && typeof streams === 'object') {
-                        for (const s in streams) {
-                            for (const e in streams[s]) {
-                                if (Array.isArray(streams[s][e])) {
-                                    if (streams[s][e].some(str => {
-                                        const parts = (str?.name || '').split('\n');
-                                        return !parts[1] || parts[1].trim() === '' || parts[1].trim() === 'Nenhuma';
-                                    })) return true;
-                                }
-                            }
-                        }
-                    }
-                    return false;
-                };
-
-                if (checkMissingQuality(pendente.conteudo.streams, pendente.conteudo.type)) {
-                    return showToast("Este arquivo contém streams sem qualidade definida. Abra em 'Visualizar/Testar' (ícone de olho) para definir a qualidade antes de aprovar!", "error");
-                }
-            }
-
             if (confirm(`Deseja aprovar e publicar o arquivo ${nome} diretamente no catálogo?`)) {
                 actionPendingFile(nome, 'approve');
             }

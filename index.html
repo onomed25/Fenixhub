@@ -422,7 +422,13 @@
                                     </button>
                                 </div>
                                 <select id="videoQuality" onchange="gen.handleQualityChange()" class="input-unified w-full p-3 rounded-lg text-sm appearance-none">
-                                    <!-- Carregado via JS -->
+                                    <option value="1080p" selected>1080p</option>
+                                    <option value="720p">720p</option>
+                                    <option value="4K">4K</option>
+                                    <option value="FHD">FHD</option>
+                                    <option value="HD">HD</option>
+                                    <option value="SD">SD</option>
+                                    <option value="CAM">CAM</option>
                                 </select>
                             </div>
                         </div>
@@ -461,6 +467,9 @@
                             <div class="flex justify-between items-end mb-3">
                                 <label class="block text-xs font-medium text-zinc-500">Links de Transmissão (Cole aqui para não enviar arquivos)</label>
                                 <div class="flex gap-2">
+                                    <button onclick="gen.deduplicateManualLinks()" class="text-[10px] text-rose-400 hover:text-rose-300 px-2 py-1 rounded transition flex items-center gap-1" title="Remover Links Duplicados">
+                                        <i class="fa-solid fa-clone"></i> <span class="hidden sm:inline">Limpar Duplicados</span>
+                                    </button>
                                     <button onclick="tg.migrateAllLinks()" class="text-[10px] text-sky-400 hover:text-sky-300 px-2 py-1 rounded transition flex items-center gap-1" title="Converter p/ Telegram">
                                         <i class="fa-brands fa-telegram"></i> <span class="hidden sm:inline">Converter p/ Telegram</span>
                                     </button>
@@ -1169,9 +1178,14 @@
                                 <i class="fa-solid fa-layer-group text-indigo-400"></i> Modificar Todos em Massa
                                 <i id="bulkToggleChevron" class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200"></i>
                             </button>
-                            <div class="flex gap-1.5">
-                                <button type="button" onclick="gen.selectAllBulk(true)" class="text-[10px] bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-lg transition font-medium">Selecionar Todos</button>
-                                <button type="button" onclick="gen.selectAllBulk(false)" class="text-[10px] bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-lg transition font-medium">Limpar</button>
+                            <div class="flex flex-wrap gap-1.5 items-center">
+                                <button type="button" onclick="gen.selectAllBulk(true)" class="text-[10px] bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-lg transition font-medium">Todos</button>
+                                <button type="button" onclick="gen.selectByAudio('Dublado')" class="text-[10px] bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-amber-300 px-2.5 py-1 rounded-lg transition font-medium">Só Dublados</button>
+                                <button type="button" onclick="gen.selectByAudio('Legendado')" class="text-[10px] bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-sky-300 px-2.5 py-1 rounded-lg transition font-medium">Só Legendados</button>
+                                <button type="button" onclick="gen.selectAllBulk(false)" class="text-[10px] bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 px-2.5 py-1 rounded-lg transition font-medium">Desmarcar</button>
+                                <button type="button" onclick="gen.deleteSelectedBulk()" class="text-[10px] bg-red-950/70 border border-red-800/50 hover:bg-red-900 text-red-300 px-2.5 py-1 rounded-lg transition font-bold flex items-center gap-1" title="Excluir streams selecionadas">
+                                    <i class="fa-solid fa-trash-can text-[10px]"></i> Excluir
+                                </button>
                             </div>
                         </div>
                         <div id="bulkEditControls" class="hidden grid grid-cols-1 sm:grid-cols-4 gap-2.5 bg-zinc-900/60 p-3 rounded-xl border border-white/5 transition-all mt-2">

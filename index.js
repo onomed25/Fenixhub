@@ -1064,9 +1064,14 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
     const uploaderNick = user ? (user.global_name || user.username) : (req.body.uploader_nick || req.headers['x-uploader-nick'] || (adminAuthed ? 'Admin' : null));
     const uploaderId = user ? user.id : null;
     const uploaderAvatar = user ? (user.avatar || null) : null;
-    const isEdit = req.body.is_edit === 'true' || req.query.is_edit === 'true' || req.body.substituir === 'true' || req.query.substituir === 'true';
+    const isEdit = req.body.is_edit === 'true' || req.query.is_edit === 'true' || req.body.substituir === 'true' || req.query.substituir === 'true' || Boolean(parsedConteudo.is_edit) || Boolean(parsedConteudo.substituir);
     const forceOverride = req.body.override_colaborador === 'true' || req.query.override_colaborador === 'true';
     const hasOriginalColab = parsedConteudo.colaborador && !isPlaceholder(parsedConteudo.colaborador);
+
+    if (isEdit) {
+        parsedConteudo.is_edit = true;
+        parsedConteudo.substituir = true;
+    }
 
     // Só sobrescreve o colaborador se for solicitado explicitamente, ou se for novo envio sem autor prévio, ou se o autor atual for placeholder
     const shouldOverride = forceOverride || (!isEdit && !hasOriginalColab) || isPlaceholder(parsedConteudo.colaborador);
@@ -1169,6 +1174,7 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
     delete finalConteudo.year;
 
     injectDateIntoStreams(finalConteudo);
+    sanitizeStreamQualities(finalConteudo.streams, finalConteudo.type);
 
     // Modo Hugging Face: Salva diretamente no repositório HF
     if (process.env.DATABASE_SOURCE === 'huggingface') {
@@ -1181,7 +1187,7 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
                 });
             }
 
-            if (!adminAuthed && !isGenerator) {
+            if (!adminAuthed && !isGenerator && !isEdit) {
                 const existing = await getContentFromHf(nome);
                 if (existing) {
                     finalConteudo = mergeMediaContents(existing, parsedConteudo, { overrideColaborador: Boolean(uploaderNick) });
@@ -1220,7 +1226,7 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
                 ? JSON.parse(checkRes.rows[0].conteudo)
                 : checkRes.rows[0].conteudo;
 
-            if (!adminAuthed && !isGenerator) {
+            if (!adminAuthed && !isGenerator && !isEdit) {
                 finalConteudo = mergeMediaContents(existing, parsedConteudo, { overrideColaborador: Boolean(uploaderNick) });
             }
         }
@@ -1889,6 +1895,34 @@ const hasStreamLinks = (streams, type) => {
     return false;
 };
 
+const sanitizeStreamQualities = (streams, type, defaultQuality = '1080p') => {
+    if (type === 'movie' && Array.isArray(streams)) {
+        streams.forEach(s => {
+            if (s && typeof s === 'object') {
+                const parts = (s.name || '').split('\n');
+                const audio = parts[0] ? parts[0].trim() : 'Dublado';
+                const quality = (parts[1] && parts[1].trim() && parts[1].trim() !== 'Nenhuma') ? parts[1].trim() : defaultQuality;
+                s.name = `${audio}\n${quality}`;
+            }
+        });
+    } else if (type === 'series' && streams && typeof streams === 'object') {
+        for (const s in streams) {
+            for (const e in streams[s]) {
+                if (Array.isArray(streams[s][e])) {
+                    streams[s][e].forEach(str => {
+                        if (str && typeof str === 'object') {
+                            const parts = (str.name || '').split('\n');
+                            const audio = parts[0] ? parts[0].trim() : 'Dublado';
+                            const quality = (parts[1] && parts[1].trim() && parts[1].trim() !== 'Nenhuma') ? parts[1].trim() : defaultQuality;
+                            str.name = `${audio}\n${quality}`;
+                        }
+                    });
+                }
+            }
+        }
+    }
+};
+
 const checkMissingQuality = (streams, type) => {
     if (type === 'movie' && Array.isArray(streams)) {
         return streams.some(s => {
@@ -1980,9 +2014,7 @@ app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async
                 return res.status(400).json({ erro: 'Não é permitido aprovar um conteúdo sem nenhuma stream (link).' });
             }
 
-            if (checkMissingQuality(conteudoToSave.streams, conteudoToSave.type)) {
-                return res.status(400).json({ erro: 'Não é permitido aprovar links sem qualidade informada. Defina a qualidade (ex: 1080p, 720p) nas streams.' });
-            }
+            sanitizeStreamQualities(conteudoToSave.streams, conteudoToSave.type);
 
             conteudoToSave.is_pendente = false;
             conteudoToSave.is_oculto = false;
@@ -2102,10 +2134,7 @@ app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async
             return res.status(400).json({ erro: 'Não é permitido aprovar um conteúdo sem nenhuma stream (link).' });
         }
 
-        if (checkMissingQuality(conteudoToSave.streams, conteudoToSave.type)) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ erro: 'Não é permitido aprovar links sem qualidade informada. Defina a qualidade (ex: 1080p, 720p) nas streams.' });
-        }
+        sanitizeStreamQualities(conteudoToSave.streams, conteudoToSave.type);
 
         const upsertQuery = `
             INSERT INTO arquivos_json (nome_do_json, conteudo, is_pendente) 
