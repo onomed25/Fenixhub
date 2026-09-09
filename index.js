@@ -1064,12 +1064,14 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
     const uploaderNick = user ? (user.global_name || user.username) : (req.body.uploader_nick || req.headers['x-uploader-nick'] || (adminAuthed ? 'Admin' : null));
     const uploaderId = user ? user.id : null;
     const uploaderAvatar = user ? (user.avatar || null) : null;
-    const roleStr = isAjudanteUser ? 'ajudante' : (adminAuthed ? 'admin' : 'membro');
-    const forceOverride = req.body.override_colaborador === 'true' || req.query.override_colaborador === 'true' || !isGenerator;
+    const isEdit = req.body.is_edit === 'true' || req.query.is_edit === 'true' || req.body.substituir === 'true' || req.query.substituir === 'true';
+    const forceOverride = req.body.override_colaborador === 'true' || req.query.override_colaborador === 'true';
+    const hasOriginalColab = parsedConteudo.colaborador && !isPlaceholder(parsedConteudo.colaborador);
+
+    // Só sobrescreve o colaborador se for solicitado explicitamente, ou se for novo envio sem autor prévio, ou se o autor atual for placeholder
+    const shouldOverride = forceOverride || (!isEdit && !hasOriginalColab) || isPlaceholder(parsedConteudo.colaborador);
 
     if (uploaderNick) {
-        const shouldOverride = !adminAuthed || forceOverride || isPlaceholder(parsedConteudo.colaborador);
-
         if (shouldOverride) {
             parsedConteudo.colaborador = uploaderNick;
             parsedConteudo.colaborador_role = roleStr;
@@ -1079,11 +1081,11 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
 
         const enforceColaboradorOnStream = (s) => {
             if (s && typeof s === 'object') {
-                if (shouldOverride || isPlaceholder(s.colaborador)) {
-                    s.colaborador = uploaderNick;
-                    s.colaborador_role = roleStr;
-                    if (uploaderId) s.colaborador_id = uploaderId;
-                    if (uploaderAvatar) s.colaborador_avatar = uploaderAvatar;
+                if (shouldOverride || !s.colaborador || isPlaceholder(s.colaborador)) {
+                    s.colaborador = parsedConteudo.colaborador || uploaderNick;
+                    s.colaborador_role = parsedConteudo.colaborador_role || roleStr;
+                    if (parsedConteudo.colaborador_id || uploaderId) s.colaborador_id = parsedConteudo.colaborador_id || uploaderId;
+                    if (parsedConteudo.colaborador_avatar || uploaderAvatar) s.colaborador_avatar = parsedConteudo.colaborador_avatar || uploaderAvatar;
                 }
             }
         };
@@ -1926,15 +1928,19 @@ app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async
             let conteudoToSave = conteudo ? (typeof conteudo === 'string' ? JSON.parse(conteudo) : conteudo) : null;
 
             if (!conteudoToSave) {
-                const existing = await getContentFromHf(cleanNome);
-                if (existing) {
-                    conteudoToSave = mergeMediaContents(existing, pendingConteudo);
-                } else {
+                if (pendingConteudo.substituir === true || pendingConteudo.is_edit === true || req.body.substituir === true) {
                     conteudoToSave = pendingConteudo;
+                } else {
+                    const existing = await getContentFromHf(cleanNome);
+                    if (existing) {
+                        conteudoToSave = mergeMediaContents(existing, pendingConteudo);
+                    } else {
+                        conteudoToSave = pendingConteudo;
+                    }
                 }
             }
 
-            // Garantir que a autoria do envio pendente seja preservada e injetada nas streams
+            // Garantir que a autoria do envio pendente seja preservada e injetada apenas onde não houver autor prévio
             const pColab = pendingConteudo.colaborador;
             const pColabId = pendingConteudo.colaborador_id;
             const pColabAvatar = pendingConteudo.colaborador_avatar;
@@ -2040,18 +2046,22 @@ app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async
         let conteudoToSave = conteudo ? (typeof conteudo === 'string' ? JSON.parse(conteudo) : conteudo) : null;
 
         if (!conteudoToSave) {
-            const existingRes = await client.query('SELECT conteudo FROM arquivos_json WHERE nome_do_json = $1;', [nome.trim()]);
-            if (existingRes.rows.length > 0) {
-                const existing = typeof existingRes.rows[0].conteudo === 'string'
-                    ? JSON.parse(existingRes.rows[0].conteudo)
-                    : existingRes.rows[0].conteudo;
-                conteudoToSave = mergeMediaContents(existing, pendingConteudo);
-            } else {
+            if (pendingConteudo.substituir === true || pendingConteudo.is_edit === true || req.body.substituir === true) {
                 conteudoToSave = pendingConteudo;
+            } else {
+                const existingRes = await client.query('SELECT conteudo FROM arquivos_json WHERE nome_do_json = $1;', [nome.trim()]);
+                if (existingRes.rows.length > 0) {
+                    const existing = typeof existingRes.rows[0].conteudo === 'string'
+                        ? JSON.parse(existingRes.rows[0].conteudo)
+                        : existingRes.rows[0].conteudo;
+                    conteudoToSave = mergeMediaContents(existing, pendingConteudo);
+                } else {
+                    conteudoToSave = pendingConteudo;
+                }
             }
         }
 
-        // Garantir que a autoria do envio pendente seja preservada e injetada nas streams
+        // Garantir que a autoria do envio pendente seja preservada e injetada apenas onde não houver autor prévio
         const pColab = pendingConteudo.colaborador;
         const pColabId = pendingConteudo.colaborador_id;
         const pColabAvatar = pendingConteudo.colaborador_avatar;

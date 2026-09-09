@@ -3323,12 +3323,20 @@ self.onmessage = async (e) => {
                     || localStorage.getItem('fenix_uploader_nick')
                     || (sessionStorage.getItem('fenixflix_senha') ? 'Admin' : '');
 
-                if (nick) {
+                const isEdit = Boolean(gen.currentData.is_edit || window.isEditingExisting);
+                const hasExistingColab = Boolean(gen.currentData.colaborador && !isPlaceholderNick(gen.currentData.colaborador));
+
+                // Se NÃO for edição com colaborador existente ou se o colaborador for placeholder, atribui o uploader atual
+                if (!hasExistingColab && nick) {
                     gen.currentData.colaborador = nick;
-                    // Injetar nos streams que ainda não possuem colaborador ou possuem placeholder
+                }
+
+                // Injetar nos streams que ainda não possuem colaborador ou possuem placeholder
+                const fallbackColab = gen.currentData.colaborador || nick;
+                if (fallbackColab) {
                     if (gen.currentData.type === 'movie' && Array.isArray(gen.currentData.streams)) {
                         gen.currentData.streams.forEach(s => {
-                            if (!s.colaborador || isPlaceholderNick(s.colaborador)) s.colaborador = nick;
+                            if (!s.colaborador || isPlaceholderNick(s.colaborador)) s.colaborador = fallbackColab;
                         });
                     } else if (gen.currentData.type === 'series' && gen.currentData.streams && typeof gen.currentData.streams === 'object') {
                         Object.keys(gen.currentData.streams).forEach(seasonNum => {
@@ -3337,7 +3345,7 @@ self.onmessage = async (e) => {
                                 const epStreams = season[epNum] || [];
                                 if (Array.isArray(epStreams)) {
                                     epStreams.forEach(s => {
-                                        if (!s.colaborador || isPlaceholderNick(s.colaborador)) s.colaborador = nick;
+                                        if (!s.colaborador || isPlaceholderNick(s.colaborador)) s.colaborador = fallbackColab;
                                     });
                                 }
                             });
@@ -3355,7 +3363,13 @@ self.onmessage = async (e) => {
                     if (nick) {
                         formData.append("uploader_nick", nick);
                     }
-                    formData.append("override_colaborador", "true");
+                    if (isEdit) {
+                        formData.append("is_edit", "true");
+                        formData.append("substituir", "true");
+                        formData.append("override_colaborador", "false");
+                    } else {
+                        formData.append("override_colaborador", "true");
+                    }
                     
                     if (window.forcePendenteForEdit) {
                         formData.append("force_pendente", "true");
@@ -3562,6 +3576,61 @@ self.onmessage = async (e) => {
 
                 gen.renderVisualEditorContent();
                 showToast(`${count} episódios adicionados com sucesso à Temporada ${seasonNum}!`, "success");
+            },
+
+            removeDuplicateStreams: () => {
+                if (!gen.editData) return;
+                const type = gen.editData.type || 'movie';
+                let removedCount = 0;
+
+                if (type === 'movie') {
+                    if (Array.isArray(gen.editData.streams)) {
+                        const seen = new Set();
+                        const unique = [];
+                        gen.editData.streams.forEach(s => {
+                            const url = (s.url || '').trim();
+                            if (!url) {
+                                unique.push(s);
+                            } else if (!seen.has(url)) {
+                                seen.add(url);
+                                unique.push(s);
+                            } else {
+                                removedCount++;
+                            }
+                        });
+                        gen.editData.streams = unique;
+                    }
+                } else {
+                    if (gen.editData.streams && typeof gen.editData.streams === 'object') {
+                        Object.keys(gen.editData.streams).forEach(season => {
+                            const seasonObj = gen.editData.streams[season] || {};
+                            Object.keys(seasonObj).forEach(ep => {
+                                const epStreams = seasonObj[ep] || [];
+                                const seen = new Set();
+                                const unique = [];
+                                epStreams.forEach(s => {
+                                    const url = (s.url || '').trim();
+                                    if (!url) {
+                                        unique.push(s);
+                                    } else if (!seen.has(url)) {
+                                        seen.add(url);
+                                        unique.push(s);
+                                    } else {
+                                        removedCount++;
+                                    }
+                                });
+                                gen.editData.streams[season][ep] = unique;
+                            });
+                        });
+                    }
+                }
+
+                gen.renderVisualEditorContent();
+                if (removedCount > 0) {
+                    showToast(`${removedCount} link(s) duplicado(s) removido(s)!`, "success");
+                } else {
+                    showToast("Nenhum link duplicado encontrado.", "info");
+                }
             },
 
             toggleBulkPanel: () => {
@@ -3902,6 +3971,9 @@ self.onmessage = async (e) => {
                         <i class="fa-solid fa-list-check text-indigo-500"></i> ${totalItemsCount} Opção(ões)
                     </h4>
                     <div class="flex items-center gap-2 shrink-0">
+                        <button type="button" onclick="gen.removeDuplicateStreams()" class="bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition" title="Remover links duplicados">
+                            <i class="fa-solid fa-clone text-[10px]"></i> Limpar Duplicados
+                        </button>
                         <button type="button" onclick="gen.addBatchEpisodesToVisualEditor()" class="bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition" title="Criar vários episódios de uma vez">
                             <i class="fa-solid fa-layer-group text-[10px]"></i> + Vários Eps
                         </button>
@@ -4289,13 +4361,9 @@ self.onmessage = async (e) => {
                     if (!senha) return;
                 }
 
+                // Ao editar no gerador, o padrão agora é SALVAR E SUBSTITUIR O ANTIGO DIRETAMENTE
                 window.forcePendenteForEdit = false;
-                if (isAjudante) {
-                    const wantPending = confirm("Modo Ajudante: Como deseja salvar esta edição?\n\n[ OK ] = Enviar para Fila de Aprovação (Modo Aprovador)\n[ Cancelar ] = Salvar e Publicar Diretamente");
-                    if (wantPending) {
-                        window.forcePendenteForEdit = true;
-                    }
-                }
+                window.isEditingExisting = true;
 
                 const item = cat.allItems.find(i => i.id === id);
                 if (!item) return;
@@ -4303,6 +4371,14 @@ self.onmessage = async (e) => {
                 let exportData = {
                     id: item.id,
                     type: item.type,
+                    title: item.title || item.id || '',
+                    is_edit: true,
+                    substituir: true,
+                    preserve_original_colaborador: true,
+                    colaborador: item.colaborador || '',
+                    colaborador_id: item.colaborador_id || '',
+                    colaborador_avatar: item.colaborador_avatar || '',
+                    colaborador_role: item.colaborador_role || '',
                     streams: item.type === 'series' ? {} : JSON.parse(JSON.stringify(item.streams || []))
                 };
 
@@ -4316,7 +4392,14 @@ self.onmessage = async (e) => {
                             if(!exportData.streams[s][e]) exportData.streams[s][e] = [];
                             
                             let nomeLimpo = str.name.replace(/S\d+E\d+\s*(-\s*)?/i, '').trim();
-                            exportData.streams[s][e].push({ name: nomeLimpo, url: str.url });
+                            exportData.streams[s][e].push({
+                                name: nomeLimpo,
+                                url: str.url,
+                                colaborador: str.colaborador || item.colaborador || '',
+                                colaborador_id: str.colaborador_id || item.colaborador_id || '',
+                                colaborador_avatar: str.colaborador_avatar || item.colaborador_avatar || '',
+                                colaborador_role: str.colaborador_role || item.colaborador_role || ''
+                            });
                         }
                     });
                 }
@@ -4331,7 +4414,7 @@ self.onmessage = async (e) => {
                 gen.toggleInputs();
                 gen.updateDisplay(true);
                 gen.openVisualEditor();
-                showToast(`Editando: ${item.title || item.id}`);
+                showToast(`Editando: ${item.title || item.id} (Substituirá o antigo ao salvar)`, "info");
             },
 
             downloadJson: (id) => {

@@ -115,19 +115,25 @@ function mergeStreamArrays(existingList, incomingList, options = {}) {
         if (!url) continue;
 
         const key = getStreamKey(inStream);
-        const existingStream = seenUrls.get(url) || (key ? seenComposite.get(key) : null);
-        if (!existingStream) {
+        const alreadyInComposite = key ? seenComposite.has(key) : false;
+        const allowDifferent = options.allowSameUrlDifferentName !== false;
+        const canAdd = options.allowDuplicateUrls || (!alreadyInComposite && allowDifferent) || (!seenUrls.has(url) && !alreadyInComposite);
+
+        if (canAdd) {
             seenUrls.set(url, inStream);
             if (key) seenComposite.set(key, inStream);
             result.push(inStream);
         } else {
-            // Se o stream existente tem colaborador vazio ou placeholder (ex: AIeatorlo),
-            // ou se options.overrideColaborador for true, atualiza a autoria com os dados do novo envio
-            if (inStream.colaborador && (!existingStream.colaborador || isPlaceholder(existingStream.colaborador) || options.overrideColaborador)) {
-                existingStream.colaborador = inStream.colaborador;
-                if (inStream.colaborador_id) existingStream.colaborador_id = inStream.colaborador_id;
-                if (inStream.colaborador_avatar) existingStream.colaborador_avatar = inStream.colaborador_avatar;
-                if (inStream.colaborador_role) existingStream.colaborador_role = inStream.colaborador_role;
+            const existingStream = (key ? seenComposite.get(key) : null) || seenUrls.get(url);
+            if (existingStream) {
+                // Se o stream existente tem colaborador vazio ou placeholder (ex: AIeatorlo),
+                // ou se options.overrideColaborador for true, atualiza a autoria com os dados do novo envio
+                if (inStream.colaborador && (!existingStream.colaborador || isPlaceholder(existingStream.colaborador) || options.overrideColaborador)) {
+                    existingStream.colaborador = inStream.colaborador;
+                    if (inStream.colaborador_id) existingStream.colaborador_id = inStream.colaborador_id;
+                    if (inStream.colaborador_avatar) existingStream.colaborador_avatar = inStream.colaborador_avatar;
+                    if (inStream.colaborador_role) existingStream.colaborador_role = inStream.colaborador_role;
+                }
             }
         }
     }
@@ -143,31 +149,38 @@ function mergeStreamArrays(existingList, incomingList, options = {}) {
  */
 function sanitizeSeriesStreams(streams) {
     if (!streams || typeof streams !== 'object' || Array.isArray(streams)) return Object.create(null);
+
     const clean = Object.create(null);
     for (const seasonNum of Object.keys(streams)) {
         if (FORBIDDEN_KEYS.has(seasonNum)) continue;
         const season = streams[seasonNum];
         if (!season || typeof season !== 'object' || Array.isArray(season)) continue;
+
         clean[seasonNum] = Object.create(null);
         for (const epNum of Object.keys(season)) {
             if (FORBIDDEN_KEYS.has(epNum)) continue;
-            const epStreams = Array.isArray(season[epNum]) ? season[epNum] : [];
-            clean[seasonNum][epNum] = mergeStreamArrays([], epStreams);
+            const epList = season[epNum];
+            if (Array.isArray(epList)) {
+                clean[seasonNum][epNum] = epList.filter(s => s && typeof s === 'object' && typeof s.url === 'string');
+            }
         }
     }
     return clean;
 }
 
 /**
- * Merges media records (movie or series) preserving views and deduplicating streams.
- * Time Complexity: O(N + M) using Hash Set deduplication.
- * Space Complexity: O(N + M).
+ * Merges new media contents into existing media contents.
+ * Safely handles streams deduplication, property updates, and protects against Prototype Pollution.
  * 
- * @param {object|null|undefined} existing - Current media entity in database
+ * @param {object|null|undefined} existing - Original media entity in database
  * @param {object|null|undefined} incoming - New media entity payload
+ * @param {object} [options] - Merge options
  * @returns {object} Merged media entity
  */
 function mergeMediaContents(existing, incoming, options = {}) {
+    if (options.substituir) {
+        return incoming || {};
+    }
     if (!existing || typeof existing !== 'object') return incoming || {};
     if (!incoming || typeof incoming !== 'object') return existing || {};
 
