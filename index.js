@@ -29,7 +29,8 @@ const {
 
 const {
     injectDateIntoStreams,
-    mergeMediaContents
+    mergeMediaContents,
+    isPlaceholder
 } = require('./src/media-merger');
 
 const hfDatabase = require('./src/hfDatabase');
@@ -1053,13 +1054,6 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
             parsedConteudo.type = 'movie';
         }
     }
-
-    const isPlaceholder = (name) => {
-        if (!name || typeof name !== 'string') return true;
-        const clean = name.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-        return clean === 'aieatorlo' || clean === 'aleatorio' || clean === 'aleatorlo' || clean === 'aieatorio' || clean === 'desconhecido' || clean === 'null' || clean === 'undefined' || clean === 'anonymous' || clean === 'anonimo';
-    };
-
     // Identifica quem está enviando (via Discord Token ou nick de uploader)
     const uploaderNick = user ? (user.global_name || user.username) : (req.body.uploader_nick || req.headers['x-uploader-nick'] || (adminAuthed ? 'Admin' : null));
     const uploaderId = user ? user.id : null;
@@ -1391,28 +1385,50 @@ app.all('/api/hf/database/sync', async (_req, res) => {
     }
 });
 
-app.delete('/api/delete', mutationLimiter, requireAdmin, async (req, res) => {
-    const { id } = req.body;
+const handleDeleteFile = async (req, res) => {
+    const id = req.body?.id || req.query?.id;
     if (!id || typeof id !== 'string') {
         return res.status(400).json({ erro: 'O nome/ID do arquivo é obrigatório.' });
+    }
+
+    const cleanId = id.trim();
+
+    if (process.env.DATABASE_SOURCE === 'huggingface') {
+        try {
+            const cleanNome = cleanId.replace(/^pendentes\//, '');
+            const targetFileName = cleanNome.endsWith('.json') ? cleanNome : `${cleanNome}.json`;
+            await deleteFileFromHf(targetFileName);
+            clearHfCache();
+            invalidateCatalogCache();
+            return res.json({ sucesso: true, mensagem: `Arquivo '${cleanId}' removido com sucesso do Hugging Face.` });
+        } catch (err) {
+            console.error('[HF Delete Error]:', err.message);
+            return res.status(500).json({ erro: `Erro ao remover arquivo no Hugging Face: ${err.message}` });
+        }
     }
 
     try {
         const query = `
             DELETE FROM arquivos_json 
-            WHERE nome_do_json = $1 OR conteudo->>'id' = $1;
+            WHERE nome_do_json = $1 
+               OR nome_do_json = $1 || '.json'
+               OR REPLACE(nome_do_json, '.json', '') = REPLACE($1, '.json', '')
+               OR conteudo->>'id' = $1;
         `;
-        const result = await pool.query(query, [id.trim()]);
+        const result = await pool.query(query, [cleanId]);
         if (result.rowCount === 0) {
             return res.status(404).json({ erro: 'Arquivo não encontrado.' });
         }
         invalidateCatalogCache();
-        res.json({ sucesso: true, mensagem: `Arquivo '${id}' removido com sucesso.` });
+        res.json({ sucesso: true, mensagem: `Arquivo '${cleanId}' removido com sucesso.` });
     } catch (err) {
         console.error('Erro ao deletar arquivo:', err.message);
         res.status(500).json({ erro: 'Erro ao apagar o arquivo do banco.' });
     }
-});
+};
+
+app.delete('/api/delete', mutationLimiter, requireAdminOrAjudante, handleDeleteFile);
+app.post('/api/delete', mutationLimiter, requireAdminOrAjudante, handleDeleteFile);
 
 app.get('/count', async (_req, res) => {
     if (process.env.DATABASE_SOURCE !== 'huggingface') {
@@ -1879,10 +1895,11 @@ app.get('/api/arquivos/pendentes', requireAdminOrAjudante, async (_req, res) => 
 
 const hasStreamLinks = (streams, type) => {
     if (!streams) return false;
-    if (type === 'movie' && Array.isArray(streams)) {
+    const resolvedType = type || (Array.isArray(streams) ? 'movie' : 'series');
+    if (resolvedType === 'movie' && Array.isArray(streams)) {
         return streams.length > 0;
     }
-    if (type === 'series' && typeof streams === 'object' && !Array.isArray(streams)) {
+    if (resolvedType === 'series' && typeof streams === 'object' && !Array.isArray(streams)) {
         for (const s in streams) {
             if (streams[s] && typeof streams[s] === 'object') {
                 for (const e in streams[s]) {
@@ -1897,7 +1914,8 @@ const hasStreamLinks = (streams, type) => {
 };
 
 const sanitizeStreamQualities = (streams, type, defaultQuality = '1080p') => {
-    if (type === 'movie' && Array.isArray(streams)) {
+    const resolvedType = type || (Array.isArray(streams) ? 'movie' : 'series');
+    if (resolvedType === 'movie' && Array.isArray(streams)) {
         streams.forEach(s => {
             if (s && typeof s === 'object') {
                 const parts = (s.name || '').split('\n');
@@ -1906,18 +1924,20 @@ const sanitizeStreamQualities = (streams, type, defaultQuality = '1080p') => {
                 s.name = `${audio}\n${quality}`;
             }
         });
-    } else if (type === 'series' && streams && typeof streams === 'object') {
+    } else if (resolvedType === 'series' && streams && typeof streams === 'object' && !Array.isArray(streams)) {
         for (const s in streams) {
-            for (const e in streams[s]) {
-                if (Array.isArray(streams[s][e])) {
-                    streams[s][e].forEach(str => {
-                        if (str && typeof str === 'object') {
-                            const parts = (str.name || '').split('\n');
-                            const audio = parts[0] ? parts[0].trim() : 'Dublado';
-                            const quality = (parts[1] && parts[1].trim() && parts[1].trim() !== 'Nenhuma') ? parts[1].trim() : defaultQuality;
-                            str.name = `${audio}\n${quality}`;
-                        }
-                    });
+            if (streams[s] && typeof streams[s] === 'object') {
+                for (const e in streams[s]) {
+                    if (Array.isArray(streams[s][e])) {
+                        streams[s][e].forEach(str => {
+                            if (str && typeof str === 'object') {
+                                const parts = (str.name || '').split('\n');
+                                const audio = parts[0] ? parts[0].trim() : 'Dublado';
+                                const quality = (parts[1] && parts[1].trim() && parts[1].trim() !== 'Nenhuma') ? parts[1].trim() : defaultQuality;
+                                str.name = `${audio}\n${quality}`;
+                            }
+                        });
+                    }
                 }
             }
         }
@@ -2011,6 +2031,14 @@ app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async
                 }
             }
 
+            if (!conteudoToSave.type) {
+                if (conteudoToSave.streams && typeof conteudoToSave.streams === 'object' && !Array.isArray(conteudoToSave.streams)) {
+                    conteudoToSave.type = 'series';
+                } else if (Array.isArray(conteudoToSave.streams)) {
+                    conteudoToSave.type = 'movie';
+                }
+            }
+
             if (!hasStreamLinks(conteudoToSave.streams, conteudoToSave.type)) {
                 return res.status(400).json({ erro: 'Não é permitido aprovar um conteúdo sem nenhuma stream (link).' });
             }
@@ -2022,14 +2050,15 @@ app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async
             await saveContentToHf(cleanNome, conteudoToSave);
 
             const pendingFileName = cleanNome.endsWith('.json') ? cleanNome : `${cleanNome}.json`;
-            if (restantePendente) {
+            const safeRestanteHf = (restantePendente && typeof restantePendente === 'string') ? JSON.parse(restantePendente) : restantePendente;
+            if (safeRestanteHf) {
                 let temRestante = false;
-                if (restantePendente.type === 'movie' && Array.isArray(restantePendente.streams) && restantePendente.streams.length > 0) {
+                if (safeRestanteHf.type === 'movie' && Array.isArray(safeRestanteHf.streams) && safeRestanteHf.streams.length > 0) {
                     temRestante = true;
-                } else if (restantePendente.type === 'series' && restantePendente.streams) {
-                    for (const s in restantePendente.streams) {
-                        for (const e in restantePendente.streams[s]) {
-                            if (Array.isArray(restantePendente.streams[s][e]) && restantePendente.streams[s][e].length > 0) {
+                } else if (safeRestanteHf.type === 'series' && safeRestanteHf.streams) {
+                    for (const s in safeRestanteHf.streams) {
+                        for (const e in safeRestanteHf.streams[s]) {
+                            if (Array.isArray(safeRestanteHf.streams[s][e]) && safeRestanteHf.streams[s][e].length > 0) {
                                 temRestante = true;
                                 break;
                             }
@@ -2039,7 +2068,7 @@ app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async
                 }
 
                 if (temRestante) {
-                    await savePendingToHf(cleanNome, restantePendente);
+                    await savePendingToHf(cleanNome, safeRestanteHf);
                 } else {
                     await deleteFileFromHf(`pendentes/${pendingFileName}`);
                 }
@@ -2130,12 +2159,23 @@ app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async
             }
         }
 
+        if (!conteudoToSave.type) {
+            if (conteudoToSave.streams && typeof conteudoToSave.streams === 'object' && !Array.isArray(conteudoToSave.streams)) {
+                conteudoToSave.type = 'series';
+            } else if (Array.isArray(conteudoToSave.streams)) {
+                conteudoToSave.type = 'movie';
+            }
+        }
+
         if (!hasStreamLinks(conteudoToSave.streams, conteudoToSave.type)) {
             await client.query('ROLLBACK');
             return res.status(400).json({ erro: 'Não é permitido aprovar um conteúdo sem nenhuma stream (link).' });
         }
 
         sanitizeStreamQualities(conteudoToSave.streams, conteudoToSave.type);
+
+        conteudoToSave.is_pendente = false;
+        conteudoToSave.is_oculto = false;
 
         const upsertQuery = `
             INSERT INTO arquivos_json (nome_do_json, conteudo, is_pendente) 
@@ -2146,14 +2186,15 @@ app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async
         await client.query(upsertQuery, [nome.trim(), JSON.stringify(conteudoToSave)]);
         invalidateCatalogCache();
 
-        if (restantePendente) {
+        const safeRestanteDb = (restantePendente && typeof restantePendente === 'string') ? JSON.parse(restantePendente) : restantePendente;
+        if (safeRestanteDb) {
             let temRestante = false;
-            if (restantePendente.type === 'movie' && Array.isArray(restantePendente.streams) && restantePendente.streams.length > 0) {
+            if (safeRestanteDb.type === 'movie' && Array.isArray(safeRestanteDb.streams) && safeRestanteDb.streams.length > 0) {
                 temRestante = true;
-            } else if (restantePendente.type === 'series' && restantePendente.streams) {
-                for (const s in restantePendente.streams) {
-                    for (const e in restantePendente.streams[s]) {
-                        if (Array.isArray(restantePendente.streams[s][e]) && restantePendente.streams[s][e].length > 0) {
+            } else if (safeRestanteDb.type === 'series' && safeRestanteDb.streams) {
+                for (const s in safeRestanteDb.streams) {
+                    for (const e in safeRestanteDb.streams[s]) {
+                        if (Array.isArray(safeRestanteDb.streams[s][e]) && safeRestanteDb.streams[s][e].length > 0) {
                             temRestante = true;
                             break;
                         }
@@ -2163,7 +2204,7 @@ app.post('/api/arquivos/aprovar', mutationLimiter, requireAdminOrAjudante, async
             }
 
             if (temRestante) {
-                await client.query('UPDATE envios_pendentes SET conteudo = $1 WHERE nome_do_json = $2;', [JSON.stringify(restantePendente), nome.trim()]);
+                await client.query('UPDATE envios_pendentes SET conteudo = $1 WHERE nome_do_json = $2;', [JSON.stringify(safeRestanteDb), nome.trim()]);
             } else {
                 await client.query('DELETE FROM envios_pendentes WHERE nome_do_json = $1;', [nome.trim()]);
             }
@@ -2233,8 +2274,8 @@ app.get('/api/denuncias', requireAdminOrAjudante, async (_req, res) => {
     }
 });
 
-app.delete('/api/denuncias/delete', mutationLimiter, requireAdminOrAjudante, async (req, res) => {
-    const { id } = req.body;
+const handleDeleteDenuncia = async (req, res) => {
+    const id = req.body?.id || req.query?.id;
     if (!id) {
         return res.status(400).json({ erro: 'ID da denúncia é obrigatório.' });
     }
@@ -2259,7 +2300,10 @@ app.delete('/api/denuncias/delete', mutationLimiter, requireAdminOrAjudante, asy
         console.error('Erro ao deletar denúncia:', err.message);
         res.status(500).json({ erro: 'Erro ao apagar denúncia do banco de dados.' });
     }
-});
+};
+
+app.delete('/api/denuncias/delete', mutationLimiter, requireAdminOrAjudante, handleDeleteDenuncia);
+app.post('/api/denuncias/delete', mutationLimiter, requireAdminOrAjudante, handleDeleteDenuncia);
 
 // Ranking de Colaboradores com Prevenção de Falha em Timestamps
 app.get('/api/colaboradores', async (req, res) => {

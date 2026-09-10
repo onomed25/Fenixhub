@@ -48,12 +48,12 @@
 
 
     
+    <link rel="stylesheet" href="/css/style.css">
     <style>
-
         :root {
             --bg: #05070D;
             --surface: #111827;
-            --surface-translucent: rgba(17, 24, 39, 0.6);
+            --surface-translucent: rgba(17, 24, 39, 0.7);
             --text: #FFF8F0;
             --text-soft: #D7DEE9;
             --primary: #FF6A00;
@@ -61,6 +61,7 @@
             --highlight: #FFB020;
             --danger: #E83D1C;
             --on-accent: #111827;
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
         }
 
         body { 
@@ -77,11 +78,17 @@
 
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 6px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 6px; }
         ::-webkit-scrollbar-thumb:hover { background: rgba(255,106,0,0.5); }
 
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Acessibilidade: Indicador de foco visual WCAG 2.1 AA */
+        :focus-visible {
+            outline: 2px solid var(--primary) !important;
+            outline-offset: 2px !important;
+        }
 
         /* Apple Design: Glassmorphism Inputs & Seletores Unificados */
         .input-unified {
@@ -178,13 +185,13 @@
         }
         
         .nav-btn.active { 
-            background: rgba(255,255,255,0.1); 
+            background: rgba(255,255,255,0.12); 
             color: var(--text); 
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
         }
         .nav-btn:hover:not(.active) {
             color: var(--text);
-            background: rgba(255,255,255,0.05);
+            background: rgba(255,255,255,0.06);
         }
 
         /* Apple Design: Spring Buttons */
@@ -211,8 +218,60 @@
         .toast { animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
         
         .progress-fill { transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
-    
-</style>
+
+        /* ==========================================================================
+           IMPECCABLE ADAPT: ADAPTAÇÕES ERGONÔMICAS & RESPONSIVAS
+           ========================================================================== */
+
+        /* Barra de Ações de Cards (Catálogo): Suporte a Toque vs Mouse */
+        .card-action-bar {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .group:hover .card-action-bar {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Dispositivos de toque: ações sempre acessíveis sem depender de hover */
+        @media (hover: none) and (pointer: coarse) {
+            .card-action-bar {
+                opacity: 0.95 !important;
+                pointer-events: auto !important;
+            }
+        }
+
+        /* Ilha de Navegação: Mobile Dock Ancorado vs Ilha Flutuante Desktop */
+        @media (max-width: 640px) {
+            .nav-floating-island {
+                bottom: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                transform: none !important;
+                width: 100% !important;
+                max-width: 100vw !important;
+                border-radius: 20px 20px 0 0 !important;
+                padding: 8px 8px calc(8px + var(--safe-bottom)) 8px !important;
+                border-left: none !important;
+                border-right: none !important;
+                border-bottom: none !important;
+                justify-content: space-around !important;
+                gap: 2px !important;
+                background: rgba(17, 24, 39, 0.94) !important;
+                backdrop-filter: blur(20px) !important;
+                -webkit-backdrop-filter: blur(20px) !important;
+                box-shadow: 0 -4px 20px rgba(0,0,0,0.5) !important;
+            }
+            .nav-floating-island .nav-btn {
+                padding: 10px 10px !important;
+                min-height: 44px !important;
+                min-width: 44px !important;
+                justify-content: center !important;
+                border-radius: 12px !important;
+            }
+        }
+    </style>
 
 </head>
 <body class="min-h-screen flex flex-col selection:bg-indigo-500/30">
@@ -228,53 +287,53 @@
             </div>
         </div>
         <div class="flex gap-3 items-center">
-            <button onclick="switchView('ranking'); loadRankingStats();" id="btn-ranking" class="nav-btn px-4 py-2 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0" title="Ranking">
+            <button onclick="switchView('ranking'); loadRankingStats();" id="btn-ranking" aria-label="Ver ranking de colaboradores" class="nav-btn px-4 py-2 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0" title="Ranking">
                 <i class="fa-solid fa-trophy text-yellow-500"></i> <span class="hidden md:inline text-zinc-300">Ranking</span>
             </button>
-            <a id="btn-addon" href="https://fenixflix-ur9u.onrender.com/" target="_blank" class="hidden px-4 py-2 rounded-full text-xs font-medium transition-colors items-center gap-2 bg-white hover:bg-zinc-200 text-obsidian-950 shrink-0 shadow-lg">
+            <a id="btn-addon" href="https://fenixflix-ur9u.onrender.com/" target="_blank" aria-label="Abrir extensão do navegador" class="hidden px-4 py-2 rounded-full text-xs font-medium transition-colors items-center gap-2 bg-white hover:bg-zinc-200 text-obsidian-950 shrink-0 shadow-lg">
                 <i class="fa-solid fa-puzzle-piece"></i> <span class="hidden sm:inline">Extensão</span>
             </a>
-            <a id="discordLoginBtn" href="/api/auth/discord" class="px-4 py-2 rounded-full text-xs font-medium transition-colors flex items-center gap-2 bg-indigo-600/10 hover:bg-indigo-600 border border-indigo-500/20 text-indigo-400 hover:text-white shrink-0">
+            <a id="discordLoginBtn" href="/api/auth/discord" aria-label="Fazer login com Discord" class="px-4 py-2 rounded-full text-xs font-medium transition-colors flex items-center gap-2 bg-indigo-600/10 hover:bg-indigo-600 border border-indigo-500/20 text-indigo-400 hover:text-white shrink-0">
                 <i class="fa-brands fa-discord"></i> <span class="hidden sm:inline">Discord</span>
             </a>
             <div id="discordUserAvatar" class="hidden items-center gap-1.5 px-2 py-1.5 rounded-full border border-obsidian-800 bg-obsidian-900 shrink-0">
-                <img id="discordAvatarImg" class="w-6 h-6 rounded-full object-cover" src="" alt="Avatar">
+                <img id="discordAvatarImg" class="w-6 h-6 rounded-full object-cover" src="" alt="Avatar do usuário Discord">
                 <!-- Nome Ocultado para poupar espaço -->
                 <span id="discordUserName" class="hidden"></span>
-                <button id="discordLogoutBtn" onclick="discordLogout()" class="text-red-400/80 hover:text-red-400 hover:bg-red-500/10 px-2 py-1 rounded-full transition-colors flex items-center gap-1.5" title="Sair do Discord">
+                <button id="discordLogoutBtn" onclick="discordLogout()" aria-label="Sair da conta Discord" class="text-red-400/80 hover:text-red-400 hover:bg-red-500/10 px-2 py-1 rounded-full transition-colors flex items-center gap-1.5" title="Sair do Discord">
                     <span class="text-xs font-medium">Sair</span>
                     <i class="fa-solid fa-right-from-bracket text-[10px]"></i>
                 </button>
             </div>
-            <button onclick="toggleAdminLogin()" id="btn-login-admin" class="px-4 py-2 rounded-full text-xs font-medium transition-colors flex items-center gap-2 border border-obsidian-800 bg-obsidian-900 text-zinc-400 hover:text-white hover:border-zinc-600 shrink-0">
+            <button onclick="toggleAdminLogin()" id="btn-login-admin" aria-label="Painel de login do administrador" class="px-4 py-2 rounded-full text-xs font-medium transition-colors flex items-center gap-2 border border-obsidian-800 bg-obsidian-900 text-zinc-400 hover:text-white hover:border-zinc-600 shrink-0">
                 <i class="fa-solid fa-user-shield"></i> <span class="hidden sm:inline">Admin</span>
             </button>
         </div>
     </header>
 
     <!-- Ilha de Navegação Flutuante -->
-    <nav class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-[var(--surface-translucent)] backdrop-blur-[24px] border border-white/10 rounded-full shadow-[0_20px_40px_rgba(0,0,0,0.5)] p-1.5 flex gap-1 items-center overflow-x-auto scrollbar-hide max-w-[95vw] sm:max-w-[90vw]">
-        <button onclick="switchView('generator')" id="btn-generator" class="nav-btn px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
+    <nav class="nav-floating-island fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-[var(--surface-translucent)] backdrop-blur-[24px] border border-white/10 rounded-full shadow-[0_20px_40px_rgba(0,0,0,0.5)] p-1.5 flex gap-1 items-center overflow-x-auto scrollbar-hide max-w-[95vw] sm:max-w-[90vw]">
+        <button onclick="switchView('generator')" id="btn-generator" aria-label="Aba Enviar links ou arquivos" class="nav-btn px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
             <i class="fa-solid fa-cloud-arrow-up text-sm"></i> <span class="hidden sm:inline">Enviar</span>
         </button>
-        <button onclick="switchView('requests'); reqProcessor.loadFromDB();" id="btn-requests" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
+        <button onclick="switchView('requests'); reqProcessor.loadFromDB();" id="btn-requests" aria-label="Aba Pedidos da comunidade" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
             <i class="fa-solid fa-list-check text-sm"></i> <span class="hidden md:inline">Pedidos</span>
         </button>
-        <button onclick="switchView('catalog'); setTimeout(() => cat.filter('all'), 50);" id="btn-catalog" class="nav-btn active px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
+        <button onclick="switchView('catalog'); setTimeout(() => cat.filter('all'), 50);" id="btn-catalog" aria-label="Aba Catálogo de filmes e séries" class="nav-btn active px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
             <i class="fa-solid fa-layer-group text-sm"></i> <span class="hidden sm:inline">Catálogo</span>
         </button>
-        <button onclick="switchView('storage'); loadStorageStats();" id="btn-storage" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
+        <button onclick="switchView('storage'); loadStorageStats();" id="btn-storage" aria-label="Aba Storage e contas conectadas" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
             <i class="fa-solid fa-database text-sm"></i> <span class="hidden sm:inline">Storage</span>
         </button>
-        <button onclick="switchView('reports'); loadReportsList();" id="btn-reports" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
+        <button onclick="switchView('reports'); loadReportsList();" id="btn-reports" aria-label="Aba Fila de denúncias" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
             <i class="fa-solid fa-triangle-exclamation text-sm"></i> <span class="hidden sm:inline">Denúncias</span>
         </button>
-        <button onclick="switchView('approvals'); loadApprovalsList();" id="btn-approvals" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
+        <button onclick="switchView('approvals'); loadApprovalsList();" id="btn-approvals" aria-label="Aba Fila de aprovação de conteúdos" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
             <i class="fa-solid fa-clipboard-check text-sm"></i> <span class="hidden sm:inline">Aprovar</span>
         </button>
     </nav>
 
-    <main class="flex-grow p-4 md:p-8 max-w-7xl mx-auto w-full pb-32">
+    <main class="flex-grow p-4 md:p-8 max-w-7xl mx-auto w-full pb-36 sm:pb-32 main-content-padded">
 
         <!-- ABA 1: GERADOR -->
         <div id="view-generator" class="tab-content">
@@ -1151,7 +1210,7 @@
                     <i class="fa-solid fa-code-merge text-indigo-500"></i> <span id="visualEditorTitle">Editar Conteúdo</span>
                     <span id="visualEditorSubtitle" class="text-xs md:text-sm font-normal text-zinc-500 ml-2"></span>
                 </h3>
-                <button onclick="gen.closeVisualEditor()" class="text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors w-10 h-10 rounded-full flex items-center justify-center">
+                <button onclick="gen.closeVisualEditor()" aria-label="Fechar editor visual" class="text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors w-10 h-10 rounded-full flex items-center justify-center">
                     <i class="fa-solid fa-xmark text-lg"></i>
                 </button>
             </div>
@@ -1222,15 +1281,15 @@
                 </div>
             </div>
             
-            <!-- Rodapé do Modal -->
-            <div class="px-6 py-4 border-t border-zinc-800/80 bg-zinc-900/50 flex flex-col md:flex-row justify-between items-center gap-4">
+            <!-- Rodapé do Modal com Ação Fixa (Evita Scroll Trap) -->
+            <div class="px-6 py-4 border-t border-zinc-800/80 bg-zinc-900/95 backdrop-blur-md shrink-0 sticky bottom-0 z-20 flex flex-col md:flex-row justify-between items-center gap-4">
                 <span class="text-xs text-zinc-400 flex items-center gap-2 hidden md:flex">
                     <i class="fa-solid fa-circle-info text-indigo-500/70"></i> 
                     Altere temporadas, episódios, áudio ou qualidade e clique em salvar.
                 </span>
                 <div class="flex gap-3 w-full md:w-auto">
-                    <button onclick="gen.closeVisualEditor()" class="flex-1 md:flex-none px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-colors text-xs md:text-sm font-semibold">Cancelar</button>
-                    <button onclick="gen.saveVisualEditor()" class="flex-1 md:flex-none px-6 py-2.5 bg-emerald-500 text-zinc-950 hover:bg-emerald-400 rounded-xl transition-colors text-xs md:text-sm font-extrabold shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2">
+                    <button onclick="gen.closeVisualEditor()" class="flex-1 md:flex-none px-5 py-2.5 min-h-[44px] bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-colors text-xs md:text-sm font-semibold flex items-center justify-center">Cancelar</button>
+                    <button onclick="gen.saveVisualEditor()" class="flex-1 md:flex-none px-6 py-2.5 min-h-[44px] bg-emerald-500 text-zinc-950 hover:bg-emerald-400 rounded-xl transition-colors text-xs md:text-sm font-extrabold shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2">
                         <i class="fa-solid fa-check"></i> Salvar Mudanças
                     </button>
                 </div>
@@ -1248,7 +1307,7 @@
                     </h3>
                     <p id="reportTargetLabel" class="text-xs text-zinc-400 mt-1 truncate max-w-[280px]"></p>
                 </div>
-                <button onclick="closeReportModal()" aria-label="Fechar Modal" class="text-zinc-500 hover:text-white bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 w-8 h-8 rounded-full transition flex items-center justify-center"><i class="fa-solid fa-xmark text-sm"></i></button>
+                <button onclick="closeReportModal()" aria-label="Fechar modal de denúncia" class="text-zinc-500 hover:text-white bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 w-9 h-9 rounded-full transition flex items-center justify-center"><i class="fa-solid fa-xmark text-sm"></i></button>
             </div>
             
             <form id="reportForm" onsubmit="submitReport(event)" class="space-y-4">
@@ -1272,8 +1331,8 @@
                 </div>
                 
                 <div class="flex gap-3 pt-2">
-                    <button type="button" onclick="closeReportModal()" class="flex-1 bg-zinc-950 hover:bg-zinc-800 text-zinc-400 border border-zinc-800 py-2.5 rounded-xl text-xs font-semibold transition-all">Cancelar</button>
-                    <button type="submit" class="flex-1 bg-red-600 hover:bg-red-500 text-white py-2.5 rounded-xl text-xs font-semibold transition-all shadow-sm">Enviar</button>
+                    <button type="button" onclick="closeReportModal()" class="flex-1 min-h-[44px] bg-zinc-950 hover:bg-zinc-800 text-zinc-400 border border-zinc-800 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center">Cancelar</button>
+                    <button type="submit" class="flex-1 min-h-[44px] bg-red-600 hover:bg-red-500 text-white py-2.5 rounded-xl text-xs font-semibold transition-all shadow-sm flex items-center justify-center">Enviar</button>
                 </div>
             </form>
         </div>
@@ -1336,7 +1395,7 @@
                 <h3 id="hfModalTitle" class="text-sm font-bold text-white flex items-center gap-2">
                     <i class="fa-solid fa-server text-amber-500"></i> Conectar Conta Servidor Teste
                 </h3>
-                <button onclick="hfStorage.closeAddModal()" aria-label="Fechar Modal" class="text-zinc-500 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+                <button onclick="hfStorage.closeAddModal()" aria-label="Fechar modal de conexão" class="text-zinc-500 hover:text-white w-9 h-9 rounded-full flex items-center justify-center transition hover:bg-zinc-800"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="space-y-3 text-xs">
                 <div>
@@ -1353,8 +1412,8 @@
                 </div>
             </div>
             <div class="flex justify-end gap-2 pt-3 border-t border-zinc-800">
-                <button onclick="hfStorage.closeAddModal()" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-medium transition">Cancelar</button>
-                <button onclick="hfStorage.saveAccount()" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold transition">Salvar Conta</button>
+                <button onclick="hfStorage.closeAddModal()" class="px-4 py-2.5 min-h-[44px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-medium transition flex items-center justify-center">Cancelar</button>
+                <button onclick="hfStorage.saveAccount()" class="px-5 py-2.5 min-h-[44px] bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center">Salvar Conta</button>
             </div>
         </div>
     </div>

@@ -72,7 +72,7 @@ function getStreamKey(stream) {
 function isPlaceholder(name) {
     if (!name || typeof name !== 'string') return true;
     const clean = name.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-    return clean === 'aieatorlo' || clean === 'aleatorio' || clean === 'aleatorlo' || clean === 'aieatorio' || clean === 'desconhecido' || clean === 'null' || clean === 'undefined';
+    return clean === 'aieatorlo' || clean === 'aleatorio' || clean === 'aleatorlo' || clean === 'aieatorio' || clean === 'desconhecido' || clean === 'null' || clean === 'undefined' || clean === 'anonymous' || clean === 'anonimo';
 }
 
 /**
@@ -241,5 +241,6 @@ module.exports = {
     injectDateIntoStreams,
     mergeMediaContents,
     mergeStreamArrays,
-    getStreamKey
+    getStreamKey,
+    isPlaceholder
 };

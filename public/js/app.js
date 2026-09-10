@@ -38,6 +38,12 @@ function clearDiscordSession() {
 
         const escapeHTML = str => (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\//g, '&#x2F;').replace(/\n/g, '&#10;');
 
+        const isPlaceholderNick = (n) => {
+            if (!n || typeof n !== 'string') return true;
+            const clean = n.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+            return clean === 'aieatorlo' || clean === 'aleatorio' || clean === 'aleatorlo' || clean === 'aieatorio' || clean === 'desconhecido' || clean === 'null' || clean === 'undefined' || clean === 'anonymous' || clean === 'anonimo';
+        };
+
         function resolveStreamPlaybackUrl(rawUrl) {
             if (!rawUrl || typeof rawUrl !== 'string') return '';
             let url = rawUrl.trim();
@@ -1115,7 +1121,8 @@ function clearDiscordSession() {
                 percentText.innerText = 'Processando...';
                 progressState.innerText = "Carregando e enviando para o Telegram...";
 
-                const headers = { 'Content-Type': 'application/json' , 'x-admin-password': typeof adminSenha !== 'undefined' ? adminSenha : (sessionStorage.getItem('fenixflix_senha') || '') };
+                const tgAdminSenha = sessionStorage.getItem('fenixflix_senha') || '';
+                const headers = { 'Content-Type': 'application/json' , 'x-admin-password': tgAdminSenha };
                 const session = localStorage.getItem('fenixflix_tg_session');
                 if (session) {
                     headers['X-Telegram-Session'] = session;
@@ -1236,7 +1243,8 @@ function clearDiscordSession() {
                     }
                     fileName += '.mp4';
 
-                    const headers = { 'Content-Type': 'application/json' , 'x-admin-password': typeof adminSenha !== 'undefined' ? adminSenha : (sessionStorage.getItem('fenixflix_senha') || '') };
+                    const tgAdminSenha = sessionStorage.getItem('fenixflix_senha') || '';
+                    const headers = { 'Content-Type': 'application/json' , 'x-admin-password': tgAdminSenha };
                     const session = localStorage.getItem('fenixflix_tg_session');
                     if (session) {
                         headers['X-Telegram-Session'] = session;
@@ -3339,12 +3347,6 @@ self.onmessage = async (e) => {
                 delete gen.currentData.overview;
                 delete gen.currentData.year;
                 
-                const isPlaceholderNick = (n) => {
-                    if (!n || typeof n !== 'string') return true;
-                    const clean = n.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-                    return clean === 'aieatorlo' || clean === 'aleatorio' || clean === 'aleatorlo' || clean === 'aieatorio' || clean === 'desconhecido' || clean === 'null' || clean === 'undefined';
-                };
-
                 const nick = document.getElementById('uploaderNick')?.value.trim()
                     || localStorage.getItem('discord_global_name')
                     || localStorage.getItem('discord_username')
@@ -4668,21 +4670,32 @@ self.onmessage = async (e) => {
             },
 
             deleteItem: async (id) => {
-                const senha = await getValidPassword(`Digite a senha do sistema para apagar o ficheiro ${id}:`);
-                if (!senha) return;
-                
-                if(!confirm(`Tem a certeza absoluta que quer apagar ${id}? Esta ação é irreversível.`)) return;
+                const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
+                const discordToken = localStorage.getItem('discord_token');
+                const isAjudante = localStorage.getItem('is_ajudante') === 'true';
+
+                let senha = adminSenha;
+                if (!senha && !isAjudante) {
+                    senha = await getValidPassword(`Digite a senha do sistema para apagar o ficheiro ${id}:`);
+                    if (!senha) return;
+                }
+
+                if (!confirm(`Tem a certeza absoluta que quer apagar ${id}? Esta ação é irreversível.`)) return;
 
                 try {
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (senha) headers['x-admin-password'] = senha;
+                    if (discordToken) headers['Authorization'] = `Bearer ${discordToken}`;
+
                     const response = await fetch(API_URL + '/api/delete', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers,
                         body: JSON.stringify({ id: id, senha: senha })
                     });
                     
                     const data = await response.json();
                     
-                    if(response.ok && data.sucesso) {
+                    if (response.ok && data.sucesso) {
                         cat.allItems = cat.allItems.filter(i => i.id !== id);
                         
                         const filterSelect = document.getElementById('cat-filter-type');
@@ -4690,11 +4703,14 @@ self.onmessage = async (e) => {
                         else cat.filter('all');
                         
                         cat.updateGlobalStats();
-                        showToast(`${id} removido!`, 'success');
+                        showToast(data.mensagem || `${id} removido!`, 'success');
                     } else {
-                        showToast(`Erro: ${data.erro}`, 'error');
+                        showToast(`Erro: ${data.erro || 'Falha ao apagar arquivo.'}`, 'error');
                     }
-                } catch(e) { showToast('Erro de conexão ao tentar apagar', 'error'); }
+                } catch(e) {
+                    console.error(e);
+                    showToast('Erro de conexão ao tentar apagar', 'error');
+                }
             },
 
             renderCard: (item) => {
@@ -4744,8 +4760,8 @@ self.onmessage = async (e) => {
                 const isAjudante = localStorage.getItem('is_ajudante') === 'true';
                 const isLogged = isAdminLogged || isAjudante;
                 const adminButtons = isLogged ? `
-                    <button onclick="event.stopPropagation(); cat.editInGenerator(${jsId})" class="bg-zinc-900/90 text-zinc-300 hover:text-white p-2 rounded-lg backdrop-blur-md border border-zinc-700/50 transition"><i class="fa-solid fa-pen text-[10px]"></i></button>
-                    <button onclick="event.stopPropagation(); cat.deleteItem(${jsId})" class="bg-zinc-900/90 text-red-400 hover:text-red-300 p-2 rounded-lg backdrop-blur-md border border-zinc-700/50 transition"><i class="fa-solid fa-trash text-[10px]"></i></button>
+                    <button onclick="event.stopPropagation(); cat.editInGenerator(${jsId})" aria-label="Editar ${safeTitle}" title="Editar" class="bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white p-2.5 rounded-xl backdrop-blur-md border border-zinc-700/60 transition flex items-center justify-center min-w-[34px] min-h-[34px]"><i class="fa-solid fa-pen text-xs"></i></button>
+                    <button onclick="event.stopPropagation(); cat.deleteItem(${jsId})" aria-label="Excluir ${safeTitle}" title="Excluir" class="bg-zinc-900/90 hover:bg-red-950/80 text-red-400 hover:text-red-300 p-2.5 rounded-xl backdrop-blur-md border border-zinc-700/60 hover:border-red-500/50 transition flex items-center justify-center min-w-[34px] min-h-[34px]"><i class="fa-solid fa-trash text-xs"></i></button>
                 ` : '';
 
                 const pendenteBadge = item.is_pendente ? `
@@ -4757,9 +4773,9 @@ self.onmessage = async (e) => {
                 return `
                 <div class="group bg-zinc-900 rounded-2xl overflow-hidden border ${item.is_pendente ? 'border-amber-500/50' : 'border-zinc-800'} hover:border-zinc-700 transition-all flex flex-col h-full cursor-pointer relative">
                     ${pendenteBadge}
-                    <div class="absolute top-2 left-2 flex-col gap-1.5 z-30 hidden group-hover:flex">
+                    <div class="card-action-bar absolute top-2 left-2 flex flex-col gap-1.5 z-30">
                         ${adminButtons}
-                        <button onclick="event.stopPropagation(); cat.downloadJson(${jsId})" class="bg-zinc-900/90 text-zinc-300 hover:text-white p-2 rounded-lg backdrop-blur-md border border-zinc-700/50 transition"><i class="fa-solid fa-download text-[10px]"></i></button>
+                        <button onclick="event.stopPropagation(); cat.downloadJson(${jsId})" aria-label="Baixar JSON de ${safeTitle}" title="Baixar JSON" class="bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white p-2.5 rounded-xl backdrop-blur-md border border-zinc-700/60 transition flex items-center justify-center min-w-[34px] min-h-[34px]"><i class="fa-solid fa-download text-xs"></i></button>
                     </div>
                     <div class="aspect-[2/3] bg-zinc-950 relative overflow-hidden" onclick="cat.openLinks(${jsId})">
                         ${posterHtml}
@@ -6803,15 +6819,15 @@ self.onmessage = async (e) => {
                                 ${dataStr}
                             </td>
                             <td class="py-3.5 pl-4 text-center">
-                                <div class="flex items-center justify-center gap-2">
-                                    <button onclick="previewFile(${jsNome})" class="w-8 h-8 rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 border border-blue-500/30 transition-colors" title="Visualizar/Testar">
-                                        <i class="fa-solid fa-eye text-[10px]"></i>
+                                <div class="flex items-center justify-center gap-2.5">
+                                    <button onclick="previewFile(${jsNome})" aria-label="Visualizar e testar ${escapeHTML(title)}" class="w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 transition-colors flex items-center justify-center" title="Visualizar/Testar">
+                                        <i class="fa-solid fa-eye text-xs"></i>
                                     </button>
-                                    <button onclick="approveFile(${jsNome})" class="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30 transition-colors" title="Aprovar">
-                                        <i class="fa-solid fa-check text-[10px]"></i>
+                                    <button onclick="approveFile(${jsNome})" aria-label="Aprovar e publicar ${escapeHTML(title)}" class="w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 transition-colors flex items-center justify-center" title="Aprovar">
+                                        <i class="fa-solid fa-check text-xs"></i>
                                     </button>
-                                    <button onclick="rejectFile(${jsNome})" class="w-8 h-8 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/30 transition-colors" title="Rejeitar">
-                                        <i class="fa-solid fa-xmark text-[10px]"></i>
+                                    <button onclick="rejectFile(${jsNome})" aria-label="Rejeitar envio de ${escapeHTML(title)}" class="w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30 transition-colors flex items-center justify-center" title="Rejeitar">
+                                        <i class="fa-solid fa-xmark text-xs"></i>
                                     </button>
                                 </div>
                             </td>
@@ -6920,10 +6936,19 @@ self.onmessage = async (e) => {
                 
                 let finalContent = liveContent ? JSON.parse(JSON.stringify(liveContent)) : JSON.parse(JSON.stringify(pendente.conteudo));
                 
-                if (type === 'movie' && !finalContent.streams) finalContent.streams = [];
-                if (type === 'series' && !finalContent.streams) finalContent.streams = {};
+                if (type === 'movie') {
+                    finalContent.streams = liveContent && Array.isArray(liveContent.streams) ? [...liveContent.streams] : [];
+                } else if (type === 'series') {
+                    finalContent.streams = liveContent && liveContent.streams && typeof liveContent.streams === 'object' && !Array.isArray(liveContent.streams)
+                        ? JSON.parse(JSON.stringify(liveContent.streams))
+                        : {};
+                }
+
+                let remainingStreamsMovie = [];
+                let remainingStreamsSeries = {};
 
                 const newStreamsProcessed = new Set();
+                let approvedStreamsCount = 0;
 
                 inputs.forEach(input => {
                     const idx = input.getAttribute('data-idx');
@@ -6941,31 +6966,41 @@ self.onmessage = async (e) => {
                     const newSeason = type === 'series' ? (modal.querySelector(`.season-input${selector}`)?.value || season || '1') : null;
                     const newEp = type === 'series' ? (modal.querySelector(`.ep-input${selector}`)?.value || ep || '1') : null;
 
-                    if (!isChecked || !urlVal) return;
-
                     if (type === 'movie') {
-                        if (pendente.conteudo.streams[idx] && !newStreamsProcessed.has(idx)) {
-                            newStreamsProcessed.add(idx);
-                            let s = { ...pendente.conteudo.streams[idx] };
-                            s.url = urlVal;
-                            s.name = `${audioVal}\n${qualityVal}`;
+                        const originalStream = pendente.conteudo.streams ? pendente.conteudo.streams[idx] : null;
+                        if (!originalStream) return;
 
-                            if ((!s.colaborador || isPlaceholderNick(s.colaborador)) && pendente.conteudo.colaborador) {
-                                s.colaborador = pendente.conteudo.colaborador;
-                                s.colaborador_id = pendente.conteudo.colaborador_id;
-                                s.colaborador_avatar = pendente.conteudo.colaborador_avatar;
-                                s.colaborador_role = pendente.conteudo.colaborador_role;
+                        if (isChecked && urlVal) {
+                            if (!newStreamsProcessed.has(idx)) {
+                                newStreamsProcessed.add(idx);
+                                approvedStreamsCount++;
+                                let s = { ...originalStream };
+                                s.url = urlVal;
+                                s.name = `${audioVal}\n${qualityVal}`;
+
+                                if ((!s.colaborador || isPlaceholderNick(s.colaborador)) && pendente.conteudo.colaborador) {
+                                    s.colaborador = pendente.conteudo.colaborador;
+                                    s.colaborador_id = pendente.conteudo.colaborador_id;
+                                    s.colaborador_avatar = pendente.conteudo.colaborador_avatar;
+                                    s.colaborador_role = pendente.conteudo.colaborador_role;
+                                }
+                                
+                                finalContent.streams = finalContent.streams.filter(x => x.url !== s.url);
+                                finalContent.streams.push(s);
                             }
-                            
-                            finalContent.streams = finalContent.streams.filter(x => x.url !== s.url);
-                            finalContent.streams.push(s);
+                        } else {
+                            remainingStreamsMovie.push(originalStream);
                         }
                     } else {
-                        if (season && ep && pendente.conteudo.streams[season] && pendente.conteudo.streams[season][ep] && pendente.conteudo.streams[season][ep][idx]) {
-                            const uniqueKey = season + '-' + ep + '-' + idx;
+                        const originalStream = (season && ep && pendente.conteudo.streams?.[season]?.[ep]) ? pendente.conteudo.streams[season][ep][idx] : null;
+                        if (!originalStream) return;
+
+                        const uniqueKey = season + '-' + ep + '-' + idx;
+                        if (isChecked && urlVal) {
                             if (!newStreamsProcessed.has(uniqueKey)) {
                                 newStreamsProcessed.add(uniqueKey);
-                                let s = { ...pendente.conteudo.streams[season][ep][idx] };
+                                approvedStreamsCount++;
+                                let s = { ...originalStream };
                                 s.url = urlVal;
                                 s.name = `${audioVal}\n${qualityVal}`;
 
@@ -6982,15 +7017,30 @@ self.onmessage = async (e) => {
                                 finalContent.streams[newSeason][newEp] = finalContent.streams[newSeason][newEp].filter(x => x.url !== s.url);
                                 finalContent.streams[newSeason][newEp].push(s);
                             }
+                        } else {
+                            if (!remainingStreamsSeries[season]) remainingStreamsSeries[season] = {};
+                            if (!remainingStreamsSeries[season][ep]) remainingStreamsSeries[season][ep] = [];
+                            remainingStreamsSeries[season][ep].push(originalStream);
                         }
                     }
                 });
+
+                if (approvedStreamsCount === 0) {
+                    return showToast("Selecione pelo menos um link válido para aprovar!", "warning");
+                }
 
                 if ((!finalContent.colaborador || isPlaceholderNick(finalContent.colaborador)) && pendente.conteudo.colaborador) {
                     finalContent.colaborador = pendente.conteudo.colaborador;
                     finalContent.colaborador_id = pendente.conteudo.colaborador_id;
                     finalContent.colaborador_avatar = pendente.conteudo.colaborador_avatar;
                     finalContent.colaborador_role = pendente.conteudo.colaborador_role;
+                }
+
+                let restantePendente = null;
+                if (type === 'movie' && remainingStreamsMovie.length > 0) {
+                    restantePendente = { ...pendente.conteudo, streams: remainingStreamsMovie };
+                } else if (type === 'series' && Object.keys(remainingStreamsSeries).length > 0) {
+                    restantePendente = { ...pendente.conteudo, streams: remainingStreamsSeries };
                 }
 
                 const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
@@ -7003,7 +7053,7 @@ self.onmessage = async (e) => {
                     const res = await fetch(API_URL + '/api/arquivos/aprovar', {
                         method: 'POST',
                         headers,
-                        body: JSON.stringify({ nome, senha: adminSenha, conteudo: finalContent })
+                        body: JSON.stringify({ nome, senha: adminSenha, conteudo: finalContent, restantePendente })
                     });
                     const data = await res.json();
                     if (res.ok) {
@@ -7081,7 +7131,7 @@ self.onmessage = async (e) => {
                         <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1 block">URL do Vídeo</label>
                         <div class="flex gap-2">
                             <input type="text" class="stream-edit-input url-input flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-indigo-300 font-mono outline-none focus:border-indigo-500 transition" ${dataAttr} value="${escapeHTML(displayUrl)}">
-                            <button type="button" onclick="playInPreview(this.parentElement.querySelector('.url-input').value)" class="shrink-0 px-3 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition">
+                            <button type="button" onclick="playInPreview(this.parentElement.querySelector('.url-input').value)" aria-label="Testar reprodução deste link de vídeo" class="shrink-0 px-3.5 py-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition">
                                 <i class="fa-solid fa-play text-[10px]"></i> Testar
                             </button>
                         </div>
@@ -7136,7 +7186,7 @@ self.onmessage = async (e) => {
                                 <span class="text-[10px] text-zinc-500 font-mono">${escapeHTML(nome)} ${year ? '• ' + year : ''}</span>
                             </div>
                         </div>
-                        <button onclick="document.getElementById('previewModal').remove()" class="text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 w-8 h-8 rounded-full flex items-center justify-center transition">
+                        <button onclick="document.getElementById('previewModal').remove()" aria-label="Fechar janela de revisão" class="text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 w-9 h-9 rounded-full flex items-center justify-center transition">
                             <i class="fa-solid fa-xmark text-sm"></i>
                         </button>
                     </div>
@@ -7145,11 +7195,11 @@ self.onmessage = async (e) => {
                         <!-- Lado Esquerdo: Player de Teste -->
                         <div class="w-full md:w-[45%] p-4 bg-black/60 border-b md:border-b-0 md:border-r border-zinc-800/80 flex flex-col justify-center items-center relative group shrink-0">
                             <video id="previewPlayer" controls class="w-full max-h-[220px] md:max-h-[380px] rounded-xl shadow-lg ring-1 ring-white/10 hidden bg-black"></video>
-                            <div id="previewEmptyState" class="text-zinc-600 text-xs flex flex-col items-center gap-2 py-8">
+                            <div id="previewEmptyState" class="text-zinc-400 text-xs flex flex-col items-center gap-2 py-6 md:py-8">
                                 <div class="w-12 h-12 rounded-full bg-zinc-900 flex items-center justify-center">
-                                    <i class="fa-solid fa-play text-xl text-zinc-600"></i>
+                                    <i class="fa-solid fa-play text-xl text-zinc-400"></i>
                                 </div>
-                                <p class="font-medium text-center text-zinc-500">Clique em "Testar" em qualquer link ao lado para reproduzir aqui.</p>
+                                <p class="font-medium text-center text-zinc-300">Clique em "Testar" em qualquer link ao lado para reproduzir aqui.</p>
                             </div>
                         </div>
                         
@@ -7159,14 +7209,15 @@ self.onmessage = async (e) => {
                         </div>
                     </div>
                     
-                    <div class="px-6 py-3 border-t border-zinc-800/80 bg-zinc-900/60 flex justify-between items-center gap-3">
+                    <!-- Rodapé Fixo com Ação Rápida (Evita Scroll Trap) -->
+                    <div class="px-6 py-3 border-t border-zinc-800/80 bg-zinc-900/95 backdrop-blur-md shrink-0 sticky bottom-0 z-20 flex justify-between items-center gap-3">
                         <span class="text-[11px] text-zinc-400 flex items-center gap-1.5 hidden sm:flex">
                             <i class="fa-solid fa-circle-info text-indigo-400"></i> 
                             Apenas os streams marcados com "Aprovar" serão adicionados ao catálogo.
                         </span>
                         <div class="flex gap-2 w-full sm:w-auto justify-end">
-                            <button onclick="document.getElementById('previewModal').remove()" class="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded-xl text-xs font-semibold transition">Cancelar</button>
-                            <button onclick="previewSaveChanges()" class="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-emerald-500/20">
+                            <button onclick="document.getElementById('previewModal').remove()" class="flex-1 sm:flex-none px-4 py-2.5 min-h-[44px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded-xl text-xs font-semibold transition flex items-center justify-center">Cancelar</button>
+                            <button onclick="previewSaveChanges()" class="flex-1 sm:flex-none px-5 py-2.5 min-h-[44px] bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20">
                                 <i class="fa-solid fa-check"></i> Salvar e Publicar
                             </button>
                         </div>
