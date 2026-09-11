@@ -103,14 +103,6 @@ app.use(cors({
 // ============================================================================
 // RATE LIMITERS ESPECIALIZADOS (SEC-05)
 // ============================================================================
-const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 600,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { erro: 'Muitas requisições deste IP, tente novamente mais tarde.' }
-});
-
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 15,
@@ -143,8 +135,6 @@ const submissionLimiter = rateLimit({
     message: { erro: 'Muitos envios/pedidos realizados. Tente novamente mais tarde.' }
 });
 
-app.use('/api/', apiLimiter);
-app.use('/count', apiLimiter);
 
 // Multer para payloads de formulário (apenas multipart textual sem arquivos)
 const upload = multer();
