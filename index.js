@@ -211,9 +211,6 @@ function getAdminPassword(req) {
     if (req.body && typeof req.body.senha === 'string' && req.body.senha.trim()) {
         return req.body.senha.trim();
     }
-    if (req.query && typeof req.query.senha === 'string' && req.query.senha.trim()) {
-        return req.query.senha.trim();
-    }
     return null;
 }
 
@@ -1350,8 +1347,8 @@ app.get('/api/catalog', async (req, res) => {
     }
 });
 
-// Testar conexão e diagnóstico do repositório Hugging Face Database
-app.get('/api/hf/database/test', async (_req, res) => {
+// Testar conexão e diagnóstico do repositório Hugging Face Database (Protegido contra vazamento de informações)
+app.get('/api/hf/database/test', requireAdmin, async (_req, res) => {
     try {
         const testResult = await testHfDatabaseConnection();
         res.json(testResult);
@@ -1360,8 +1357,8 @@ app.get('/api/hf/database/test', async (_req, res) => {
     }
 });
 
-// Sincronizar catálogo do Hugging Face manualmente
-app.all('/api/hf/database/sync', async (_req, res) => {
+// Sincronizar catálogo do Hugging Face manualmente (Protegido contra DoS e esgotamento de quota)
+app.post('/api/hf/database/sync', requireAdmin, async (_req, res) => {
     try {
         const items = await fetchCatalogFromHf(true);
         invalidateCatalogCache();

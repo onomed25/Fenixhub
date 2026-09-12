@@ -856,7 +856,7 @@ function clearDiscordSession() {
                         item.innerHTML = `
                             <div class="flex items-center gap-2 truncate">
                                 <i class="fa-solid fa-spinner fa-spin text-sky-500" id="tg-queue-icon-${index}"></i>
-                                <span class="text-xs text-zinc-300 truncate" title="${file.name}">${file.name}</span>
+                                <span class="text-xs text-zinc-300 truncate" title="${escapeHTML(file.name)}">${escapeHTML(file.name)}</span>
                             </div>
                             <span class="text-[10px] text-zinc-500 font-mono" id="tg-queue-status-${index}">Aguardando...</span>
                         `;
@@ -1780,7 +1780,7 @@ self.onmessage = async (e) => {
                     const headers = { 'x-admin-password': adminSenha };
                     if (discordToken) headers['Authorization'] = `Bearer ${discordToken}`;
 
-                    const res = await fetch(`/api/hf/accounts/${encodeURIComponent(id)}?senha=${encodeURIComponent(adminSenha)}`, {
+                    const res = await fetch(`/api/hf/accounts/${encodeURIComponent(id)}`, {
                         method: 'DELETE',
                         headers
                     });
@@ -2088,7 +2088,7 @@ self.onmessage = async (e) => {
                         const typeName = item.media_type === 'movie' ? 'Filme' : 'Série';
                         
                         const posterHtml = item.poster_path 
-                            ? `<img src="https://image.tmdb.org/t/p/w92${escapeHTML(item.poster_path)}" class="w-8 h-12 object-cover rounded border border-zinc-800 shrink-0">` 
+                            ? `<img src="https://image.tmdb.org/t/p/w92${escapeHTML(item.poster_path)}" alt="${escapeHTML(title || 'Poster')}" loading="lazy" decoding="async" class="w-8 h-12 object-cover rounded border border-zinc-800 shrink-0">` 
                             : `<div class="w-8 h-12 bg-zinc-900 border border-zinc-800 rounded flex items-center justify-center shrink-0"><i class="fa-solid fa-image text-[10px] text-zinc-700"></i></div>`;
                         
                         const btnEl = document.createElement('button');
@@ -2511,7 +2511,7 @@ self.onmessage = async (e) => {
                         } flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between`;
                         
                         const stillHtml = ep.still_path 
-                            ? `<img src="https://image.tmdb.org/t/p/w185${escapeHTML(ep.still_path)}" class="w-full h-full object-cover" loading="lazy">` 
+                            ? `<img src="https://image.tmdb.org/t/p/w185${escapeHTML(ep.still_path)}" alt="Still do Episódio ${ep.episode_number || ''}" class="w-full h-full object-cover" loading="lazy" decoding="async">` 
                             : `<div class="w-full h-full flex items-center justify-center text-zinc-600"><i class="fa-solid fa-film text-xs"></i></div>`;
                             
                         const airDate = ep.air_date 
@@ -4248,11 +4248,15 @@ self.onmessage = async (e) => {
                 
                 cat.isLoadingMore = true;
                 cat.visibleCount += 36;
-                cat.renderFiltered();
+                cat.renderFiltered(true);
+                
+                if (typeof cat.fetchMissingMetadata === 'function') {
+                    cat.fetchMissingMetadata();
+                }
                 
                 setTimeout(() => {
                     cat.isLoadingMore = false;
-                }, 200); // Throttle de 200ms
+                }, 150); // Throttle de 150ms
             },
 
             renderDbPausedState: () => {
@@ -4460,14 +4464,18 @@ self.onmessage = async (e) => {
                 }
             },
 
+            searchTimeout: null,
             search: (query) => {
-                const term = query.toLowerCase();
-                if (!term) { cat.filter('all'); return; }
-                cat.filteredItems = cat.allItems.filter(item => 
-                    (item.title && item.title.toLowerCase().includes(term)) || 
-                    (item.id && item.id.includes(term))
-                );
-                cat.sort(cat.currentSort);
+                clearTimeout(cat.searchTimeout);
+                cat.searchTimeout = setTimeout(() => {
+                    const term = (query || '').toLowerCase().trim();
+                    if (!term) { cat.filter('all'); return; }
+                    cat.filteredItems = cat.allItems.filter(item => 
+                        (item.title && item.title.toLowerCase().includes(term)) || 
+                        (item.id && item.id.includes(term))
+                    );
+                    cat.sort(cat.currentSort);
+                }, 180);
             },
 
             getItemTimestamp: (item) => {
@@ -4720,7 +4728,7 @@ self.onmessage = async (e) => {
                 const safeYear = escapeHTML(item.year || '');
                 const jsId = JSON.stringify(item.id).replace(/"/g, '&quot;');
                 
-                const posterHtml = item.poster ? `<img src="${safePoster}" alt="${safeTitle}" loading="lazy" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 opacity-90 group-hover:opacity-100">` : `<div class="flex flex-col items-center justify-center h-full bg-zinc-900 text-zinc-700"><i class="fa-solid fa-image text-3xl mb-2"></i><span class="text-[10px]">${safeId}</span></div>`;
+                const posterHtml = item.poster ? `<img src="${safePoster}" alt="${safeTitle}" loading="lazy" decoding="async" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 opacity-90 group-hover:opacity-100">` : `<div class="flex flex-col items-center justify-center h-full bg-zinc-900 text-zinc-700"><i class="fa-solid fa-image text-3xl mb-2"></i><span class="text-[10px]">${safeId}</span></div>`;
 
                 let footerHtml = '';
                 if (item.type === 'series') {
@@ -4937,12 +4945,15 @@ self.onmessage = async (e) => {
 
             renderFiltered: (append = false) => {
                 const container = document.getElementById('gridContainer');
-                if(!cat.filteredItems.length) { container.innerHTML = '<div class="col-span-full text-center text-zinc-600 py-12 text-sm">Nenhum resultado.</div>'; return; }
+                if (!container) return;
+                if (!cat.filteredItems.length) { container.innerHTML = '<div class="col-span-full text-center text-zinc-600 py-12 text-sm">Nenhum resultado.</div>'; return; }
                 
                 if (append) {
                     // Render only the new batch
-                    const itemsToRender = cat.filteredItems.slice(cat.visibleCount - 50, cat.visibleCount);
-                    container.insertAdjacentHTML('beforeend', itemsToRender.map(item => cat.renderCard(item)).join(''));
+                    const itemsToRender = cat.filteredItems.slice(cat.visibleCount - 36, cat.visibleCount);
+                    if (itemsToRender.length > 0) {
+                        container.insertAdjacentHTML('beforeend', itemsToRender.map(item => cat.renderCard(item)).join(''));
+                    }
                 } else {
                     // Full re-render on initial load or search
                     const itemsToRender = cat.filteredItems.slice(0, cat.visibleCount);
@@ -5342,15 +5353,15 @@ self.onmessage = async (e) => {
                         
                         <!-- Overlay de Qualidade dentro do Player -->
                         <div id="playerOverlayMeta" class="absolute top-3 left-3 z-30 bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 px-2.5 py-1.5 rounded-lg text-[9px] text-zinc-300 font-medium select-none shadow-2xl pointer-events-none transition-opacity duration-500 opacity-0 group-hover:opacity-100 flex items-center gap-2">
-                            <i class="fa-solid fa-circle-info text-indigo-400"></i>
+                            <i class="fa-solid fa-circle-info text-primary"></i>
                             <span>Resolução: <b id="playerOverlayRes" class="text-zinc-200 font-mono">-</b></span>
                             <span class="text-zinc-700">|</span>
                             <span id="playerOverlayMatch" class="flex items-center gap-1 font-semibold"></span>
                         </div>
 
                         <div id="playerPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950 text-zinc-500 p-4 text-center">
-                            ${item.poster ? `<img src="${escapeHTML(item.poster)}" class="absolute inset-0 w-full h-full object-cover opacity-15 blur-md pointer-events-none">` : ''}
-                            <i class="fa-solid fa-circle-play text-5xl mb-3 text-indigo-500 opacity-90 animate-pulse relative z-10"></i>
+                            ${item.poster ? `<img src="${escapeHTML(item.poster)}" alt="" aria-hidden="true" loading="lazy" decoding="async" class="absolute inset-0 w-full h-full object-cover opacity-15 blur-md pointer-events-none">` : ''}
+                            <i class="fa-solid fa-circle-play text-5xl mb-3 text-primary opacity-90 animate-pulse relative z-10"></i>
                             <p class="text-sm font-semibold text-zinc-200 relative z-10">Selecione uma opção abaixo para assistir</p>
                             <p class="text-xs text-zinc-500 mt-1 relative z-10">O player rodará diretamente no site sem exibir o link.</p>
                         </div>
@@ -5960,16 +5971,37 @@ self.onmessage = async (e) => {
                 if (reqProcessor.visibleCount >= reqProcessor.filteredItems.length) return;
                 
                 reqProcessor.isLoadingMore = true;
+                const prev = reqProcessor.visibleCount;
                 reqProcessor.visibleCount += 50;
-                reqProcessor.renderFiltered();
+                const container = document.getElementById('req-results-container');
+                if (container) {
+                    const newBatch = reqProcessor.filteredItems.slice(prev, reqProcessor.visibleCount);
+                    if (newBatch.length > 0) {
+                        const today = new Date().toISOString().split('T')[0];
+                        container.insertAdjacentHTML('beforeend', newBatch.map(item => reqProcessor.renderRow(item, today)).join(''));
+                    }
+                }
                 
                 setTimeout(() => {
                     reqProcessor.isLoadingMore = false;
                 }, 100);
             },
 
-            renderList: () => {
+            renderListTimeout: null,
+            renderList: (immediate = false) => {
+                clearTimeout(reqProcessor.renderListTimeout);
+                if (immediate) {
+                    reqProcessor._doRenderList();
+                } else {
+                    reqProcessor.renderListTimeout = setTimeout(() => {
+                        reqProcessor._doRenderList();
+                    }, 150);
+                }
+            },
+
+            _doRenderList: () => {
                 const container = document.getElementById('req-results-container');
+                if (!container) return;
                 if (reqProcessor.parsedItems.size === 0) {
                     container.innerHTML = '<div class="text-center py-8 text-zinc-600 text-sm">Nenhum resultado.</div>';
                     return;
@@ -6004,63 +6036,62 @@ self.onmessage = async (e) => {
                 reqProcessor.renderFiltered();
             },
 
+            renderRow: (item, today) => {
+                const typeName = item.type === 'movie' ? 'Filme' : 'Série';
+                const countBadge = (item.count > 1) ? `<span class="text-zinc-500 text-[10px] font-medium ml-2">${item.count} pedidos</span>` : '';
+
+                const isUnreleased = item.releaseDate && item.releaseDate > today;
+                const unreleasedBadge = isUnreleased 
+                    ? `<span class="text-[9px] text-amber-500 font-semibold uppercase tracking-widest border border-amber-500/30 bg-amber-500/10 px-1.5 rounded ml-1.5">Não Lançado (${item.releaseDate})</span>`
+                    : '';
+
+                let epsHtml = '';
+                if (item.type === 'series' && item.missingEps && item.missingEps.size > 0) {
+                    const epsArray = Array.from(item.missingEps).sort((a, b) => {
+                        const pa = a.match(/(\d+)/g)?.map(Number) || [0,0];
+                        const pb = b.match(/(\d+)/g)?.map(Number) || [0,0];
+                        return pa[0] !== pb[0] ? pa[0] - pb[0] : (pa[1]||0) - (pb[1]||0);
+                    });
+                    const epTags = epsArray.map(ep => `<span class="bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-md px-2 py-1 text-[10px] font-mono">${escapeHTML(ep)}</span>`).join('');
+                    epsHtml = `<div class="mt-3 flex flex-wrap gap-1.5">${epTags}</div>`;
+                }
+
+                const isLogged = sessionStorage.getItem('fenixflix_senha') !== null;
+                const jsId = JSON.stringify(item.id).replace(/"/g, '&quot;');
+                const removeBtnHtml = isLogged ? `<button onclick="reqProcessor.removeItem(${jsId})" class="text-zinc-700 hover:text-red-400 transition p-2"><i class="fa-solid fa-xmark"></i></button>` : '';
+
+                return `
+                    <div class="bg-zinc-950 p-4 rounded-xl border border-zinc-900 flex flex-col group">
+                        <div class="flex items-center justify-between">
+                            <div class="overflow-hidden">
+                                <div class="flex items-center gap-2">
+                                    <h4 class="font-medium text-white text-sm truncate">${escapeHTML(item.title)}</h4>
+                                    <span class="text-[9px] text-zinc-500 uppercase tracking-widest border border-zinc-800 px-1.5 rounded">${typeName}</span>
+                                    ${unreleasedBadge}
+                                </div>
+                                <div class="flex items-center mt-1">
+                                    <span class="font-mono text-[10px] text-zinc-600">${escapeHTML(item.id)}</span>
+                                    ${countBadge}
+                                </div>
+                            </div>
+                            ${removeBtnHtml}
+                        </div>
+                        ${epsHtml}
+                    </div>
+                `;
+            },
+
             renderFiltered: () => {
                 const container = document.getElementById('req-results-container');
+                if (!container) return;
                 if (reqProcessor.filteredItems.length === 0) {
                     container.innerHTML = '<div class="text-center py-8 text-zinc-600 text-sm">Nenhum resultado.</div>';
                     return;
                 }
 
                 const today = new Date().toISOString().split('T')[0];
-                let html = '';
                 const itemsToRender = reqProcessor.filteredItems.slice(0, reqProcessor.visibleCount);
-                
-                itemsToRender.forEach(item => {
-                    const typeName = item.type === 'movie' ? 'Filme' : 'Série';
-                    const countBadge = (item.count > 1) ? `<span class="text-zinc-500 text-[10px] font-medium ml-2">${item.count} pedidos</span>` : '';
-
-                    const isUnreleased = item.releaseDate && item.releaseDate > today;
-                    const unreleasedBadge = isUnreleased 
-                        ? `<span class="text-[9px] text-amber-500 font-semibold uppercase tracking-widest border border-amber-500/30 bg-amber-500/10 px-1.5 rounded ml-1.5">Não Lançado (${item.releaseDate})</span>`
-                        : '';
-
-                    let epsHtml = '';
-                    if (item.type === 'series' && item.missingEps.size > 0) {
-                        const epsArray = Array.from(item.missingEps).sort((a, b) => {
-                            const pa = a.match(/(\d+)/g)?.map(Number) || [0,0];
-                            const pb = b.match(/(\d+)/g)?.map(Number) || [0,0];
-                            return pa[0] !== pb[0] ? pa[0] - pb[0] : (pa[1]||0) - (pb[1]||0);
-                        });
-                        const epTags = epsArray.map(ep => `<span class="bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-md px-2 py-1 text-[10px] font-mono">${escapeHTML(ep)}</span>`).join('');
-                        epsHtml = `<div class="mt-3 flex flex-wrap gap-1.5">${epTags}</div>`;
-                    }
-
-                    const isLogged = sessionStorage.getItem('fenixflix_senha') !== null;
-                    const jsId = JSON.stringify(item.id).replace(/"/g, '&quot;');
-                    const removeBtnHtml = isLogged ? `<button onclick="reqProcessor.removeItem(${jsId})" class="text-zinc-700 hover:text-red-400 transition p-2"><i class="fa-solid fa-xmark"></i></button>` : '';
-
-                    html += `
-                        <div class="bg-zinc-950 p-4 rounded-xl border border-zinc-900 flex flex-col group">
-                            <div class="flex items-center justify-between">
-                                <div class="overflow-hidden">
-                                    <div class="flex items-center gap-2">
-                                        <h4 class="font-medium text-white text-sm truncate">${escapeHTML(item.title)}</h4>
-                                        <span class="text-[9px] text-zinc-500 uppercase tracking-widest border border-zinc-800 px-1.5 rounded">${typeName}</span>
-                                        ${unreleasedBadge}
-                                    </div>
-                                    <div class="flex items-center mt-1">
-                                        <span class="font-mono text-[10px] text-zinc-600">${escapeHTML(item.id)}</span>
-                                        ${countBadge}
-                                    </div>
-                                </div>
-                                ${removeBtnHtml}
-                            </div>
-                            ${epsHtml}
-                        </div>
-                    `;
-                });
-
-                container.innerHTML = html;
+                container.innerHTML = itemsToRender.map(item => reqProcessor.renderRow(item, today)).join('');
             },
 
             removeItem: async (id) => {
@@ -6723,12 +6754,12 @@ self.onmessage = async (e) => {
                         let avatarImgHtml = `<i class="fa-solid fa-user text-zinc-400 text-sm"></i>`;
                         if (col.discord_id && col.avatar) {
                             const avatarUrl = `https://cdn.discordapp.com/avatars/${col.discord_id}/${col.avatar}.png?size=64`;
-                            avatarImgHtml = `<img src="${avatarUrl}" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
+                            avatarImgHtml = `<img src="${avatarUrl}" alt="Avatar de ${safeNick}" loading="lazy" decoding="async" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
                         } else if (col.discord_id) {
                             // Calcula avatar padrão caso não tenha hash de avatar mas tenha ID
                             const defaultIdx = (parseInt(col.discord_id.slice(-4)) || 0) % 5;
                             const defaultAvatarUrl = `https://cdn.discordapp.com/embed/avatars/${defaultIdx}.png`;
-                            avatarImgHtml = `<img src="${defaultAvatarUrl}" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
+                            avatarImgHtml = `<img src="${defaultAvatarUrl}" alt="Avatar de ${safeNick}" loading="lazy" decoding="async" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
                         }
 
                         tcHtml += `
@@ -7367,5 +7398,31 @@ self.onmessage = async (e) => {
                     }
                 }
             }, 100); // Limita verificação a cada 100ms
+        }, { passive: true });
+
+        // Hardening: Gerenciamento acessível de tecla Escape para fechar modais e popovers abertos
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const reportModal = document.getElementById('reportModal');
+                if (reportModal && !reportModal.classList.contains('hidden')) {
+                    closeReportModal();
+                    return;
+                }
+                const visualEditorModal = document.getElementById('visualEditorModal');
+                if (visualEditorModal && !visualEditorModal.classList.contains('hidden')) {
+                    if (typeof gen !== 'undefined' && gen.closeVisualEditor) gen.closeVisualEditor();
+                    return;
+                }
+                const hfModal = document.getElementById('hfAddAccountModal');
+                if (hfModal && !hfModal.classList.contains('hidden')) {
+                    if (typeof hfStorage !== 'undefined' && hfStorage.closeAddModal) hfStorage.closeAddModal();
+                    return;
+                }
+                const searchResults = document.getElementById('tmdbSearchResults');
+                if (searchResults && !searchResults.classList.contains('hidden')) {
+                    searchResults.classList.add('hidden');
+                    return;
+                }
+            }
         });
     

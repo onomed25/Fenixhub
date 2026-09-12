@@ -21,6 +21,24 @@ function clearHfCache() {
 }
 
 /**
+ * Sanitiza um caminho de arquivo para operações no Hugging Face, prevenindo Directory Traversal
+ * @param {string} rawPath Caminho bruto
+ * @returns {string} Caminho seguro normalizado
+ */
+function sanitizeHfFilePath(rawPath) {
+    if (!rawPath || typeof rawPath !== 'string') {
+        throw new Error('Caminho de arquivo inválido.');
+    }
+    const cleaned = rawPath.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+    const normalized = path.posix.normalize(cleaned.replace(/\\/g, '/')).replace(/^\/+/, '');
+    const segments = normalized.split('/');
+    if (!normalized || segments.some(s => s === '..' || s === '.')) {
+        throw new Error('Caminho de arquivo não permitido (tentativa de directory traversal).');
+    }
+    return normalized;
+}
+
+/**
  * Testa a autenticação e permissões de acesso ao repositório Hugging Face
  */
 async function testHfDatabaseConnection() {
@@ -248,7 +266,12 @@ function getItemTimestampHf(item) {
  */
 async function getContentFromHf(nomeOrId) {
     if (!nomeOrId) return null;
-    const clean = String(nomeOrId).trim();
+    let clean;
+    try {
+        clean = sanitizeHfFilePath(String(nomeOrId));
+    } catch (_) {
+        return null;
+    }
     const cleanLower = clean.toLowerCase();
     const cleanNoExt = cleanLower.replace(/\.json$/, '');
 
@@ -326,7 +349,7 @@ async function saveContentToHf(nome, conteudo) {
         throw new Error('Módulo @huggingface/hub não instalado no servidor. Adicione ao package.json.');
     }
 
-    const cleanNome = String(nome).trim();
+    const cleanNome = sanitizeHfFilePath(nome);
     const fileName = cleanNome.endsWith('.json') ? cleanNome : `${cleanNome}.json`;
     const contentStr = typeof conteudo === 'string' ? conteudo : JSON.stringify(conteudo, null, 2);
 
@@ -355,8 +378,10 @@ async function saveContentToHf(nome, conteudo) {
  * Salva um arquivo na pasta de pendentes (pendentes/<nome>.json) no Hugging Face
  */
 async function savePendingToHf(nome, conteudo) {
-    const cleanNome = String(nome).trim().replace(/^pendentes\//, '');
-    const fileName = cleanNome.endsWith('.json') ? cleanNome : `${cleanNome}.json`;
+    const rawClean = String(nome).trim().replace(/^pendentes\//, '');
+    const cleanBase = path.posix.basename(rawClean);
+    const safeBase = sanitizeHfFilePath(cleanBase);
+    const fileName = safeBase.endsWith('.json') ? safeBase : `${safeBase}.json`;
     return await saveContentToHf(`pendentes/${fileName}`, conteudo);
 }
 
@@ -415,8 +440,15 @@ async function fetchPendingFromHf() {
  */
 async function getPendingContentFromHf(nome) {
     if (!nome) return null;
-    const clean = String(nome).trim().replace(/^pendentes\//, '');
-    const fileName = clean.endsWith('.json') ? clean : `${clean}.json`;
+    let safeBase;
+    try {
+        const rawClean = String(nome).trim().replace(/^pendentes\//, '');
+        const cleanBase = path.posix.basename(rawClean);
+        safeBase = sanitizeHfFilePath(cleanBase);
+    } catch (_) {
+        return null;
+    }
+    const fileName = safeBase.endsWith('.json') ? safeBase : `${safeBase}.json`;
     return await getContentFromHf(`pendentes/${fileName}`);
 }
 
@@ -437,7 +469,7 @@ async function deleteFileFromHf(filePath) {
         throw new Error('Módulo @huggingface/hub não instalado ou desatualizado.');
     }
 
-    const cleanPath = String(filePath).trim();
+    const cleanPath = sanitizeHfFilePath(filePath);
 
     try {
         await deleteFile({
@@ -456,6 +488,7 @@ async function deleteFileFromHf(filePath) {
 module.exports = {
     getHfDbConfig,
     clearHfCache,
+    sanitizeHfFilePath,
     testHfDatabaseConnection,
     fetchCatalogFromHf,
     getContentFromHf,

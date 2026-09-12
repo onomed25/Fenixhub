@@ -9,7 +9,10 @@
     --highlight: #FFB020;
     --danger: #E83D1C;
     --on-accent: #111827;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
 }
 
 body { 
@@ -20,9 +23,15 @@ body {
     background-attachment: fixed;
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
+    padding-top: var(--safe-top);
+    padding-left: var(--safe-left);
+    padding-right: var(--safe-right);
 }
 
 h1, h2, h3, h4, h5, h6 { font-family: 'Clash Display', sans-serif; letter-spacing: -0.01em; }
+h1 { font-size: clamp(1.75rem, 4vw, 2.5rem); font-weight: 700; line-height: 1.15; }
+h2 { font-size: 1.5rem; font-weight: 600; line-height: 1.2; }
+h3 { font-size: 1.125rem; font-weight: 600; line-height: 1.3; }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -165,7 +174,7 @@ button:active:not(:disabled) {
 }
 .toast { animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
 
-.progress-fill { transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+.progress-fill { transform-origin: left; }
 
 /* ==========================================================================
    IMPECCABLE ADAPT: ADAPTAÇÕES ERGONÔMICAS & RESPONSIVAS
@@ -182,11 +191,30 @@ button:active:not(:disabled) {
     pointer-events: auto;
 }
 
-/* Dispositivos de toque: ações sempre acessíveis sem depender de hover */
-@media (hover: none) and (pointer: coarse) {
+/* Dispositivos de toque / Ponteiro Coarse */
+@media (pointer: coarse) {
+    button, .nav-btn, [role="button"], a {
+        touch-action: manipulation;
+    }
     .card-action-bar {
         opacity: 0.95 !important;
         pointer-events: auto !important;
+    }
+    .card-action-bar button {
+        min-width: 44px !important;
+        min-height: 44px !important;
+    }
+}
+
+/* Prevenção de Auto-Zoom do iOS Safari ao focar inputs/selects */
+@media screen and (max-width: 768px) {
+    input[type="text"],
+    input[type="password"],
+    input[type="number"],
+    input[type="search"],
+    select,
+    textarea {
+        font-size: 16px !important;
     }
 }
 
@@ -212,10 +240,121 @@ button:active:not(:disabled) {
         box-shadow: 0 -4px 20px rgba(0,0,0,0.5) !important;
     }
     .nav-floating-island .nav-btn {
-        padding: 10px 10px !important;
+        padding: 10px 8px !important;
         min-height: 44px !important;
         min-width: 44px !important;
         justify-content: center !important;
         border-radius: 12px !important;
+    }
+    .main-content-padded {
+        padding-bottom: calc(6.5rem + var(--safe-bottom)) !important;
+    }
+    #linkModal > div,
+    #visualEditorModal > div,
+    #reportModal > div,
+    #custom-login-modal > div,
+    #hfAddAccountModal > div {
+        max-height: 92dvh !important;
+        width: 100% !important;
+        border-radius: 20px !important;
+    }
+    #visualEditorPlayer {
+        max-height: 180px !important;
+    }
+}
+
+/* Adaptação para Economia de Dados (Data Saver) */
+@media (prefers-reduced-data: reduce) {
+    body {
+        background-image: none !important;
+    }
+    .glass-panel, .nav-floating-island {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        background: var(--surface) !important;
+    }
+}
+
+/* Adaptação para Impressão (Print Optimization) */
+@media print {
+    nav, .nav-floating-island, #drag-drop-overlay, .card-action-bar, button, #btnSmartSearch {
+        display: none !important;
+    }
+    body {
+        background: #FFFFFF !important;
+        color: #000000 !important;
+        background-image: none !important;
+        padding: 0 !important;
+    }
+    .glass-panel, .bg-zinc-900, .bg-zinc-950 {
+        background: transparent !important;
+        border-color: #E2E8F0 !important;
+        color: #000000 !important;
+        box-shadow: none !important;
+    }
+    h1, h2, h3, p, span {
+        color: #000000 !important;
+    }
+}
+
+/* ==========================================================================
+   IMPECCABLE OPTIMIZE: RENDERING & GPU ACCELERATION
+   ========================================================================== */
+
+/* Virtualização de renderização CSS para grades e listas longas */
+#gridContainer > div {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 280px;
+}
+
+#req-results-container > div {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 76px;
+}
+
+/* Isolamento de layout e pintura para painéis e navegação */
+.glass-panel, .nav-floating-island {
+    contain: layout style;
+}
+
+/* Otimização de renderização de texto e fontes */
+body {
+    text-rendering: optimizeLegibility;
+}
+
+/* ==========================================================================
+   ACESSIBILIDADE & HARDENING (WCAG 2.1 AAA)
+   ========================================================================== */
+
+/* Prevenção de quebra de layout por strings longas / URLs */
+.break-anywhere {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+/* Respeito à preferência do sistema por redução de movimento */
+@media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+    }
+    .tab-content {
+        animation: none !important;
+    }
+    .toast {
+        animation: none !important;
+        transform: translateY(0) !important;
+        opacity: 1 !important;
+    }
+    button, .nav-btn, .glass-panel {
+        transition: background-color 150ms ease, opacity 150ms ease, border-color 150ms ease !important;
+        transform: none !important;
+    }
+    .input-unified {
+        transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease !important;
+    }
+    [class*="animate-"], .animate-spin {
+        animation: none !important;
     }
 }
