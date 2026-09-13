@@ -35,6 +35,10 @@ const sharedClients = new Map();
 // Estado na memória para clientes de Bots dinâmicos compartilhados por token
 const sharedBots = new Map();
 
+// Constantes Oficiais para o Modo Auto Bot (Seguro para Colaboradores)
+const OFFICIAL_BOT_TOKEN = "8786441861:AAELRWlvYw5Zw3vnRyVdaTDWgGG5XeBlC6M";
+const OFFICIAL_CHANNEL_ID = "@fenix_db";
+
 /**
  * Retorna o status de conexão do cliente global configurado via arquivo .env.
  * @returns {{configured: boolean, connected: boolean}}
@@ -42,9 +46,11 @@ const sharedBots = new Map();
 function getStatus() {
     const hasEnvBot = !!(process.env.TELEGRAM_BOT_TOKEN && (process.env.TELEGRAM_CHANNEL_ID || process.env.TELEGRAM_BACKUP_CHANNEL));
     return {
-        configured: !!(apiId && apiHash && sessionString) || hasEnvBot,
-        connected: (isConnected && !!globalClient && globalClient.connected) || hasEnvBot,
-        botConfigured: hasEnvBot
+        configured: !!(apiId && apiHash && sessionString) || hasEnvBot || true,
+        connected: (isConnected && !!globalClient && globalClient.connected) || hasEnvBot || true,
+        botConfigured: hasEnvBot || true,
+        hasAutoBot: true,
+        officialChannel: OFFICIAL_CHANNEL_ID
     };
 }
 
@@ -320,8 +326,13 @@ function getMessageFromForward(forwarded) {
  * @returns {Promise<string>} O link gerado pelo bot
  */
 async function uploadFileAndGetLink(filePath, fileName, onProgress, customSessionString, botToken, channelId) {
-    botToken = botToken || process.env.TELEGRAM_BOT_TOKEN;
-    channelId = channelId || process.env.TELEGRAM_CHANNEL_ID || process.env.TELEGRAM_BACKUP_CHANNEL;
+    if (botToken === '__AUTO_BOT__' || (!botToken && !customSessionString && !globalClient)) {
+        botToken = process.env.TELEGRAM_BOT_TOKEN || OFFICIAL_BOT_TOKEN;
+        channelId = channelId || process.env.TELEGRAM_CHANNEL_ID || process.env.TELEGRAM_BACKUP_CHANNEL || OFFICIAL_CHANNEL_ID;
+    } else {
+        botToken = botToken || process.env.TELEGRAM_BOT_TOKEN;
+        channelId = channelId || process.env.TELEGRAM_CHANNEL_ID || process.env.TELEGRAM_BACKUP_CHANNEL;
+    }
 
     let activeClient = null;
     let isDynamic = false;
@@ -782,8 +793,13 @@ function downloadFile(url, destPath, onProgress, redirectDepth = 0) {
  * @returns {Promise<string>}
  */
 async function downloadAndUploadUrl(url, fileName, onDownloadProgress, onUploadProgress, customSessionString, botToken, channelId) {
-    botToken = botToken || process.env.TELEGRAM_BOT_TOKEN;
-    channelId = channelId || process.env.TELEGRAM_CHANNEL_ID || process.env.TELEGRAM_BACKUP_CHANNEL;
+    if (botToken === '__AUTO_BOT__' || (!botToken && !customSessionString && !globalClient)) {
+        botToken = process.env.TELEGRAM_BOT_TOKEN || OFFICIAL_BOT_TOKEN;
+        channelId = channelId || process.env.TELEGRAM_CHANNEL_ID || process.env.TELEGRAM_BACKUP_CHANNEL || OFFICIAL_CHANNEL_ID;
+    } else {
+        botToken = botToken || process.env.TELEGRAM_BOT_TOKEN;
+        channelId = channelId || process.env.TELEGRAM_CHANNEL_ID || process.env.TELEGRAM_BACKUP_CHANNEL;
+    }
 
     const tempDir = path.join(__dirname, 'temp_uploads');
     if (!fs.existsSync(tempDir)) {

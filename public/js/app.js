@@ -553,7 +553,8 @@ function clearDiscordSession() {
                 }
 
                 if (botDirectCheckbox) {
-                    botDirectCheckbox.checked = localStorage.getItem('fenixflix_tg_use_bot_direct') === 'true';
+                    const saved = localStorage.getItem('fenixflix_tg_use_bot_direct');
+                    botDirectCheckbox.checked = saved !== null ? saved === 'true' : tg.isPrivileged();
                 }
 
                 await tg.checkStatus();
@@ -613,6 +614,12 @@ function clearDiscordSession() {
                 const feedbackText = document.getElementById('tgFeedbackText');
                 const botNoLoginContainer = document.getElementById('tgBotNoLoginOption');
                 const botDirectCheckbox = document.getElementById('tgUseBotDirect');
+                const botTokenInput = document.getElementById('tgBotToken');
+                const channelIdInput = document.getElementById('tgChannelId');
+                const botTokenShield = document.getElementById('tgBotTokenShield');
+                const autoBotNotice = document.getElementById('tgAutoBotNotice');
+                const botTokenBadge = document.getElementById('tgBotTokenBadge');
+                const channelBadge = document.getElementById('tgChannelBadge');
 
                 const hasLocalSession = localStorage.getItem('fenixflix_tg_session') !== null;
                 const isPrivileged = tg.isPrivileged();
@@ -632,7 +639,7 @@ function clearDiscordSession() {
                 if (useBotDirect) {
                     if (badge) {
                         badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800";
-                        badge.innerText = "Modo Bot (Autorizado)";
+                        badge.innerText = "Auto Bot Oficial (@fenix_db)";
                     }
                     if (btnToggle) {
                         btnToggle.innerText = "Conta Pessoal";
@@ -640,8 +647,31 @@ function clearDiscordSession() {
                     }
                     if (btnBrowser) btnBrowser.disabled = false;
                     if (btnLocal) btnLocal.disabled = false;
-                    if (feedbackText) feedbackText.innerText = "Modo Bot ativo: você pode enviar arquivos sem precisar conectar conta pessoal do Telegram.";
+                    if (feedbackText) feedbackText.innerText = "Auto Bot Oficial ativo: vídeos são postados automaticamente no canal @fenix_db com link de stream direto.";
+                    
+                    if (botTokenInput) {
+                        botTokenInput.value = "••••••••••••••••••••••••••••••••";
+                        botTokenInput.disabled = true;
+                        botTokenInput.type = "password";
+                    }
+                    if (channelIdInput && (!channelIdInput.value || channelIdInput.value === '@fenix_db')) {
+                        channelIdInput.value = "@fenix_db";
+                    }
+                    if (botTokenShield) botTokenShield.classList.remove('hidden');
+                    if (autoBotNotice) autoBotNotice.classList.remove('hidden');
+                    if (botTokenBadge) botTokenBadge.innerText = "Protegido (Oficial)";
+                    if (channelBadge) channelBadge.innerText = "Canal Oficial (@fenix_db)";
                     return;
+                } else {
+                    if (botTokenInput && botTokenInput.disabled) {
+                        botTokenInput.disabled = false;
+                        botTokenInput.type = "password";
+                        botTokenInput.value = localStorage.getItem('fenixflix_tg_bot_token') || '';
+                    }
+                    if (botTokenShield) botTokenShield.classList.add('hidden');
+                    if (autoBotNotice) autoBotNotice.classList.add('hidden');
+                    if (botTokenBadge) botTokenBadge.innerText = "Obrigatório no Modo Bot";
+                    if (channelBadge) channelBadge.innerText = "O bot deve ser admin";
                 }
 
                 if (hasLocalSession) {
@@ -883,16 +913,16 @@ function clearDiscordSession() {
                 // 1. Ordena os arquivos de forma natural (ex: Episódio 2 antes de Episódio 10)
                 files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
-                const botTokenInput = document.getElementById('tgBotToken').value.trim();
-                const channelId = document.getElementById('tgChannelId').value.trim();
-                const botTokens = botTokenInput ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
-                const hasBotConfig = botTokens.length > 0 && channelId;
-
+                const botTokenInput = (document.getElementById('tgBotToken')?.value || '').trim();
+                const channelId = (document.getElementById('tgChannelId')?.value || '').trim();
                 const botDirectCheckbox = document.getElementById('tgUseBotDirect');
-                const useBotDirect = botDirectCheckbox && botDirectCheckbox.checked;
+                const isAutoBot = tg.isPrivileged() && botDirectCheckbox && botDirectCheckbox.checked;
+                const isMaskedToken = botTokenInput.includes('••••');
+                const botTokens = (botTokenInput && !isMaskedToken) ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
+                const hasBotConfig = botTokens.length > 0 && channelId;
                 const session = localStorage.getItem('fenixflix_tg_session');
 
-                if ((useBotDirect || !session) && (!botTokenInput || !channelId)) {
+                if (!isAutoBot && !session && (!botTokenInput || !channelId)) {
                     const advContent = document.getElementById('tgAdvancedContent');
                     if (advContent && advContent.classList.contains('hidden')) {
                         tg.toggleAdvanced();
@@ -966,28 +996,17 @@ function clearDiscordSession() {
                         const xhr = new XMLHttpRequest();
                         xhr.open('POST', TELEGRAM_API_URL + '/api/telegram/upload', true);
 
-                        const session = localStorage.getItem('fenixflix_tg_session');
-                        const useBotDirect = tg.isPrivileged() && (localStorage.getItem('fenixflix_tg_use_bot_direct') === 'true' || !session);
-
-                        if (session && !useBotDirect) {
+                        if (session && !isAutoBot) {
                             xhr.setRequestHeader('X-Telegram-Session', session);
                         }
 
-                        if (hasBotConfig) {
-                            if (useBotDirect || !session) {
-                                const activeBotToken = botTokens[index % botTokens.length];
-                                xhr.setRequestHeader('X-Telegram-Bot-Token', activeBotToken);
-                                xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
-                            } else {
-                                const uploaderIndex = index % (botTokens.length + 1);
-                                if (uploaderIndex === 0) {
-                                    xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
-                                } else {
-                                    const activeBotToken = botTokens[uploaderIndex - 1];
-                                    xhr.setRequestHeader('X-Telegram-Bot-Token', activeBotToken);
-                                    xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
-                                }
-                            }
+                        if (isAutoBot) {
+                            xhr.setRequestHeader('X-Telegram-Use-Auto-Bot', 'true');
+                            xhr.setRequestHeader('X-Telegram-Channel-Id', channelId || '@fenix_db');
+                        } else if (hasBotConfig) {
+                            const activeBotToken = botTokens[index % botTokens.length];
+                            xhr.setRequestHeader('X-Telegram-Bot-Token', activeBotToken);
+                            xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
                         } else if (channelId) {
                             xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
                         }
@@ -1197,14 +1216,15 @@ function clearDiscordSession() {
                     return showToast("O arquivo local precisa ser um vídeo (mp4, mkv, etc.)!", "error");
                 }
 
-                const botTokenInput = document.getElementById('tgBotToken').value.trim();
-                const channelId = document.getElementById('tgChannelId').value.trim();
-                const botTokens = botTokenInput ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
+                const botTokenInput = (document.getElementById('tgBotToken')?.value || '').trim();
+                const channelId = (document.getElementById('tgChannelId')?.value || '').trim();
                 const botDirectCheckbox = document.getElementById('tgUseBotDirect');
-                const useBotDirect = botDirectCheckbox && botDirectCheckbox.checked;
+                const isAutoBot = tg.isPrivileged() && botDirectCheckbox && botDirectCheckbox.checked;
+                const isMaskedToken = botTokenInput.includes('••••');
+                const botTokens = (botTokenInput && !isMaskedToken) ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
                 const session = localStorage.getItem('fenixflix_tg_session');
 
-                if ((useBotDirect || !session) && (!botTokenInput || !channelId)) {
+                if (!isAutoBot && !session && (!botTokenInput || !channelId)) {
                     const advContent = document.getElementById('tgAdvancedContent');
                     if (advContent && advContent.classList.contains('hidden')) {
                         tg.toggleAdvanced();
@@ -1230,15 +1250,20 @@ function clearDiscordSession() {
 
                 const tgAdminSenha = sessionStorage.getItem('fenixflix_senha') || '';
                 const headers = { 'Content-Type': 'application/json' , 'x-admin-password': tgAdminSenha };
-                if (session) {
+                if (session && !isAutoBot) {
                     headers['X-Telegram-Session'] = session;
                 }
 
-                if (botTokens.length > 0) {
-                    headers['X-Telegram-Bot-Token'] = botTokens[0];
-                }
-                if (channelId) {
-                    headers['X-Telegram-Channel-Id'] = channelId;
+                if (isAutoBot) {
+                    headers['X-Telegram-Use-Auto-Bot'] = 'true';
+                    headers['X-Telegram-Channel-Id'] = channelId || '@fenix_db';
+                } else {
+                    if (botTokens.length > 0) {
+                        headers['X-Telegram-Bot-Token'] = botTokens[0];
+                    }
+                    if (channelId) {
+                        headers['X-Telegram-Channel-Id'] = channelId;
+                    }
                 }
 
                 try {
@@ -1295,9 +1320,12 @@ function clearDiscordSession() {
                     return showToast("Nenhum link externo pendente para conversão.", "info");
                 }
 
-                const botTokenInput = document.getElementById('tgBotToken').value.trim();
-                const channelId = document.getElementById('tgChannelId').value.trim();
-                const botTokens = botTokenInput ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
+                const botTokenInput = (document.getElementById('tgBotToken')?.value || '').trim();
+                const channelId = (document.getElementById('tgChannelId')?.value || '').trim();
+                const botDirectCheckbox = document.getElementById('tgUseBotDirect');
+                const isAutoBot = tg.isPrivileged() && botDirectCheckbox && botDirectCheckbox.checked;
+                const isMaskedToken = botTokenInput.includes('••••');
+                const botTokens = (botTokenInput && !isMaskedToken) ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
                 const hasBotConfig = botTokens.length > 0 && channelId;
                 // Força concorrência = 2
                 const concurrencyLimit = 2;
@@ -1349,27 +1377,18 @@ function clearDiscordSession() {
                     const tgAdminSenha = sessionStorage.getItem('fenixflix_senha') || '';
                     const headers = { 'Content-Type': 'application/json' , 'x-admin-password': tgAdminSenha };
                     const session = localStorage.getItem('fenixflix_tg_session');
-                    const useBotDirect = tg.isPrivileged() && (localStorage.getItem('fenixflix_tg_use_bot_direct') === 'true' || !session);
 
-                    if (session && !useBotDirect) {
+                    if (session && !isAutoBot) {
                         headers['X-Telegram-Session'] = session;
                     }
 
-                    if (hasBotConfig) {
-                        if (useBotDirect || !session) {
-                            const activeBotToken = botTokens[index % botTokens.length];
-                            headers['X-Telegram-Bot-Token'] = activeBotToken;
-                            headers['X-Telegram-Channel-Id'] = channelId;
-                        } else {
-                            const uploaderIndex = index % (botTokens.length + 1);
-                            if (uploaderIndex === 0) {
-                                headers['X-Telegram-Channel-Id'] = channelId;
-                            } else {
-                                const activeBotToken = botTokens[uploaderIndex - 1];
-                                headers['X-Telegram-Bot-Token'] = activeBotToken;
-                                headers['X-Telegram-Channel-Id'] = channelId;
-                            }
-                        }
+                    if (isAutoBot) {
+                        headers['X-Telegram-Use-Auto-Bot'] = 'true';
+                        headers['X-Telegram-Channel-Id'] = channelId || '@fenix_db';
+                    } else if (hasBotConfig) {
+                        const activeBotToken = botTokens[index % botTokens.length];
+                        headers['X-Telegram-Bot-Token'] = activeBotToken;
+                        headers['X-Telegram-Channel-Id'] = channelId;
                     } else if (channelId) {
                         headers['X-Telegram-Channel-Id'] = channelId;
                     }
@@ -4839,7 +4858,7 @@ self.onmessage = async (e) => {
                 const safeYear = escapeHTML(item.year || '');
                 const jsId = JSON.stringify(item.id).replace(/"/g, '&quot;');
                 
-                const posterHtml = item.poster ? `<img src="${safePoster}" alt="${safeTitle}" loading="lazy" decoding="async" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 opacity-90 group-hover:opacity-100">` : `<div class="flex flex-col items-center justify-center h-full bg-zinc-900 text-zinc-700"><i class="fa-solid fa-image text-3xl mb-2"></i><span class="text-[10px]">${safeId}</span></div>`;
+                const posterHtml = item.poster ? `<img src="${safePoster}" alt="${safeTitle}" loading="lazy" decoding="async" onerror="this.onerror=null; this.classList.add('hidden'); if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 opacity-90 group-hover:opacity-100"><div class="hidden flex flex-col items-center justify-center h-full bg-zinc-900 text-zinc-600 p-3 text-center"><i class="fa-solid fa-image text-2xl mb-1.5 text-zinc-700"></i><span class="text-xs line-clamp-2">${safeTitle}</span></div>` : `<div class="flex flex-col items-center justify-center h-full bg-zinc-900 text-zinc-700 p-3 text-center"><i class="fa-solid fa-image text-2xl mb-1.5 text-zinc-700"></i><span class="text-xs line-clamp-2">${safeTitle}</span></div>`;
 
                 let footerHtml = '';
                 if (item.type === 'series') {
@@ -4855,16 +4874,16 @@ self.onmessage = async (e) => {
                         if (totalExpected > 0) {
                             if (missing === 0) {
                                 barColor = 'bg-emerald-500';
-                                statusText = `<span class="text-emerald-500 font-semibold text-[10px]">${seasonLabel ? `${seasonLabel} • ` : ''}Completo</span>`;
+                                statusText = `<span class="text-emerald-500 font-semibold text-xs">${seasonLabel ? `${seasonLabel} • ` : ''}Completo</span>`;
                             } else {
                                 barColor = 'bg-amber-500';
-                                statusText = `<span class="text-amber-500 font-semibold text-[10px]">${seasonLabel ? `${seasonLabel} • ` : ''}Faltam ${missing}</span>`;
+                                statusText = `<span class="text-amber-500 font-semibold text-xs">${seasonLabel ? `${seasonLabel} • ` : ''}Faltam ${missing}</span>`;
                             }
-                            countHtml = `<span class="text-zinc-400 text-[10px] font-mono">${foundCount}/${totalExpected}</span>`;
+                            countHtml = `<span class="text-zinc-400 text-xs font-mono">${foundCount}/${totalExpected}</span>`;
                         } else {
                             barColor = 'bg-indigo-500';
-                            statusText = `<span class="text-zinc-400 font-semibold text-[10px]">${seasonLabel || 'Série'}</span>`;
-                            countHtml = `<span class="text-zinc-400 text-[10px] font-mono">${foundCount} eps</span>`;
+                            statusText = `<span class="text-zinc-400 font-semibold text-xs">${seasonLabel || 'Série'}</span>`;
+                            countHtml = `<span class="text-zinc-400 text-xs font-mono">${foundCount} eps</span>`;
                         }
                     }
                     const fillPercent = (totalExpected > 0) ? percent : (foundCount > 0 ? 100 : 0);
@@ -4872,7 +4891,7 @@ self.onmessage = async (e) => {
                 } else {
                     const streamCount = item.streams ? item.streams.length : 0;
                     const hasLink = streamCount > 0;
-                    footerHtml = `<div class="mt-auto pt-2.5 flex justify-between items-center"><span class="text-[10px] text-zinc-500 font-mono">${safeYear}</span><span class="${hasLink ? 'text-zinc-300' : 'text-red-400'} text-[10px] font-medium flex items-center gap-1.5">${hasLink ? streamCount + ' opções' : 'Sem links'}</span></div>`;
+                    footerHtml = `<div class="mt-auto pt-2.5 flex justify-between items-center"><span class="text-xs text-zinc-500 font-mono">${safeYear}</span><span class="${hasLink ? 'text-zinc-300' : 'text-red-400'} text-xs font-medium flex items-center gap-1.5">${hasLink ? streamCount + ' opções' : 'Sem links'}</span></div>`;
                 }
 
                 const isAdminLogged = sessionStorage.getItem('fenixflix_senha') !== null;
@@ -4884,7 +4903,7 @@ self.onmessage = async (e) => {
                 ` : '';
 
                 const pendenteBadge = item.is_pendente ? `
-                    <div class="absolute top-2 right-2 z-30 bg-amber-500/90 text-black text-[9px] font-bold px-2 py-0.5 rounded-full shadow-md backdrop-blur-sm flex items-center gap-1">
+                    <div class="absolute top-2 right-2 z-30 bg-amber-500/90 text-black text-xs font-bold px-2 py-0.5 rounded-full shadow-md backdrop-blur-sm flex items-center gap-1">
                         <i class="fa-solid fa-clock"></i> Moderação
                     </div>
                 ` : '';
@@ -6917,7 +6936,7 @@ self.onmessage = async (e) => {
         async function loadApprovalsList() {
             const tableBody = document.getElementById('approvals-table-body');
             const emptyState = document.getElementById('approvals-empty-state');
-            tableBody.innerHTML = `<tr><td colspan="3" class="py-12 text-center text-zinc-500"><i class="fa-solid fa-spinner animate-spin mr-1.5"></i> Carregando pendentes...</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-zinc-500"><i class="fa-solid fa-spinner animate-spin mr-1.5"></i> Carregando pendentes...</td></tr>`;
             emptyState.classList.add('hidden');
 
             const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
@@ -6925,7 +6944,10 @@ self.onmessage = async (e) => {
             const isAjudante = localStorage.getItem('is_ajudante') === 'true';
             
             if (!adminSenha && !isAjudante) {
-                tableBody.innerHTML = `<tr><td colspan="3" class="py-12 text-center text-red-400">Acesso negado. Faça login como admin ou ajudante.</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">
+                    <p class="mb-3 font-medium">Acesso restrito. Faça login como admin ou ajudante.</p>
+                    <button onclick="document.getElementById('loginModal')?.classList.remove('hidden')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition">Fazer Login</button>
+                </td></tr>`;
                 return;
             }
 
@@ -6947,31 +6969,75 @@ self.onmessage = async (e) => {
                 }
 
                 let html = '';
+                const itemsToResolve = [];
+
                 pendentes.forEach(p => {
-                    const dataStr = new Date(p.criado_em).toLocaleString('pt-BR');
+                    let dataStr = 'Data indisponível';
+                    if (p.criado_em) {
+                        try {
+                            const d = new Date(p.criado_em);
+                            if (!isNaN(d.getTime())) dataStr = d.toLocaleString('pt-BR');
+                        } catch (_) {}
+                    }
                     const jsNome = JSON.stringify(p.nome_do_json).replace(/"/g, '&quot;');
                     
-                    let title = p.nome_do_json;
-                    if (p.conteudo && p.conteudo.id) title = p.conteudo.title || p.conteudo.id;
+                    const cType = p.conteudo?.type || (p.conteudo?.streams && typeof p.conteudo?.streams === 'object' && !Array.isArray(p.conteudo?.streams) ? 'series' : 'movie');
+                    const isMovie = cType === 'movie';
+                    const typeBadge = isMovie
+                        ? `<span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 shrink-0"><i class="fa-solid fa-film text-xs"></i> Filme</span>`
+                        : `<span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 shrink-0"><i class="fa-solid fa-tv text-xs"></i> Série</span>`;
+
+                    const imdbId = p.conteudo?.id || String(p.nome_do_json).replace(/\.json$/, '');
+                    let title = p.conteudo?.title || p.conteudo?.name || '';
+                    const titleDomId = `pending-title-${p.nome_do_json.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+
+                    if (!title && imdbId.startsWith('tt')) {
+                        itemsToResolve.push({ id: imdbId, type: cType, domId: titleDomId });
+                    }
+
+                    const displayTitle = title || imdbId;
+
+                    const uploader = p.conteudo?.colaborador || p.conteudo?.uploader || p.conteudo?.uploader_nick || 'Anônimo';
+                    const isColab = p.conteudo?.is_colaborador === true || ['colaborador', 'ajudante', 'admin'].includes(String(p.conteudo?.colaborador_role).toLowerCase());
+                    const colabBadge = isColab
+                        ? `<span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm"><i class="fa-solid fa-shield-check text-xs"></i> Colaborador</span>`
+                        : `<span class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700/60"><i class="fa-solid fa-user text-xs"></i> Usuário</span>`;
 
                     html += `
                         <tr class="border-b border-zinc-800/40 hover:bg-zinc-900/20 transition-colors">
-                            <td class="py-3.5 pr-4 font-semibold text-white">
-                                <span class="text-indigo-400">${escapeHTML(title)}</span>
-                                <span class="block text-[10px] text-zinc-500 font-mono font-normal mt-0.5">${escapeHTML(p.nome_do_json)}</span>
+                            <td class="py-3.5 pr-4 max-w-[260px]">
+                                <div class="flex items-center gap-2 mb-1 min-w-0">
+                                    ${typeBadge}
+                                    <span id="${titleDomId}" class="text-sm font-bold text-white hover:text-indigo-300 transition-colors truncate block" title="${escapeHTML(displayTitle)}">${escapeHTML(displayTitle)}</span>
+                                </div>
+                                <div class="flex items-center gap-2 text-xs text-zinc-500 font-mono min-w-0">
+                                    <span class="truncate block" title="${escapeHTML(p.nome_do_json)}"><i class="fa-regular fa-file-code mr-1"></i>${escapeHTML(p.nome_do_json)}</span>
+                                    ${p.conteudo?.year ? `<span class="shrink-0">• ${escapeHTML(String(p.conteudo.year))}</span>` : ''}
+                                </div>
                             </td>
-                            <td class="py-3.5 px-4 text-center text-[10px] text-zinc-500 font-mono">
+                            <td class="py-3.5 px-3">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs text-zinc-400 shrink-0">
+                                        <i class="fa-solid fa-user-astronaut"></i>
+                                    </div>
+                                    <span class="text-xs font-semibold text-zinc-200 truncate max-w-[140px]" title="${escapeHTML(uploader)}">${escapeHTML(uploader)}</span>
+                                </div>
+                            </td>
+                            <td class="py-3.5 px-3 text-center">
+                                ${colabBadge}
+                            </td>
+                            <td class="py-3.5 px-3 text-center text-xs text-zinc-400 font-mono">
                                 ${dataStr}
                             </td>
-                            <td class="py-3.5 pl-4 text-center">
-                                <div class="flex items-center justify-center gap-2.5">
-                                    <button onclick="previewFile(${jsNome})" aria-label="Visualizar e testar ${escapeHTML(title)}" class="w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 transition-colors flex items-center justify-center" title="Visualizar/Testar">
+                            <td class="py-3.5 pl-3 text-center">
+                                <div class="flex items-center justify-center gap-2">
+                                    <button onclick="previewFile(${jsNome})" aria-label="Visualizar e testar ${escapeHTML(displayTitle)}" class="w-8 h-8 rounded-full bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 transition-colors flex items-center justify-center" title="Visualizar / Testar">
                                         <i class="fa-solid fa-eye text-xs"></i>
                                     </button>
-                                    <button onclick="approveFile(${jsNome})" aria-label="Aprovar e publicar ${escapeHTML(title)}" class="w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 transition-colors flex items-center justify-center" title="Aprovar">
+                                    <button onclick="approveFile(${jsNome}, this)" aria-label="Aprovar e publicar ${escapeHTML(displayTitle)}" class="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 transition-colors flex items-center justify-center" title="Aprovar Direto">
                                         <i class="fa-solid fa-check text-xs"></i>
                                     </button>
-                                    <button onclick="rejectFile(${jsNome})" aria-label="Rejeitar envio de ${escapeHTML(title)}" class="w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30 transition-colors flex items-center justify-center" title="Rejeitar">
+                                    <button onclick="rejectFile(${jsNome}, this)" aria-label="Rejeitar envio de ${escapeHTML(displayTitle)}" class="w-8 h-8 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30 transition-colors flex items-center justify-center" title="Rejeitar">
                                         <i class="fa-solid fa-xmark text-xs"></i>
                                     </button>
                                 </div>
@@ -6980,18 +7046,40 @@ self.onmessage = async (e) => {
                     `;
                 });
                 tableBody.innerHTML = html;
+
+                if (itemsToResolve.length > 0 && typeof fetchMediaMetadata === 'function') {
+                    itemsToResolve.forEach(async item => {
+                        try {
+                            const metaData = await fetchMediaMetadata(item.id, item.type);
+                            if (metaData && metaData.meta && (metaData.meta.name || metaData.meta.title)) {
+                                const el = document.getElementById(item.domId);
+                                if (el) el.innerText = metaData.meta.name || metaData.meta.title;
+                            }
+                        } catch (_) {}
+                    });
+                }
             } catch (e) {
                 console.error(e);
-                tableBody.innerHTML = `<tr><td colspan="3" class="py-12 text-center text-red-500">Erro ao carregar arquivos pendentes.</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">
+                    <p class="mb-3 font-medium">Erro ao carregar arquivos pendentes.</p>
+                    <button onclick="loadApprovalsList()" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-lg text-xs font-semibold transition inline-flex items-center gap-1.5"><i class="fa-solid fa-rotate-right"></i> Tentar Novamente</button>
+                </td></tr>`;
             }
         }
 
-        async function actionPendingFile(nome, action) {
+        async function actionPendingFile(nome, action, btnElement = null) {
             const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
             const discordToken = localStorage.getItem('discord_token');
             const isAjudante = localStorage.getItem('is_ajudante') === 'true';
 
             if (!adminSenha && !isAjudante) return showToast("Acesso negado. Necessário Admin ou Ajudante.", "error");
+
+            let originalContent = '';
+            if (btnElement) {
+                btnElement.disabled = true;
+                originalContent = btnElement.innerHTML;
+                btnElement.innerHTML = `<i class="fa-solid fa-spinner animate-spin text-xs"></i>`;
+            }
 
             try {
                 const headers = { 'Content-Type': 'application/json' , 'x-admin-password': typeof adminSenha !== 'undefined' ? adminSenha : (sessionStorage.getItem('fenixflix_senha') || '') };
@@ -7006,14 +7094,19 @@ self.onmessage = async (e) => {
 
                 const data = await res.json();
                 if (res.ok) {
-                    showToast(data.mensagem, "success");
+                    showToast(data.mensagem || (action === 'approve' ? 'Arquivo aprovado!' : 'Arquivo rejeitado!'), "success");
                     loadApprovalsList();
                 } else {
-                    showToast(data.erro, "error");
+                    showToast(data.erro || 'Erro ao processar arquivo.', "error");
                 }
             } catch (e) {
                 console.error(e);
                 showToast(`Erro ao ${action === 'approve' ? 'aprovar' : 'rejeitar'} arquivo.`, "error");
+            } finally {
+                if (btnElement) {
+                    btnElement.disabled = false;
+                    btnElement.innerHTML = originalContent;
+                }
             }
         }
 
@@ -7194,6 +7287,15 @@ self.onmessage = async (e) => {
                 const headers = { 'Content-Type': 'application/json', 'x-admin-password': adminSenha };
                 if (discordToken) headers['Authorization'] = `Bearer ${discordToken}`;
 
+                const saveBtn = document.getElementById('btnPreviewSaveChanges');
+                let originalBtnHtml = '';
+                if (saveBtn) {
+                    if (saveBtn.disabled) return;
+                    saveBtn.disabled = true;
+                    originalBtnHtml = saveBtn.innerHTML;
+                    saveBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-1"></i> Publicando...`;
+                }
+
                 try {
                     const res = await fetch(API_URL + '/api/arquivos/aprovar', {
                         method: 'POST',
@@ -7208,9 +7310,17 @@ self.onmessage = async (e) => {
                         loadApprovalsList();
                     } else {
                         showToast(data.erro || 'Erro ao aprovar', "error");
+                        if (saveBtn) {
+                            saveBtn.disabled = false;
+                            saveBtn.innerHTML = originalBtnHtml;
+                        }
                     }
                 } catch (e) {
                     showToast("Erro ao conectar ao servidor para aprovar", "error");
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.innerHTML = originalBtnHtml;
+                    }
                 }
             };
 
@@ -7316,12 +7426,18 @@ self.onmessage = async (e) => {
                 streamsHtml = '<p class="text-zinc-500 text-xs mt-4">Formato de stream não reconhecido.</p>';
             }
             
+            const uploader = pendente.conteudo?.colaborador || pendente.conteudo?.uploader || 'Anônimo';
+            const isColab = pendente.conteudo?.is_colaborador === true || ['colaborador', 'ajudante', 'admin'].includes(String(pendente.conteudo?.colaborador_role).toLowerCase());
+            const colabBadge = isColab
+                ? `<span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"><i class="fa-solid fa-shield-check text-[9px]"></i> Colaborador</span>`
+                : `<span class="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700/60"><i class="fa-solid fa-user text-[9px]"></i> Usuário</span>`;
+
             const modalHtml = `
             <div id="previewModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[9999] flex items-center justify-center p-3 sm:p-6">
                 <div class="bg-zinc-950 border border-zinc-800 rounded-3xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
-                    <div class="px-6 py-4 border-b border-zinc-800/80 flex justify-between items-center bg-zinc-900/60">
+                    <div class="px-6 py-4 border-b border-zinc-800/80 flex flex-wrap justify-between items-center gap-3 bg-zinc-900/60">
                         <div class="flex items-center gap-3">
-                            <div class="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                            <div class="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
                                 <i class="fa-solid fa-clipboard-check text-sm"></i>
                             </div>
                             <div>
@@ -7331,9 +7447,16 @@ self.onmessage = async (e) => {
                                 <span class="text-[10px] text-zinc-500 font-mono">${escapeHTML(nome)} ${year ? '• ' + year : ''}</span>
                             </div>
                         </div>
-                        <button onclick="document.getElementById('previewModal').remove()" aria-label="Fechar janela de revisão" class="text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 w-9 h-9 rounded-full flex items-center justify-center transition">
-                            <i class="fa-solid fa-xmark text-sm"></i>
-                        </button>
+                        <div class="flex items-center gap-3">
+                            <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800">
+                                <span class="text-[10px] text-zinc-400">Enviado por:</span>
+                                <span class="text-xs font-bold text-white truncate max-w-[130px]">${escapeHTML(uploader)}</span>
+                                ${colabBadge}
+                            </div>
+                            <button onclick="document.getElementById('previewModal').remove()" aria-label="Fechar janela de revisão" class="text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 w-9 h-9 rounded-full flex items-center justify-center transition">
+                                <i class="fa-solid fa-xmark text-sm"></i>
+                            </button>
+                        </div>
                     </div>
                     
                     <div class="flex flex-col md:flex-row flex-1 overflow-hidden">
@@ -7356,13 +7479,13 @@ self.onmessage = async (e) => {
                     
                     <!-- Rodapé Fixo com Ação Rápida (Evita Scroll Trap) -->
                     <div class="px-6 py-3 border-t border-zinc-800/80 bg-zinc-900/95 backdrop-blur-md shrink-0 sticky bottom-0 z-20 flex justify-between items-center gap-3">
-                        <span class="text-[11px] text-zinc-400 flex items-center gap-1.5 hidden sm:flex">
+                        <span class="text-xs text-zinc-400 flex items-center gap-1.5 hidden sm:flex">
                             <i class="fa-solid fa-circle-info text-indigo-400"></i> 
                             Apenas os streams marcados com "Aprovar" serão adicionados ao catálogo.
                         </span>
                         <div class="flex gap-2 w-full sm:w-auto justify-end">
                             <button onclick="document.getElementById('previewModal').remove()" class="flex-1 sm:flex-none px-4 py-2.5 min-h-[44px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded-xl text-xs font-semibold transition flex items-center justify-center">Cancelar</button>
-                            <button onclick="previewSaveChanges()" class="flex-1 sm:flex-none px-5 py-2.5 min-h-[44px] bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20">
+                            <button id="btnPreviewSaveChanges" onclick="previewSaveChanges()" class="flex-1 sm:flex-none px-5 py-2.5 min-h-[44px] bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20">
                                 <i class="fa-solid fa-check"></i> Salvar e Publicar
                             </button>
                         </div>
@@ -7381,15 +7504,15 @@ self.onmessage = async (e) => {
             }
         }
 
-        async function approveFile(nome) {
+        async function approveFile(nome, btn = null) {
             if (confirm(`Deseja aprovar e publicar o arquivo ${nome} diretamente no catálogo?`)) {
-                actionPendingFile(nome, 'approve');
+                await actionPendingFile(nome, 'approve', btn);
             }
         }
 
-        async function rejectFile(nome) {
+        async function rejectFile(nome, btn = null) {
             if (confirm(`Deseja REJEITAR e excluir o envio pendente de ${nome}?`)) {
-                actionPendingFile(nome, 'reject');
+                await actionPendingFile(nome, 'reject', btn);
             }
         }
         async function loadReportsList() {
@@ -7403,7 +7526,10 @@ self.onmessage = async (e) => {
             const isAjudante = localStorage.getItem('is_ajudante') === 'true';
             
             if (!adminSenha && !isAjudante) {
-                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">Acesso negado. Faça login como admin ou ajudante.</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">
+                    <p class="mb-3 font-medium">Acesso restrito. Faça login como admin ou ajudante.</p>
+                    <button onclick="document.getElementById('loginModal')?.classList.remove('hidden')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition">Fazer Login</button>
+                </td></tr>`;
                 return;
             }
 
@@ -7414,7 +7540,10 @@ self.onmessage = async (e) => {
                 const res = await fetch(API_URL + `/api/denuncias`, { headers });
                 if (!res.ok) {
                     if (res.status === 401) {
-                        return tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">Senha expirada ou incorreta.</td></tr>`;
+                        return tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">
+                            <p class="mb-3 font-medium">Sessão expirada ou senha incorreta.</p>
+                            <button onclick="document.getElementById('loginModal')?.classList.remove('hidden')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition">Fazer Login</button>
+                        </td></tr>`;
                     }
                     throw new Error("Falha ao carregar denúncias");
                 }
@@ -7428,26 +7557,32 @@ self.onmessage = async (e) => {
 
                 let html = '';
                 reports.forEach(rep => {
-                    const dataStr = new Date(rep.criado_em).toLocaleString('pt-BR');
+                    let dataStr = 'Data indisponível';
+                    if (rep.criado_em) {
+                        try {
+                            const d = new Date(rep.criado_em);
+                            if (!isNaN(d.getTime())) dataStr = d.toLocaleString('pt-BR');
+                        } catch (_) {}
+                    }
                     const jsNome = JSON.stringify(rep.nome_do_json).replace(/"/g, '&quot;');
                     html += `
                         <tr class="border-b border-zinc-800/40 hover:bg-zinc-900/20 transition-colors">
-                            <td class="py-3.5 pr-4 font-semibold text-white">
-                                <span class="cursor-pointer hover:underline text-indigo-400" onclick="switchView('catalog'); setTimeout(() => cat.openLinks(${jsNome}), 100);">${escapeHTML(rep.titulo)}</span>
-                                <span class="block text-[10px] text-zinc-500 font-mono font-normal mt-0.5">${escapeHTML(rep.nome_do_json)}</span>
+                            <td class="py-3.5 pr-4 font-semibold text-white max-w-[240px]">
+                                <span class="cursor-pointer hover:underline text-indigo-400 truncate block" onclick="switchView('catalog'); setTimeout(() => cat.openLinks(${jsNome}), 100);" title="${escapeHTML(rep.titulo)}">${escapeHTML(rep.titulo)}</span>
+                                <span class="block text-xs text-zinc-500 font-mono font-normal mt-0.5 truncate" title="${escapeHTML(rep.nome_do_json)}">${escapeHTML(rep.nome_do_json)}</span>
                             </td>
                             <td class="py-3.5 px-4">
-                                <span class="px-2 py-0.5 bg-red-950/60 border border-red-900/30 text-red-400 rounded text-[10px] font-medium">${escapeHTML(rep.motivo)}</span>
+                                <span class="px-2 py-0.5 bg-red-950/60 border border-red-900/30 text-red-400 rounded text-xs font-medium">${escapeHTML(rep.motivo)}</span>
                             </td>
                             <td class="py-3.5 px-4 text-xs text-zinc-400 max-w-xs truncate" title="${escapeHTML(rep.detalhes || '')}">
-                                ${rep.detalhes ? escapeHTML(rep.detalhes) : '<span class="text-zinc-650 italic">Sem detalhes</span>'}
+                                ${rep.detalhes ? escapeHTML(rep.detalhes) : '<span class="text-zinc-600 italic">Sem detalhes</span>'}
                             </td>
                             <td class="py-3.5 px-4 text-xs text-zinc-500 font-mono">
                                 ${dataStr}
                             </td>
                             <td class="py-3.5 pl-4 text-right">
                                 <div class="flex justify-end gap-2">
-                                    <button onclick="deleteReport(${rep.id})" class="bg-emerald-950 hover:bg-emerald-900 text-emerald-400 border border-emerald-900/30 px-3 py-1.5 rounded-lg text-xs font-semibold transition" title="Marcar como Resolvido / Excluir Denúncia">
+                                    <button onclick="deleteReport(${rep.id}, this)" class="bg-emerald-950 hover:bg-emerald-900 text-emerald-400 border border-emerald-900/30 px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1 min-h-[32px]" title="Marcar como Resolvido / Excluir Denúncia">
                                         <i class="fa-solid fa-check mr-1"></i> Resolver
                                     </button>
                                 </div>
@@ -7458,11 +7593,14 @@ self.onmessage = async (e) => {
                 tableBody.innerHTML = html;
             } catch (e) {
                 console.error(e);
-                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-500">Erro ao carregar denúncias.</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">
+                    <p class="mb-3 font-medium">Erro ao carregar denúncias.</p>
+                    <button onclick="loadReportsList()" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-lg text-xs font-semibold transition inline-flex items-center gap-1.5"><i class="fa-solid fa-rotate-right"></i> Tentar Novamente</button>
+                </td></tr>`;
             }
         }
 
-        async function deleteReport(id) {
+        async function deleteReport(id, btn = null) {
             if (!confirm("Deseja realmente marcar essa denúncia como resolvida? Ela será removida da lista.")) return;
 
             const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
@@ -7470,6 +7608,13 @@ self.onmessage = async (e) => {
             const isAjudante = localStorage.getItem('is_ajudante') === 'true';
 
             if (!adminSenha && !isAjudante) return showToast("Acesso negado. Necessário Admin ou Ajudante.", "error");
+
+            let originalContent = '';
+            if (btn) {
+                btn.disabled = true;
+                originalContent = btn.innerHTML;
+                btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-1"></i> Resolvendo...`;
+            }
 
             try {
                 const headers = { 'Content-Type': 'application/json' , 'x-admin-password': typeof adminSenha !== 'undefined' ? adminSenha : (sessionStorage.getItem('fenixflix_senha') || '') };
@@ -7491,6 +7636,11 @@ self.onmessage = async (e) => {
             } catch (e) {
                 console.error(e);
                 showToast("Erro ao conectar com o servidor.", "error");
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalContent;
+                }
             }
         }
 

@@ -1045,7 +1045,15 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
     const uploaderNick = user ? (user.global_name || user.username) : (req.body.uploader_nick || req.headers['x-uploader-nick'] || (adminAuthed ? 'Admin' : null));
     const uploaderId = user ? user.id : null;
     const uploaderAvatar = user ? (user.avatar || null) : null;
-    const roleStr = isAjudanteUser ? 'ajudante' : (adminAuthed ? 'admin' : (user ? 'membro' : 'colaborador'));
+    const isColaboradorUser = Boolean(user && (user.isColaborador || (Array.isArray(user.cargos) && user.cargos.includes(process.env.DISCORD_COLABORADOR_ROLE_ID))));
+    const isColab = adminAuthed || isAjudanteUser || isColaboradorUser;
+    let roleStr = 'membro';
+    if (adminAuthed) roleStr = 'admin';
+    else if (isAjudanteUser) roleStr = 'ajudante';
+    else if (isColaboradorUser) roleStr = 'colaborador';
+    else if (user) roleStr = 'membro';
+    else roleStr = 'membro';
+
     const isEdit = req.body.is_edit === 'true' || req.query.is_edit === 'true' || req.body.substituir === 'true' || req.query.substituir === 'true' || Boolean(parsedConteudo.is_edit) || Boolean(parsedConteudo.substituir);
     const forceOverride = req.body.override_colaborador === 'true' || req.query.override_colaborador === 'true';
     const hasOriginalColab = parsedConteudo.colaborador && !isPlaceholder(parsedConteudo.colaborador);
@@ -1062,6 +1070,7 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
         if (shouldOverride) {
             parsedConteudo.colaborador = uploaderNick;
             parsedConteudo.colaborador_role = roleStr;
+            parsedConteudo.is_colaborador = isColab;
             if (uploaderId) parsedConteudo.colaborador_id = uploaderId;
             if (uploaderAvatar) parsedConteudo.colaborador_avatar = uploaderAvatar;
         }
@@ -1071,6 +1080,7 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
                 if (shouldOverride || !s.colaborador || isPlaceholder(s.colaborador)) {
                     s.colaborador = parsedConteudo.colaborador || uploaderNick;
                     s.colaborador_role = parsedConteudo.colaborador_role || roleStr;
+                    s.is_colaborador = parsedConteudo.is_colaborador !== undefined ? parsedConteudo.is_colaborador : isColab;
                     if (parsedConteudo.colaborador_id || uploaderId) s.colaborador_id = parsedConteudo.colaborador_id || uploaderId;
                     if (parsedConteudo.colaborador_avatar || uploaderAvatar) s.colaborador_avatar = parsedConteudo.colaborador_avatar || uploaderAvatar;
                 }
@@ -1145,6 +1155,9 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
     }
 
     let finalConteudo = parsedConteudo;
+    const mediaTitle = parsedConteudo.title || parsedConteudo.name || (typeof nuviometaData !== 'undefined' && nuviometaData ? (nuviometaData.name || nuviometaData.title) : null);
+    const mediaYear = parsedConteudo.year || (typeof nuviometaData !== 'undefined' && nuviometaData ? nuviometaData.year : null);
+
     // O JSON armazena apenas dados estruturais de streams/id/tipo. Remove título, poster, fanart e sinopse:
     delete finalConteudo.title;
     delete finalConteudo.name;
@@ -1154,6 +1167,12 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
     delete finalConteudo.description;
     delete finalConteudo.overview;
     delete finalConteudo.year;
+
+    // Preserva título e ano se for envio pendente para moderação
+    if (isPendente) {
+        if (mediaTitle) finalConteudo.title = mediaTitle;
+        if (mediaYear) finalConteudo.year = mediaYear;
+    }
 
     injectDateIntoStreams(finalConteudo);
     sanitizeStreamQualities(finalConteudo.streams, finalConteudo.type);
@@ -1860,10 +1879,37 @@ app.get('/api/meus-pendentes', async (req, res) => {
 });
 
 app.get('/api/arquivos/pendentes', requireAdminOrAjudante, async (_req, res) => {
+    const enrichPendingItem = (p, userRolesMap = new Map()) => {
+        const conteudo = p.conteudo || {};
+        const colabName = conteudo.colaborador || conteudo.uploader || conteudo.uploader_nick || 'Anônimo';
+        const role = (conteudo.colaborador_role || '').toLowerCase();
+
+        let isColab = false;
+        if (conteudo.is_colaborador !== undefined) {
+            isColab = Boolean(conteudo.is_colaborador);
+        } else if (['colaborador', 'ajudante', 'admin'].includes(role)) {
+            isColab = true;
+        } else if (userRolesMap.has(colabName.toLowerCase())) {
+            isColab = userRolesMap.get(colabName.toLowerCase());
+        }
+
+        return {
+            nome_do_json: p.nome_do_json,
+            conteudo: {
+                ...conteudo,
+                colaborador: colabName,
+                is_colaborador: isColab,
+                colaborador_role: role || (isColab ? 'colaborador' : 'membro')
+            },
+            criado_em: p.criado_em || conteudo.criado_em || new Date().toISOString()
+        };
+    };
+
     if (process.env.DATABASE_SOURCE === 'huggingface') {
         try {
             const pendentes = await fetchPendingFromHf();
-            return res.json(pendentes);
+            const enriched = pendentes.map(p => enrichPendingItem(p));
+            return res.json(enriched);
         } catch (err) {
             console.error('[HF Pendentes Error]:', err.message);
             return res.status(500).json({ erro: 'Erro ao buscar arquivos pendentes do Hugging Face.' });
@@ -1871,9 +1917,20 @@ app.get('/api/arquivos/pendentes', requireAdminOrAjudante, async (_req, res) => 
     }
 
     try {
+        let userRolesMap = new Map();
+        try {
+            const usersRes = await pool.query('SELECT username, global_name, is_colaborador, is_ajudante FROM usuarios_discord;');
+            usersRes.rows.forEach(u => {
+                const isC = Boolean(u.is_colaborador || u.is_ajudante);
+                if (u.username) userRolesMap.set(u.username.toLowerCase(), isC);
+                if (u.global_name) userRolesMap.set(u.global_name.toLowerCase(), isC);
+            });
+        } catch (_) {}
+
         const query = 'SELECT nome_do_json, conteudo, criado_em FROM envios_pendentes ORDER BY criado_em ASC;';
         const result = await pool.query(query);
-        res.json(result.rows);
+        const enriched = result.rows.map(r => enrichPendingItem(r, userRolesMap));
+        res.json(enriched);
     } catch (err) {
         console.error('Erro ao listar arquivos pendentes:', err.message);
         res.status(500).json({ erro: 'Erro ao buscar arquivos pendentes.' });
