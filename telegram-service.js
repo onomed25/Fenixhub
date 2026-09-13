@@ -256,8 +256,8 @@ async function uploadFileAndGetLink(filePath, fileName, onProgress, customSessio
         activeClient = await initClient();
     }
 
-    if (!activeClient) {
-        throw new Error("Nenhum cliente Telegram ativo. Faça login no Telegram primeiro!");
+    if (!activeClient && !(botToken && channelId)) {
+        throw new Error("Nenhum cliente Telegram ativo. Faça login no Telegram ou configure o Bot Token e Canal de Backup!");
     }
 
     if (!fs.existsSync(filePath)) {
@@ -334,7 +334,25 @@ async function uploadFileAndGetLink(filePath, fileName, onProgress, customSessio
                         ]
                     });
 
-                    console.log(`[Telegram] Arquivo postado no canal (ID: ${sentMsg.id}). Encaminhando para o bot @${botUsername}...`);
+                    console.log(`[Telegram] Arquivo postado no canal (ID: ${sentMsg.id}).`);
+
+                    // Se não houver conta de usuário conectada, o bot próprio já publicou no canal com sucesso
+                    if (!activeClient) {
+                        console.log(`[Telegram] Modo Bot Direto: upload concluído sem conta pessoal no canal ${channelId}.`);
+                        let channelLink = "";
+                        const cleanChannelStr = String(channelId).trim();
+                        if (/^-?\d+$/.test(cleanChannelStr)) {
+                            const cleanId = cleanChannelStr.replace(/^-100/, '').replace(/^-/, '');
+                            channelLink = `https://t.me/c/${cleanId}/${sentMsg.id}`;
+                        } else {
+                            const cleanUsername = cleanChannelStr.replace(/^@/, '');
+                            channelLink = `https://t.me/${cleanUsername}/${sentMsg.id}`;
+                        }
+                        console.log(`[Telegram] Link do canal gerado via Bot: ${channelLink}`);
+                        return channelLink;
+                    }
+
+                    console.log(`[Telegram] Encaminhando do canal para o bot @${botUsername}...`);
 
                     // Resolve peer do canal para o usuário (quem faz o encaminhamento)
                     let userChannelPeer = channelId;
@@ -362,6 +380,9 @@ async function uploadFileAndGetLink(filePath, fileName, onProgress, customSessio
                         sentMsgToBot = forwardedMsgs || {};
                     }
                 } else {
+                    if (!activeClient) {
+                        throw new Error("Para upload sem canal de backup, é necessário conectar uma conta de usuário do Telegram.");
+                    }
                     console.log(`[Telegram] Enviando arquivo diretamente para o bot @${botUsername}... (Tentativa ${attempts}/${maxAttempts})`);
                     sentMsg = await activeClient.sendFile(botUsername, {
                         file: inputFile,

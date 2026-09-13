@@ -328,8 +328,8 @@ async function uploadFileAndGetLink(filePath, fileName, onProgress, customSessio
         activeClient = await initClient();
     }
 
-    if (!activeClient) {
-        throw new Error("Nenhum cliente Telegram ativo. Faça login no Telegram primeiro!");
+    if (!activeClient && !(botToken && channelId)) {
+        throw new Error("Nenhum cliente Telegram ativo. Faça login no Telegram ou configure o Bot Token e Canal de Backup!");
     }
 
     if (!fs.existsSync(filePath)) {
@@ -355,7 +355,7 @@ async function uploadFileAndGetLink(filePath, fileName, onProgress, customSessio
 
         const inputFile = await activeUploader.uploadFile({
             file: customFile,
-            workers: 1, // Mantido 1 worker para estabilidade em servidores
+            workers: 1,
             onProgress: (progress) => {
                 if (onProgress) onProgress(progress);
             }
@@ -363,24 +363,13 @@ async function uploadFileAndGetLink(filePath, fileName, onProgress, customSessio
 
         console.log(`[Telegram] Upload concluído para ${fileName}! (Uploader: ${isBotUploader ? 'Bot' : 'Usuário'})`);
 
-        // Otimização importante: Resolvemos o ID do bot previamente
-        // para evitar chamar message.getSender() (requisição lenta de rede) para cada mensagem recebida
-        let botId = null;
-        try {
-            const botEntity = await activeClient.getEntity(botUsername);
-            if (botEntity && botEntity.id) {
-                botId = botEntity.id.toString();
-            }
-        } catch (entityErr) {
-            console.warn(`[Telegram Warning] Não foi possível obter entidade do bot ${botUsername}:`, entityErr.message);
-        }
-
         let link = null;
         let attempts = 0;
         const maxAttempts = 3;
 
         while (attempts < maxAttempts) {
             attempts++;
+            
             let sentMsg = null;
             let sentMsgToBot = null;
 
@@ -410,7 +399,25 @@ async function uploadFileAndGetLink(filePath, fileName, onProgress, customSessio
                         ]
                     });
 
-                    console.log(`[Telegram] Arquivo postado no canal (ID: ${sentMsg.id}). Encaminhando para o bot @${botUsername}...`);
+                    console.log(`[Telegram] Arquivo postado no canal (ID: ${sentMsg.id}).`);
+
+                    // Se não houver conta de usuário conectada, o bot próprio já publicou no canal com sucesso
+                    if (!activeClient) {
+                        console.log(`[Telegram] Modo Bot Direto: upload concluído sem conta pessoal no canal ${channelId}.`);
+                        let channelLink = "";
+                        const cleanChannelStr = String(channelId).trim();
+                        if (/^-?\d+$/.test(cleanChannelStr)) {
+                            const cleanId = cleanChannelStr.replace(/^-100/, '').replace(/^-/, '');
+                            channelLink = `https://t.me/c/${cleanId}/${sentMsg.id}`;
+                        } else {
+                            const cleanUsername = cleanChannelStr.replace(/^@/, '');
+                            channelLink = `https://t.me/${cleanUsername}/${sentMsg.id}`;
+                        }
+                        console.log(`[Telegram] Link do canal gerado via Bot: ${channelLink}`);
+                        return channelLink;
+                    }
+
+                    console.log(`[Telegram] Encaminhando para o bot @${botUsername}...`);
 
                     let userChannelPeer = channelId;
                     try {
@@ -436,6 +443,9 @@ async function uploadFileAndGetLink(filePath, fileName, onProgress, customSessio
                         sentMsgToBot = forwardedMsgs || {};
                     }
                 } else {
+                    if (!activeClient) {
+                        throw new Error("Para upload sem canal de backup, é necessário conectar uma conta de usuário do Telegram.");
+                    }
                     console.log(`[Telegram] Enviando arquivo diretamente para o bot @${botUsername}... (Tentativa ${attempts}/${maxAttempts})`);
                     sentMsg = await activeClient.sendFile(botUsername, {
                         file: inputFile,

@@ -428,6 +428,9 @@ function clearDiscordSession() {
                 updateDiscordUI();
                 window.isUpdatingUI_Admin = false;
             }
+            if (typeof tg !== 'undefined' && typeof tg.updateUIStatus === 'function') {
+                tg.updateUIStatus();
+            }
         }
 
         async function checkAdminSession() {
@@ -521,11 +524,19 @@ function clearDiscordSession() {
         // --- MÓDULO 0: SERVIÇO TELEGRAM ---
         const tg = {
             status: { configured: false, connected: false },
+
+            isPrivileged: () => {
+                const isAdmin = sessionStorage.getItem('fenixflix_senha') !== null;
+                const isAjudante = localStorage.getItem('is_ajudante') === 'true';
+                const isColaborador = localStorage.getItem('is_colaborador') === 'true';
+                return isAdmin || isAjudante || isColaborador;
+            },
             
             init: async () => {
                 // Carrega configurações avançadas do localStorage
                 const botTokenInput = document.getElementById('tgBotToken');
                 const channelIdInput = document.getElementById('tgChannelId');
+                const botDirectCheckbox = document.getElementById('tgUseBotDirect');
                 
                 if (botTokenInput && channelIdInput) {
                     botTokenInput.value = localStorage.getItem('fenixflix_tg_bot_token') || '';
@@ -533,14 +544,28 @@ function clearDiscordSession() {
                     
                     botTokenInput.addEventListener('input', (e) => {
                         localStorage.setItem('fenixflix_tg_bot_token', e.target.value.trim());
+                        tg.updateUIStatus();
                     });
                     channelIdInput.addEventListener('input', (e) => {
                         localStorage.setItem('fenixflix_tg_channel_id', e.target.value.trim());
+                        tg.updateUIStatus();
                     });
+                }
+
+                if (botDirectCheckbox) {
+                    botDirectCheckbox.checked = localStorage.getItem('fenixflix_tg_use_bot_direct') === 'true';
                 }
 
                 await tg.checkStatus();
                 setInterval(tg.checkStatus, 15000);
+            },
+
+            onBotModeToggle: () => {
+                const botDirectCheckbox = document.getElementById('tgUseBotDirect');
+                if (botDirectCheckbox) {
+                    localStorage.setItem('fenixflix_tg_use_bot_direct', botDirectCheckbox.checked ? 'true' : 'false');
+                }
+                tg.updateUIStatus();
             },
 
             syncToMainForm: () => {
@@ -586,42 +611,88 @@ function clearDiscordSession() {
                 const btnBrowser = document.getElementById('btnTgBrowserSend');
                 const btnLocal = document.getElementById('btnTgLocalSend');
                 const feedbackText = document.getElementById('tgFeedbackText');
+                const botNoLoginContainer = document.getElementById('tgBotNoLoginOption');
+                const botDirectCheckbox = document.getElementById('tgUseBotDirect');
 
                 const hasLocalSession = localStorage.getItem('fenixflix_tg_session') !== null;
+                const isPrivileged = tg.isPrivileged();
+
+                // Exibe a opção de upload por bot sem login exclusivamente para cargos autorizados
+                if (botNoLoginContainer) {
+                    if (isPrivileged) {
+                        botNoLoginContainer.classList.remove('hidden');
+                    } else {
+                        botNoLoginContainer.classList.add('hidden');
+                        if (botDirectCheckbox) botDirectCheckbox.checked = false;
+                    }
+                }
+
+                const useBotDirect = isPrivileged && botDirectCheckbox && botDirectCheckbox.checked;
+
+                if (useBotDirect) {
+                    if (badge) {
+                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800";
+                        badge.innerText = "Modo Bot (Autorizado)";
+                    }
+                    if (btnToggle) {
+                        btnToggle.innerText = "Conta Pessoal";
+                        btnToggle.className = "text-[9px] font-semibold text-zinc-400 hover:underline ml-1";
+                    }
+                    if (btnBrowser) btnBrowser.disabled = false;
+                    if (btnLocal) btnLocal.disabled = false;
+                    if (feedbackText) feedbackText.innerText = "Modo Bot ativo: você pode enviar arquivos sem precisar conectar conta pessoal do Telegram.";
+                    return;
+                }
 
                 if (hasLocalSession) {
-                    badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-900";
-                    badge.innerText = "Conectado (Web)";
-                    btnToggle.innerText = "Desconectar";
-                    btnToggle.className = "text-[9px] font-semibold text-red-400 hover:underline";
-                    btnBrowser.disabled = false;
-                    btnLocal.disabled = false;
-                    feedbackText.innerText = "Conectado usando sua conta do Telegram. Pronto para converter vídeos!";
+                    if (badge) {
+                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-900";
+                        badge.innerText = "Conectado (Web)";
+                    }
+                    if (btnToggle) {
+                        btnToggle.innerText = "Desconectar";
+                        btnToggle.className = "text-[9px] font-semibold text-red-400 hover:underline ml-1";
+                    }
+                    if (btnBrowser) btnBrowser.disabled = false;
+                    if (btnLocal) btnLocal.disabled = false;
+                    if (feedbackText) feedbackText.innerText = "Conectado usando sua conta do Telegram. Pronto para converter vídeos!";
                 } else if (!tg.status.configured) {
-                    badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-900";
-                    badge.innerText = "Não configurado (.env)";
-                    btnToggle.innerText = "Conectar";
-                    btnToggle.className = "text-[9px] font-semibold text-indigo-400 hover:underline";
-                    btnBrowser.disabled = true;
-                    btnLocal.disabled = true;
-                    feedbackText.innerText = "O Telegram do servidor não está configurado. Conecte sua conta do Telegram para usar.";
+                    if (badge) {
+                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-900";
+                        badge.innerText = "Não configurado (.env)";
+                    }
+                    if (btnToggle) {
+                        btnToggle.innerText = "Conectar";
+                        btnToggle.className = "text-[9px] font-semibold text-indigo-400 hover:underline ml-1";
+                    }
+                    if (btnBrowser) btnBrowser.disabled = true;
+                    if (btnLocal) btnLocal.disabled = true;
+                    if (feedbackText) feedbackText.innerText = "O Telegram do servidor não está configurado. Conecte sua conta do Telegram para usar.";
                 } else if (!tg.status.connected) {
-                    badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-red-950 text-red-300 border border-red-900 animate-pulse";
-                    badge.innerText = "Desconectado";
-                    btnToggle.innerText = "Conectar";
-                    btnToggle.className = "text-[9px] font-semibold text-indigo-400 hover:underline";
-                    btnBrowser.disabled = true;
-                    btnLocal.disabled = true;
-                    feedbackText.innerText = "Telegram do servidor desconectado. Conecte sua conta do Telegram para usar.";
+                    if (badge) {
+                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-red-950 text-red-300 border border-red-900 animate-pulse";
+                        badge.innerText = "Desconectado";
+                    }
+                    if (btnToggle) {
+                        btnToggle.innerText = "Conectar";
+                        btnToggle.className = "text-[9px] font-semibold text-indigo-400 hover:underline ml-1";
+                    }
+                    if (btnBrowser) btnBrowser.disabled = true;
+                    if (btnLocal) btnLocal.disabled = true;
+                    if (feedbackText) feedbackText.innerText = "Telegram do servidor desconectado. Conecte sua conta do Telegram para usar.";
                 } else {
                     // Conectado com a conta global do servidor
-                    badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-900";
-                    badge.innerText = "Conectado (Server)";
-                    btnToggle.innerText = "Conectar Outro";
-                    btnToggle.className = "text-[9px] font-semibold text-indigo-400 hover:underline";
-                    btnBrowser.disabled = false;
-                    btnLocal.disabled = false;
-                    feedbackText.innerText = "Conectado usando a conta padrão do servidor. Pronto para converter vídeos!";
+                    if (badge) {
+                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-900";
+                        badge.innerText = "Conectado (Server)";
+                    }
+                    if (btnToggle) {
+                        btnToggle.innerText = "Conectar Outro";
+                        btnToggle.className = "text-[9px] font-semibold text-indigo-400 hover:underline ml-1";
+                    }
+                    if (btnBrowser) btnBrowser.disabled = false;
+                    if (btnLocal) btnLocal.disabled = false;
+                    if (feedbackText) feedbackText.innerText = "Conectado usando a conta padrão do servidor. Pronto para converter vídeos!";
                 }
             },
 
@@ -884,18 +955,26 @@ function clearDiscordSession() {
                         xhr.open('POST', TELEGRAM_API_URL + '/api/telegram/upload', true);
 
                         const session = localStorage.getItem('fenixflix_tg_session');
-                        if (session) {
+                        const useBotDirect = tg.isPrivileged() && (localStorage.getItem('fenixflix_tg_use_bot_direct') === 'true' || !session);
+
+                        if (session && !useBotDirect) {
                             xhr.setRequestHeader('X-Telegram-Session', session);
                         }
 
                         if (hasBotConfig) {
-                            const uploaderIndex = index % (botTokens.length + 1);
-                            if (uploaderIndex === 0) {
-                                xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
-                            } else {
-                                const activeBotToken = botTokens[uploaderIndex - 1];
+                            if (useBotDirect || !session) {
+                                const activeBotToken = botTokens[index % botTokens.length];
                                 xhr.setRequestHeader('X-Telegram-Bot-Token', activeBotToken);
                                 xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
+                            } else {
+                                const uploaderIndex = index % (botTokens.length + 1);
+                                if (uploaderIndex === 0) {
+                                    xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
+                                } else {
+                                    const activeBotToken = botTokens[uploaderIndex - 1];
+                                    xhr.setRequestHeader('X-Telegram-Bot-Token', activeBotToken);
+                                    xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
+                                }
                             }
                         } else if (channelId) {
                             xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
@@ -1246,18 +1325,26 @@ function clearDiscordSession() {
                     const tgAdminSenha = sessionStorage.getItem('fenixflix_senha') || '';
                     const headers = { 'Content-Type': 'application/json' , 'x-admin-password': tgAdminSenha };
                     const session = localStorage.getItem('fenixflix_tg_session');
-                    if (session) {
+                    const useBotDirect = tg.isPrivileged() && (localStorage.getItem('fenixflix_tg_use_bot_direct') === 'true' || !session);
+
+                    if (session && !useBotDirect) {
                         headers['X-Telegram-Session'] = session;
                     }
 
                     if (hasBotConfig) {
-                        const uploaderIndex = index % (botTokens.length + 1);
-                        if (uploaderIndex === 0) {
-                            headers['X-Telegram-Channel-Id'] = channelId;
-                        } else {
-                            const activeBotToken = botTokens[uploaderIndex - 1];
+                        if (useBotDirect || !session) {
+                            const activeBotToken = botTokens[index % botTokens.length];
                             headers['X-Telegram-Bot-Token'] = activeBotToken;
                             headers['X-Telegram-Channel-Id'] = channelId;
+                        } else {
+                            const uploaderIndex = index % (botTokens.length + 1);
+                            if (uploaderIndex === 0) {
+                                headers['X-Telegram-Channel-Id'] = channelId;
+                            } else {
+                                const activeBotToken = botTokens[uploaderIndex - 1];
+                                headers['X-Telegram-Bot-Token'] = activeBotToken;
+                                headers['X-Telegram-Channel-Id'] = channelId;
+                            }
                         }
                     } else if (channelId) {
                         headers['X-Telegram-Channel-Id'] = channelId;
@@ -4977,7 +5064,7 @@ self.onmessage = async (e) => {
             },
 
             fetchMissingMetadata: async () => {
-                const missing = cat.allItems.filter(i => (!i.title || !i.poster || (i.type === 'series' && (!i.seriesData || !i.seriesData.totalExpected))) && i.id && i.id.startsWith('tt') && !i._fetchingMeta);
+                const missing = cat.allItems.filter(i => !i.title && i.id && i.id.startsWith('tt') && !i._fetchingMeta);
                 if (missing.length === 0) return;
 
                 // Priorizar os itens que estão visíveis na tela atualmente para carregar os títulos e capas instantaneamente
@@ -6509,6 +6596,9 @@ self.onmessage = async (e) => {
                 window.isUpdatingUI_Discord = true;
                 updateAdminUI();
                 window.isUpdatingUI_Discord = false;
+            }
+            if (typeof tg !== 'undefined' && typeof tg.updateUIStatus === 'function') {
+                tg.updateUIStatus();
             }
         }
 
