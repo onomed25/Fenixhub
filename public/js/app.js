@@ -888,6 +888,18 @@ function clearDiscordSession() {
                 const botTokens = botTokenInput ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
                 const hasBotConfig = botTokens.length > 0 && channelId;
 
+                const botDirectCheckbox = document.getElementById('tgUseBotDirect');
+                const useBotDirect = botDirectCheckbox && botDirectCheckbox.checked;
+                const session = localStorage.getItem('fenixflix_tg_session');
+
+                if ((useBotDirect || !session) && (!botTokenInput || !channelId)) {
+                    const advContent = document.getElementById('tgAdvancedContent');
+                    if (advContent && advContent.classList.contains('hidden')) {
+                        tg.toggleAdvanced();
+                    }
+                    return showToast("Para enviar via Bot sem sua conta, informe seu Bot Token e Canal de Backup nas Configurações Avançadas abaixo!", "warning");
+                }
+
                 const progressBox = document.getElementById('tgProgressBox');
                 const progressBar = document.getElementById('tgProgressBar');
                 const percentText = document.getElementById('tgPercent');
@@ -1185,6 +1197,22 @@ function clearDiscordSession() {
                     return showToast("O arquivo local precisa ser um vídeo (mp4, mkv, etc.)!", "error");
                 }
 
+                const botTokenInput = document.getElementById('tgBotToken').value.trim();
+                const channelId = document.getElementById('tgChannelId').value.trim();
+                const botTokens = botTokenInput ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
+                const botDirectCheckbox = document.getElementById('tgUseBotDirect');
+                const useBotDirect = botDirectCheckbox && botDirectCheckbox.checked;
+                const session = localStorage.getItem('fenixflix_tg_session');
+
+                if ((useBotDirect || !session) && (!botTokenInput || !channelId)) {
+                    const advContent = document.getElementById('tgAdvancedContent');
+                    if (advContent && advContent.classList.contains('hidden')) {
+                        tg.toggleAdvanced();
+                    }
+                    const botInputEl = document.getElementById('tgBotToken');
+                    if (botInputEl) botInputEl.focus();
+                    return showToast("Para enviar via Bot sem sua conta, informe seu Bot Token e Canal de Backup nas Configurações Avançadas abaixo!", "warning");
+                }
 
                 const btn = document.getElementById('btnTgLocalSend');
                 const progressBox = document.getElementById('tgProgressBox');
@@ -1202,14 +1230,10 @@ function clearDiscordSession() {
 
                 const tgAdminSenha = sessionStorage.getItem('fenixflix_senha') || '';
                 const headers = { 'Content-Type': 'application/json' , 'x-admin-password': tgAdminSenha };
-                const session = localStorage.getItem('fenixflix_tg_session');
                 if (session) {
                     headers['X-Telegram-Session'] = session;
                 }
 
-                const botTokenInput = document.getElementById('tgBotToken').value.trim();
-                const channelId = document.getElementById('tgChannelId').value.trim();
-                const botTokens = botTokenInput ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
                 if (botTokens.length > 0) {
                     headers['X-Telegram-Bot-Token'] = botTokens[0];
                 }

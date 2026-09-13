@@ -40,9 +40,11 @@ const sharedBots = new Map();
  * @returns {{configured: boolean, connected: boolean}}
  */
 function getStatus() {
+    const hasEnvBot = !!(process.env.TELEGRAM_BOT_TOKEN && (process.env.TELEGRAM_CHANNEL_ID || process.env.TELEGRAM_BACKUP_CHANNEL));
     return {
-        configured: !!(apiId && apiHash && sessionString),
-        connected: isConnected && !!globalClient && globalClient.connected
+        configured: !!(apiId && apiHash && sessionString) || hasEnvBot,
+        connected: (isConnected && !!globalClient && globalClient.connected) || hasEnvBot,
+        botConfigured: hasEnvBot
     };
 }
 
@@ -318,6 +320,9 @@ function getMessageFromForward(forwarded) {
  * @returns {Promise<string>} O link gerado pelo bot
  */
 async function uploadFileAndGetLink(filePath, fileName, onProgress, customSessionString, botToken, channelId) {
+    botToken = botToken || process.env.TELEGRAM_BOT_TOKEN;
+    channelId = channelId || process.env.TELEGRAM_CHANNEL_ID || process.env.TELEGRAM_BACKUP_CHANNEL;
+
     let activeClient = null;
     let isDynamic = false;
 
@@ -777,6 +782,9 @@ function downloadFile(url, destPath, onProgress, redirectDepth = 0) {
  * @returns {Promise<string>}
  */
 async function downloadAndUploadUrl(url, fileName, onDownloadProgress, onUploadProgress, customSessionString, botToken, channelId) {
+    botToken = botToken || process.env.TELEGRAM_BOT_TOKEN;
+    channelId = channelId || process.env.TELEGRAM_CHANNEL_ID || process.env.TELEGRAM_BACKUP_CHANNEL;
+
     const tempDir = path.join(__dirname, 'temp_uploads');
     if (!fs.existsSync(tempDir)) {
         fs.mkdirSync(tempDir, { recursive: true });

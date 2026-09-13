@@ -711,16 +711,27 @@
                                         </div>
                                         <div id="tgAdvancedContent" class="hidden space-y-2.5 pt-2 border-t border-zinc-800/40">
                                             <div>
-                                                <label class="block text-[9px] text-zinc-500 mb-1">Token de Bot Próprio (Opcional):</label>
-                                                <input type="text" id="tgBotToken" maxlength="500" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: token1, token2 (separe por vírgula para múltiplos)">
+                                                <div class="flex justify-between items-center mb-1">
+                                                    <label class="block text-[9px] text-zinc-400 font-medium">Token de Bot (@BotFather):</label>
+                                                    <span class="text-[9px] text-primary">Obrigatório no Modo Bot</span>
+                                                </div>
+                                                <input type="text" id="tgBotToken" maxlength="500" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: 7123456789:AAFlkjw98fjw... (obtido com @BotFather)">
                                             </div>
                                             <div>
-                                                <label class="block text-[9px] text-zinc-500 mb-1">Username ou ID do Canal de Backup (Opcional):</label>
+                                                <div class="flex justify-between items-center mb-1">
+                                                    <label class="block text-[9px] text-zinc-400 font-medium">Canal de Backup do Telegram:</label>
+                                                    <span class="text-[9px] text-primary">O bot deve ser admin</span>
+                                                </div>
                                                 <input type="text" id="tgChannelId" maxlength="200" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: @meucanal ou -100123456789">
                                             </div>
-                                            <p class="text-[9px] text-zinc-500 leading-relaxed">
-                                                * Ao preencher ambos, o upload será dividido em paralelo entre seus Bots e sua Conta de Usuário (concorrência = número de bots + 1), postando no canal e encaminhando de lá para o bot de streaming.
-                                            </p>
+                                            <div class="p-2 rounded bg-zinc-900/60 border border-zinc-800/60 text-[9px] text-zinc-400 leading-relaxed space-y-1">
+                                                <p><i class="fa-solid fa-robot text-primary mr-1"></i><strong>Como usar o Modo Bot Seguro:</strong></p>
+                                                <ol class="list-decimal pl-4 space-y-0.5 text-zinc-400">
+                                                    <li>Crie um bot no Telegram com o <b>@BotFather</b> e copie o Token gerado.</li>
+                                                    <li>Crie um Canal no Telegram e adicione seu bot como <b>Administrador</b> (com permissão de postar).</li>
+                                                    <li>Cole o Token e o Canal acima. O upload irá direto pelo bot para o canal, sem usar sua conta pessoal!</li>
+                                                </ol>
+                                            </div>
                                         </div>
                                     </div>
 
