@@ -111,9 +111,10 @@ const authLimiter = rateLimit({
     message: { erro: 'Muitas tentativas de autenticação. Tente novamente mais tarde.' }
 });
 
+// Limite por IP: dimensionado para importação de vários lotes (.json) de uma só vez
 const uploadLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 60,
+    max: 400,
     standardHeaders: true,
     legacyHeaders: false,
     message: { erro: 'Limite de uploads atingido temporariamente. Tente novamente mais tarde.' }
@@ -2350,96 +2351,101 @@ app.delete('/api/denuncias/delete', mutationLimiter, requireAdminOrAjudante, han
 app.post('/api/denuncias/delete', mutationLimiter, requireAdminOrAjudante, handleDeleteDenuncia);
 
 // Ranking de Colaboradores com Prevenção de Falha em Timestamps
-app.get('/api/colaboradores', async (req, res) => {
-    const { periodo } = req.query;
+// Helper compartilhado: monta o ranking a partir de qualquer catálogo (PostgreSQL ou Hugging Face).
+function buildRankingFromCatalog(catalog, periodo) {
+    const now = Date.now();
+    let maxAgeMs = Infinity;
 
-    if (process.env.DATABASE_SOURCE === 'huggingface') {
-        try {
-            const catalog = await fetchCatalogFromHf(false);
-            const now = Date.now();
-            let maxAgeMs = Infinity;
+    if (periodo === 'semana') maxAgeMs = 7 * 24 * 60 * 60 * 1000;
+    else if (periodo === 'mes') maxAgeMs = 30 * 24 * 60 * 60 * 1000;
+    else if (periodo === 'ano') maxAgeMs = 365 * 24 * 60 * 60 * 1000;
 
-            if (periodo === 'semana') maxAgeMs = 7 * 24 * 60 * 60 * 1000;
-            else if (periodo === 'mes') maxAgeMs = 30 * 24 * 60 * 60 * 1000;
-            else if (periodo === 'ano') maxAgeMs = 365 * 24 * 60 * 60 * 1000;
+    const rankingMap = {};
+    const items = Array.isArray(catalog) ? catalog : [];
 
-            const rankingMap = {};
+    items.forEach(item => {
+        if (!item || typeof item !== 'object') return;
 
-            catalog.forEach(item => {
-                const title = item.title || item.nome_do_json || item.id;
-                const type = item.type || 'movie';
+        const title = String(item.title || item.nome_do_json || item.id || 'Sem título');
+        const type = item.type || 'movie';
 
-                const processStream = (stream) => {
-                    const colab = (stream && stream.colaborador) || item.colaborador;
-                    if (!colab || typeof colab !== 'string' || !colab.trim()) return;
+        const processStream = (stream) => {
+            const rawColab = (stream && stream.colaborador) || item.colaborador;
+            if (rawColab === null || rawColab === undefined) return;
 
-                    const colabName = colab.trim();
-                    const streamDateStr = (stream && stream.criado_em) || item.criado_em;
-                    if (maxAgeMs !== Infinity && streamDateStr) {
-                        const streamDate = new Date(streamDateStr).getTime();
-                        if (!isNaN(streamDate) && (now - streamDate > maxAgeMs)) {
-                            return;
-                        }
-                    }
+            const colabName = String(rawColab).trim();
+            if (!colabName) return;
 
-                    const colabId = (stream && stream.colaborador_id) || item.colaborador_id || null;
-                    const colabAvatar = (stream && stream.colaborador_avatar) || item.colaborador_avatar || null;
-                    const role = (stream && stream.colaborador_role) || item.colaborador_role || '';
-                    const isAjudante = role === 'ajudante';
+            const streamDateStr = (stream && stream.criado_em) || item.criado_em;
+            if (maxAgeMs !== Infinity && streamDateStr) {
+                const streamDate = new Date(streamDateStr).getTime();
+                if (!isNaN(streamDate) && (now - streamDate > maxAgeMs)) {
+                    return;
+                }
+            }
 
-                    if (!rankingMap[colabName]) {
-                        rankingMap[colabName] = {
-                            nome: colabName,
-                            count: 0,
-                            discord_id: colabId,
-                            avatar: colabAvatar,
-                            is_ajudante: isAjudante,
-                            envios_detalhes: []
-                        };
-                    } else {
-                        if (!rankingMap[colabName].discord_id && colabId) rankingMap[colabName].discord_id = colabId;
-                        if (!rankingMap[colabName].avatar && colabAvatar) rankingMap[colabName].avatar = colabAvatar;
-                        if (isAjudante) rankingMap[colabName].is_ajudante = true;
-                    }
+            const colabId = (stream && stream.colaborador_id) || item.colaborador_id || null;
+            const colabAvatar = (stream && stream.colaborador_avatar) || item.colaborador_avatar || null;
+            const role = (stream && stream.colaborador_role) || item.colaborador_role || '';
+            const isAjudante = role === 'ajudante';
 
-                    rankingMap[colabName].count++;
-                    rankingMap[colabName].envios_detalhes.push({ title, type });
+            if (!rankingMap[colabName]) {
+                rankingMap[colabName] = {
+                    nome: colabName,
+                    count: 0,
+                    discord_id: colabId,
+                    avatar: colabAvatar,
+                    is_ajudante: isAjudante,
+                    envios_detalhes: []
                 };
+            } else {
+                if (!rankingMap[colabName].discord_id && colabId) rankingMap[colabName].discord_id = colabId;
+                if (!rankingMap[colabName].avatar && colabAvatar) rankingMap[colabName].avatar = colabAvatar;
+                if (isAjudante) rankingMap[colabName].is_ajudante = true;
+            }
 
-                if (type === 'movie' && Array.isArray(item.streams)) {
-                    item.streams.forEach(processStream);
-                } else if (type === 'series' && item.streams && typeof item.streams === 'object') {
-                    Object.values(item.streams).forEach(season => {
-                        if (season && typeof season === 'object') {
-                            Object.values(season).forEach(epStreams => {
-                                if (Array.isArray(epStreams)) {
-                                    epStreams.forEach(processStream);
-                                }
-                            });
+            rankingMap[colabName].count++;
+            rankingMap[colabName].envios_detalhes.push({ title, type });
+        };
+
+        if (type === 'movie' && Array.isArray(item.streams)) {
+            item.streams.forEach(processStream);
+        } else if (type === 'series' && item.streams && typeof item.streams === 'object') {
+            Object.values(item.streams).forEach(season => {
+                if (season && typeof season === 'object') {
+                    Object.values(season).forEach(epStreams => {
+                        if (Array.isArray(epStreams)) {
+                            epStreams.forEach(processStream);
                         }
                     });
                 }
             });
+        }
+    });
 
-            const ranking = Object.values(rankingMap).sort((a, b) => b.count - a.count);
-            return res.json(ranking);
+    return Object.values(rankingMap).sort((a, b) => b.count - a.count);
+}
+
+app.get('/api/colaboradores', async (req, res) => {
+    const { periodo } = req.query;
+    const safePeriodo = ['semana', 'mes', 'ano'].includes(periodo) ? periodo : 'todos';
+
+    if (process.env.DATABASE_SOURCE === 'huggingface') {
+        try {
+            const catalog = await fetchCatalogFromHf(false);
+            return res.json(buildRankingFromCatalog(catalog, safePeriodo));
         } catch (hfErr) {
             console.error('[HF Colaboradores Error]:', hfErr.message);
             return res.status(500).json({ erro: 'Erro ao buscar ranking de colaboradores do Hugging Face.' });
         }
     }
-    let dateFilter = '';
 
-    // Sanitização de timestamp para evitar erro de sintaxe SQL se criado_em for inválido
-    const safeDateExpr = "COALESCE(CASE WHEN (stream->>'criado_em') ~ '^\\d{4}-\\d{2}-\\d{2}' THEN (stream->>'criado_em')::timestamp ELSE NULL END, criado_em)";
-
-    if (periodo === 'semana') {
-        dateFilter = `AND ${safeDateExpr} >= NOW() - INTERVAL '7 days'`;
-    } else if (periodo === 'mes') {
-        dateFilter = `AND ${safeDateExpr} >= NOW() - INTERVAL '30 days'`;
-    } else if (periodo === 'ano') {
-        dateFilter = `AND ${safeDateExpr} >= NOW() - INTERVAL '365 days'`;
-    }
+    // Filtro de período por comparação de datas ISO em texto: evita cast inválido no PostgreSQL
+    // (antes um timestamp malformado derrubava a query inteira com erro 500).
+    const cutoffDays = safePeriodo === 'semana' ? 7 : (safePeriodo === 'mes' ? 30 : (safePeriodo === 'ano' ? 365 : null));
+    const streamDayExpr = "LEFT(COALESCE(NULLIF(stream->>'criado_em', ''), ''), 10)";
+    const effectiveDayExpr = `CASE WHEN ${streamDayExpr} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN ${streamDayExpr} ELSE to_char(COALESCE(criado_em, NOW()), 'YYYY-MM-DD') END`;
+    const dateFilter = cutoffDays ? `AND ${effectiveDayExpr} >= to_char(NOW() - INTERVAL '${cutoffDays} days', 'YYYY-MM-DD')` : '';
 
     try {
         const query = `
@@ -2527,7 +2533,16 @@ app.get('/api/colaboradores', async (req, res) => {
         res.json(result.rows);
     } catch (err) {
         console.error('Erro ao buscar ranking de colaboradores:', err.message);
-        res.status(500).json({ erro: 'Erro ao buscar ranking de colaboradores.' });
+
+        // FALLBACK: mesma resiliência do catálogo principal (PostgreSQL -> Hugging Face)
+        try {
+            const catalog = await fetchCatalogFromHf(false);
+            console.warn('[Colaboradores] Fonte PostgreSQL indisponível: usando Hugging Face como fallback.');
+            return res.json(buildRankingFromCatalog(catalog, safePeriodo));
+        } catch (hfErr) {
+            console.error('[HF Colaboradores Fallback Error]:', hfErr.message);
+            return res.status(500).json({ erro: 'Erro ao buscar ranking de colaboradores.' });
+        }
     }
 });
 

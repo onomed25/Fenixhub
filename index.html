@@ -621,7 +621,7 @@
                             <div id="uploadSectionBot" class="space-y-3">
                                 <!-- Painel de Login/Conexão do Telegram -->
                                 <div id="tgLoginPanel" class="hidden mb-4 p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 space-y-3">
-                                    <p class="text-xs text-zinc-400">Conecte sua conta do Telegram para poder converter vídeos usando sua própria conta:</p>
+                                    <p class="text-xs text-zinc-400">Opcional: conecte sua conta do Telegram para converter vídeos usando a sua própria conta. Cargos autorizados já enviam pelo Bot Oficial sem precisar de login.</p>
                                     
                                     <!-- Passo 1: Telefone -->
                                     <div id="tgLoginPhoneStep" class="flex gap-2">
@@ -666,17 +666,14 @@
                                         </label>
                                     </div>
 
-                                    <!-- Opção Exclusiva: Auto Bot Oficial Fenixflix (Sem login e sem expor token) -->
-                                    <div id="tgBotNoLoginOption" class="hidden flex items-center justify-between p-3 bg-indigo-950/40 border border-indigo-500/30 rounded-xl">
-                                        <label class="flex items-center gap-2.5 cursor-pointer select-none">
-                                            <input type="checkbox" id="tgUseBotDirect" onchange="tg.onBotModeToggle()" class="rounded border-zinc-700 bg-zinc-900 text-indigo-500 focus:ring-indigo-500 w-4 h-4 cursor-pointer">
-                                            <div class="flex flex-col">
-                                                <span class="text-xs font-semibold text-zinc-100 flex items-center gap-1.5">
-                                                    <i class="fa-solid fa-robot text-indigo-400"></i> Auto Bot Oficial Fenixflix (@fenix_db)
-                                                </span>
-                                                <span class="text-xs text-zinc-400">Envio automático direto pelo Bot Oficial da equipe sem precisar de login nem credenciais</span>
-                                            </div>
-                                        </label>
+                                    <!-- Aviso fixo: cargos autorizados enviam sem login pelo Bot Oficial -->
+                                    <div id="tgOfficialBotInfo" class="hidden flex items-center justify-between gap-3 p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-xl">
+                                        <div class="flex flex-col">
+                                            <span class="text-xs font-semibold text-zinc-100 flex items-center gap-1.5">
+                                                <i class="fa-solid fa-robot text-emerald-400"></i> Envio pelo Bot Oficial (@fenix_db)
+                                            </span>
+                                            <span class="text-xs text-zinc-400">Você não precisa fazer login no Telegram: os vídeos são postados automaticamente pelo bot oficial da equipe.</span>
+                                        </div>
                                         <span class="text-xs font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 shrink-0 flex items-center gap-1">
                                             <i class="fa-solid fa-shield-halved text-xs"></i> Protegido
                                         </span>
@@ -711,9 +708,9 @@
                                             <i id="tgAdvancedIcon" class="fa-solid fa-chevron-down text-zinc-500 text-xs transition-transform duration-300"></i>
                                         </div>
                                         <div id="tgAdvancedContent" class="hidden space-y-2.5 pt-2 border-t border-zinc-800/40">
-                                            <div id="tgAutoBotNotice" class="hidden p-2.5 rounded-lg bg-indigo-950/40 border border-indigo-500/30 text-xs text-indigo-300 flex items-center gap-2">
-                                                <i class="fa-solid fa-lock text-xs text-indigo-400"></i>
-                                                <span>Modo <b>Auto Bot Oficial</b> ativo. O Token do bot é gerenciado pelo sistema e protegido contra visualização.</span>
+                                            <div id="tgOfficialBotNotice" class="hidden p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-xs text-emerald-300 flex items-center gap-2">
+                                                <i class="fa-solid fa-lock text-xs text-emerald-400"></i>
+                                                <span>Envio pelo <b>Bot Oficial</b> ativo para o seu cargo. O Token do bot é gerenciado pelo sistema e protegido contra visualização.</span>
                                             </div>
                                             <div>
                                                 <div class="flex justify-between items-center mb-1">
@@ -722,7 +719,6 @@
                                                 </div>
                                                 <div class="relative">
                                                     <input type="password" id="tgBotToken" maxlength="500" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: 7123456789:AAFlkjw98fjw... (obtido com @BotFather)">
-                                                    <span id="tgBotTokenShield" class="hidden absolute right-2.5 top-2.5 text-emerald-400 text-xs" title="Token Oficial Protegido"><i class="fa-solid fa-shield-check"></i></span>
                                                 </div>
                                             </div>
                                             <div>
@@ -733,10 +729,10 @@
                                                 <input type="text" id="tgChannelId" maxlength="200" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: @meucanal ou -100123456789">
                                             </div>
                                             <div class="p-2 rounded bg-zinc-900/60 border border-zinc-800/60 text-xs text-zinc-400 leading-relaxed space-y-1">
-                                                <p><i class="fa-solid fa-robot text-primary mr-1"></i><strong>Como usar o Modo Bot Seguro:</strong></p>
+                                                <p><i class="fa-solid fa-robot text-primary mr-1"></i><strong>Como funciona o envio:</strong></p>
                                                 <ol class="list-decimal pl-4 space-y-0.5 text-zinc-400">
-                                                    <li>Colaboradores autorizados utilizam o <b>Auto Bot Oficial</b> para envio automático ao canal <b>@fenix_db</b> sem precisar configurar nada.</li>
-                                                    <li>Se preferir usar seu próprio bot, desmarque a opção de Auto Bot e configure seu próprio Token e Canal acima.</li>
+                                                    <li>Cargos autorizados (admin, ajudante ou colaborador) enviam pelo <b>Bot Oficial</b> ao canal <b>@fenix_db</b>, sem login e sem configurar nada.</li>
+                                                    <li>Sem cargo autorizado, conecte sua conta do Telegram ou informe seu próprio Token e Canal acima.</li>
                                                 </ol>
                                             </div>
                                         </div>
@@ -1416,6 +1412,21 @@
     <!-- Container de Toasts (Notificações) -->
     <div id="toast-container" class="fixed bottom-6 left-1/2 -translate-x-1/2 md:translate-x-0 md:left-auto md:right-6 z-[200] flex flex-col gap-2 pointer-events-none w-[90%] md:w-auto"></div>
 
+    <!-- Progresso da importação de vários lotes (.json) de uma vez -->
+    <div id="loteImportBox" class="hidden fixed top-20 sm:top-24 left-1/2 -translate-x-1/2 z-[210] w-[92%] max-w-md bg-zinc-950/95 backdrop-blur border border-zinc-800 rounded-2xl shadow-2xl p-4">
+        <div class="flex items-center justify-between gap-3 mb-2">
+            <span class="text-xs font-semibold text-white flex items-center gap-2 truncate">
+                <i class="fa-solid fa-boxes-stacked text-primary"></i>
+                <span id="loteImportTitle" class="truncate">Importando lotes...</span>
+            </span>
+            <span id="loteImportCount" class="text-xs font-mono text-zinc-400 shrink-0">0/0</span>
+        </div>
+        <div class="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden border border-zinc-800/80">
+            <div id="loteImportBar" class="bg-primary h-full w-0 transition-all duration-300"></div>
+        </div>
+        <div id="loteImportErrors" class="hidden mt-2 text-[11px] text-red-400 max-h-28 overflow-y-auto custom-scrollbar space-y-0.5"></div>
+    </div>
+
     <!-- Modal de Login Personalizado -->
     <div id="custom-login-modal" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle" class="fixed inset-0 z-[250] hidden flex items-center justify-center p-4">
         <!-- Backdrop com transição de opacidade -->
@@ -1496,7 +1507,7 @@
     <script>
         window.TELEGRAM_API_URL = '__TELEGRAM_API_URL_PLACEHOLDER__';
     </script>
-    <script src="/js/app.js?v=20"></script>
+    <script src="/js/app.js?v=21"></script>
 
     <!-- Overlay para arrastar e soltar arquivos -->
     <div id="drag-drop-overlay" class="fixed inset-0 bg-[#05070D]/85 backdrop-blur-md z-[9999] flex flex-col items-center justify-center border-4 border-dashed border-primary/60 m-4 rounded-3xl opacity-0 pointer-events-none transition-opacity duration-300">

@@ -531,13 +531,19 @@ function clearDiscordSession() {
                 const isColaborador = localStorage.getItem('is_colaborador') === 'true';
                 return isAdmin || isAjudante || isColaborador;
             },
+
+            // Envio sem login: cargos autorizados sempre enviam pelo Bot Oficial (@fenix_db).
+            // Não existe mais a opção "Auto Bot": o comportamento é automático.
+            shouldUseOfficialBot: () => tg.isPrivileged(),
             
             init: async () => {
                 // Carrega configurações avançadas do localStorage
                 const botTokenInput = document.getElementById('tgBotToken');
                 const channelIdInput = document.getElementById('tgChannelId');
-                const botDirectCheckbox = document.getElementById('tgUseBotDirect');
-                
+
+                // Limpa a preferência antiga do modo Auto Bot (opção removida).
+                localStorage.removeItem('fenixflix_tg_use_bot_direct');
+
                 if (botTokenInput && channelIdInput) {
                     botTokenInput.value = localStorage.getItem('fenixflix_tg_bot_token') || '';
                     channelIdInput.value = localStorage.getItem('fenixflix_tg_channel_id') || '';
@@ -552,22 +558,10 @@ function clearDiscordSession() {
                     });
                 }
 
-                if (botDirectCheckbox) {
-                    const saved = localStorage.getItem('fenixflix_tg_use_bot_direct');
-                    botDirectCheckbox.checked = saved !== null ? saved === 'true' : tg.isPrivileged();
-                }
-
                 await tg.checkStatus();
                 setInterval(tg.checkStatus, 15000);
             },
 
-            onBotModeToggle: () => {
-                const botDirectCheckbox = document.getElementById('tgUseBotDirect');
-                if (botDirectCheckbox) {
-                    localStorage.setItem('fenixflix_tg_use_bot_direct', botDirectCheckbox.checked ? 'true' : 'false');
-                }
-                tg.updateUIStatus();
-            },
 
             syncToMainForm: () => {
                 // Obsolete: inputs removed.
@@ -612,66 +606,48 @@ function clearDiscordSession() {
                 const btnBrowser = document.getElementById('btnTgBrowserSend');
                 const btnLocal = document.getElementById('btnTgLocalSend');
                 const feedbackText = document.getElementById('tgFeedbackText');
-                const botNoLoginContainer = document.getElementById('tgBotNoLoginOption');
-                const botDirectCheckbox = document.getElementById('tgUseBotDirect');
                 const botTokenInput = document.getElementById('tgBotToken');
-                const channelIdInput = document.getElementById('tgChannelId');
-                const botTokenShield = document.getElementById('tgBotTokenShield');
-                const autoBotNotice = document.getElementById('tgAutoBotNotice');
+                const officialBotInfo = document.getElementById('tgOfficialBotInfo');
+                const officialBotNotice = document.getElementById('tgOfficialBotNotice');
                 const botTokenBadge = document.getElementById('tgBotTokenBadge');
                 const channelBadge = document.getElementById('tgChannelBadge');
 
                 const hasLocalSession = localStorage.getItem('fenixflix_tg_session') !== null;
-                const isPrivileged = tg.isPrivileged();
+                const useOfficialBot = tg.shouldUseOfficialBot();
 
-                // Exibe a opção de upload por bot sem login exclusivamente para cargos autorizados
-                if (botNoLoginContainer) {
-                    if (isPrivileged) {
-                        botNoLoginContainer.classList.remove('hidden');
-                    } else {
-                        botNoLoginContainer.classList.add('hidden');
-                        if (botDirectCheckbox) botDirectCheckbox.checked = false;
-                    }
-                }
+                if (officialBotInfo) officialBotInfo.classList.toggle('hidden', !useOfficialBot);
+                if (officialBotNotice) officialBotNotice.classList.toggle('hidden', !useOfficialBot);
 
-                const useBotDirect = isPrivileged && botDirectCheckbox && botDirectCheckbox.checked;
-
-                if (useBotDirect) {
+                // Cargos autorizados: envio pelo Bot Oficial, sem login e sem credenciais.
+                if (useOfficialBot) {
                     if (badge) {
-                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800";
-                        badge.innerText = "Auto Bot Oficial (@fenix_db)";
+                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-900";
+                        badge.innerText = "Bot Oficial (@fenix_db)";
                     }
-                    if (btnToggle) {
-                        btnToggle.innerText = "Conta Pessoal";
-                        btnToggle.className = "text-[9px] font-semibold text-zinc-400 hover:underline ml-1";
-                    }
+                    if (btnToggle) btnToggle.classList.add('hidden');
                     if (btnBrowser) btnBrowser.disabled = false;
                     if (btnLocal) btnLocal.disabled = false;
-                    if (feedbackText) feedbackText.innerText = "Auto Bot Oficial ativo: vídeos são postados automaticamente no canal @fenix_db com link de stream direto.";
-                    
+                    if (feedbackText) feedbackText.innerText = "Bot Oficial ativo: os vídeos são postados automaticamente em @fenix_db com link de stream direto, sem precisar de login.";
+
                     if (botTokenInput) {
-                        botTokenInput.value = "••••••••••••••••••••••••••••••••";
                         botTokenInput.disabled = true;
-                        botTokenInput.type = "password";
+                        botTokenInput.placeholder = "Gerenciado automaticamente pelo Bot Oficial";
                     }
-                    if (channelIdInput && (!channelIdInput.value || channelIdInput.value === '@fenix_db')) {
-                        channelIdInput.value = "@fenix_db";
-                    }
-                    if (botTokenShield) botTokenShield.classList.remove('hidden');
-                    if (autoBotNotice) autoBotNotice.classList.remove('hidden');
-                    if (botTokenBadge) botTokenBadge.innerText = "Protegido (Oficial)";
+                    if (botTokenBadge) botTokenBadge.innerText = "Gerenciado pelo Bot Oficial";
                     if (channelBadge) channelBadge.innerText = "Canal Oficial (@fenix_db)";
                     return;
-                } else {
-                    if (botTokenInput && botTokenInput.disabled) {
-                        botTokenInput.disabled = false;
-                        botTokenInput.type = "password";
-                        botTokenInput.value = localStorage.getItem('fenixflix_tg_bot_token') || '';
-                    }
-                    if (botTokenShield) botTokenShield.classList.add('hidden');
-                    if (autoBotNotice) autoBotNotice.classList.add('hidden');
-                    if (botTokenBadge) botTokenBadge.innerText = "Obrigatório no Modo Bot";
-                    if (channelBadge) channelBadge.innerText = "O bot deve ser admin";
+                }
+
+                if (botTokenBadge) botTokenBadge.innerText = "Obrigatório no Modo Bot";
+                if (channelBadge) channelBadge.innerText = "O bot deve ser admin";
+
+                if (btnToggle) btnToggle.classList.remove('hidden');
+
+                if (botTokenInput && botTokenInput.disabled) {
+                    botTokenInput.disabled = false;
+                    botTokenInput.type = "password";
+                    botTokenInput.placeholder = "Ex: 7123456789:AAFlkjw98fjw... (obtido com @BotFather)";
+                    botTokenInput.value = localStorage.getItem('fenixflix_tg_bot_token') || '';
                 }
 
                 if (hasLocalSession) {
@@ -915,19 +891,20 @@ function clearDiscordSession() {
 
                 const botTokenInput = (document.getElementById('tgBotToken')?.value || '').trim();
                 const channelId = (document.getElementById('tgChannelId')?.value || '').trim();
-                const botDirectCheckbox = document.getElementById('tgUseBotDirect');
-                const isAutoBot = tg.isPrivileged() && botDirectCheckbox && botDirectCheckbox.checked;
+                // Sem a opção de Auto Bot: cargos autorizados usam o Bot Oficial automaticamente.
+                const useOfficialBot = tg.shouldUseOfficialBot();
+
                 const isMaskedToken = botTokenInput.includes('••••');
                 const botTokens = (botTokenInput && !isMaskedToken) ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
                 const hasBotConfig = botTokens.length > 0 && channelId;
                 const session = localStorage.getItem('fenixflix_tg_session');
 
-                if (!isAutoBot && !session && (!botTokenInput || !channelId)) {
+                if (!useOfficialBot && !session && (!botTokenInput || !channelId)) {
                     const advContent = document.getElementById('tgAdvancedContent');
                     if (advContent && advContent.classList.contains('hidden')) {
                         tg.toggleAdvanced();
                     }
-                    return showToast("Para enviar via Bot sem sua conta, informe seu Bot Token e Canal de Backup nas Configurações Avançadas abaixo!", "warning");
+                    return showToast("Conecte sua conta do Telegram ou informe seu Bot Token e Canal de Backup nas Configurações Avançadas para enviar!", "warning");
                 }
 
                 const progressBox = document.getElementById('tgProgressBox');
@@ -996,11 +973,11 @@ function clearDiscordSession() {
                         const xhr = new XMLHttpRequest();
                         xhr.open('POST', TELEGRAM_API_URL + '/api/telegram/upload', true);
 
-                        if (session && !isAutoBot) {
+                        if (session && !useOfficialBot) {
                             xhr.setRequestHeader('X-Telegram-Session', session);
                         }
 
-                        if (isAutoBot) {
+                        if (useOfficialBot) {
                             xhr.setRequestHeader('X-Telegram-Use-Auto-Bot', 'true');
                             xhr.setRequestHeader('X-Telegram-Channel-Id', channelId || '@fenix_db');
                         } else if (hasBotConfig) {
@@ -1218,20 +1195,20 @@ function clearDiscordSession() {
 
                 const botTokenInput = (document.getElementById('tgBotToken')?.value || '').trim();
                 const channelId = (document.getElementById('tgChannelId')?.value || '').trim();
-                const botDirectCheckbox = document.getElementById('tgUseBotDirect');
-                const isAutoBot = tg.isPrivileged() && botDirectCheckbox && botDirectCheckbox.checked;
+                // Sem a opção de Auto Bot: cargos autorizados usam o Bot Oficial automaticamente.
+                const useOfficialBot = tg.shouldUseOfficialBot();
                 const isMaskedToken = botTokenInput.includes('••••');
                 const botTokens = (botTokenInput && !isMaskedToken) ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
                 const session = localStorage.getItem('fenixflix_tg_session');
 
-                if (!isAutoBot && !session && (!botTokenInput || !channelId)) {
+                if (!useOfficialBot && !session && (!botTokenInput || !channelId)) {
                     const advContent = document.getElementById('tgAdvancedContent');
                     if (advContent && advContent.classList.contains('hidden')) {
                         tg.toggleAdvanced();
                     }
                     const botInputEl = document.getElementById('tgBotToken');
                     if (botInputEl) botInputEl.focus();
-                    return showToast("Para enviar via Bot sem sua conta, informe seu Bot Token e Canal de Backup nas Configurações Avançadas abaixo!", "warning");
+                    return showToast("Conecte sua conta do Telegram ou informe seu Bot Token e Canal de Backup nas Configurações Avançadas para enviar!", "warning");
                 }
 
                 const btn = document.getElementById('btnTgLocalSend');
@@ -1250,11 +1227,11 @@ function clearDiscordSession() {
 
                 const tgAdminSenha = sessionStorage.getItem('fenixflix_senha') || '';
                 const headers = { 'Content-Type': 'application/json' , 'x-admin-password': tgAdminSenha };
-                if (session && !isAutoBot) {
+                if (session && !useOfficialBot) {
                     headers['X-Telegram-Session'] = session;
                 }
 
-                if (isAutoBot) {
+                if (useOfficialBot) {
                     headers['X-Telegram-Use-Auto-Bot'] = 'true';
                     headers['X-Telegram-Channel-Id'] = channelId || '@fenix_db';
                 } else {
@@ -1322,8 +1299,8 @@ function clearDiscordSession() {
 
                 const botTokenInput = (document.getElementById('tgBotToken')?.value || '').trim();
                 const channelId = (document.getElementById('tgChannelId')?.value || '').trim();
-                const botDirectCheckbox = document.getElementById('tgUseBotDirect');
-                const isAutoBot = tg.isPrivileged() && botDirectCheckbox && botDirectCheckbox.checked;
+                // Sem a opção de Auto Bot: cargos autorizados usam o Bot Oficial automaticamente.
+                const useOfficialBot = tg.shouldUseOfficialBot();
                 const isMaskedToken = botTokenInput.includes('••••');
                 const botTokens = (botTokenInput && !isMaskedToken) ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
                 const hasBotConfig = botTokens.length > 0 && channelId;
@@ -1378,11 +1355,11 @@ function clearDiscordSession() {
                     const headers = { 'Content-Type': 'application/json' , 'x-admin-password': tgAdminSenha };
                     const session = localStorage.getItem('fenixflix_tg_session');
 
-                    if (session && !isAutoBot) {
+                    if (session && !useOfficialBot) {
                         headers['X-Telegram-Session'] = session;
                     }
 
-                    if (isAutoBot) {
+                    if (useOfficialBot) {
                         headers['X-Telegram-Use-Auto-Bot'] = 'true';
                         headers['X-Telegram-Channel-Id'] = channelId || '@fenix_db';
                     } else if (hasBotConfig) {
@@ -5210,16 +5187,37 @@ self.onmessage = async (e) => {
                     return;
                 }
 
+                const fileList = Array.from(files);
                 let sucesso = 0;
                 let erro = 0;
                 let discordExpired = false;
+                const errosDetalhados = [];
+                let concluidos = 0;
 
                 const currentUploader = localStorage.getItem('discord_global_name') || localStorage.getItem('discord_username') || localStorage.getItem('fenix_uploader_nick') || (hasAdminSession ? 'Admin' : '');
 
-                showToast(`A processar ${files.length} ficheiros... aguarde.`, 'info');
+                // Painel de progresso: permite importar vários lotes (.json) de uma só vez
+                const loteBox = document.getElementById('loteImportBox');
+                const loteTitle = document.getElementById('loteImportTitle');
+                const loteCount = document.getElementById('loteImportCount');
+                const loteBar = document.getElementById('loteImportBar');
+                const loteErrors = document.getElementById('loteImportErrors');
 
-                for (let i = 0; i < files.length; i++) {
-                    const file = files[i];
+                const updateLoteProgress = () => {
+                    if (loteCount) loteCount.innerText = `${concluidos}/${fileList.length}`;
+                    if (loteBar) loteBar.style.width = Math.round((concluidos / fileList.length) * 100) + '%';
+                };
+
+                if (loteBox) {
+                    loteBox.classList.remove('hidden');
+                    if (loteErrors) { loteErrors.classList.add('hidden'); loteErrors.innerHTML = ''; }
+                    if (loteTitle) loteTitle.innerText = `Importando ${fileList.length} lote(s)...`;
+                }
+                updateLoteProgress();
+
+                showToast(`A processar ${fileList.length} ficheiros... aguarde.`, 'info');
+
+                const uploadSingleLote = async (file) => {
                     try {
                         const text = await file.text();
                         const json = JSON.parse(text);
@@ -5287,11 +5285,43 @@ self.onmessage = async (e) => {
                         } else {
                             if (response.status === 401) discordExpired = true;
                             erro++;
+                            let motivo = `HTTP ${response.status}`;
+                            try {
+                                const data = await response.json();
+                                if (data && data.erro) motivo = data.erro;
+                            } catch (_) {}
+                            errosDetalhados.push(`${file.name}: ${motivo}`);
                         }
                     } catch (error) {
                         erro++;
+                        errosDetalhados.push(`${file.name}: ${error && error.message ? error.message : 'arquivo inválido'}`);
                         console.error(`Erro no ficheiro ${file.name}:`, error);
+                    } finally {
+                        concluidos++;
+                        updateLoteProgress();
+                        if (loteTitle) loteTitle.innerText = `Importando lotes (${sucesso} ok / ${erro} erro)...`;
                     }
+                };
+
+                // Concorrência limitada: importa lotes grandes sem travar o navegador
+                const concurrency = 4;
+                const queue = [...fileList];
+                const workers = Array(Math.min(concurrency, queue.length)).fill(null).map(async () => {
+                    while (queue.length > 0) {
+                        const nextFile = queue.shift();
+                        await uploadSingleLote(nextFile);
+                    }
+                });
+                await Promise.all(workers);
+
+                if (loteBox) {
+                    if (loteTitle) loteTitle.innerText = erro > 0 ? `Lote concluído com ${erro} erro(s)` : 'Lote importado com sucesso';
+                    if (loteErrors && errosDetalhados.length > 0) {
+                        loteErrors.innerHTML = errosDetalhados.slice(0, 30).map(e => `<div>• ${escapeHTML(e)}</div>`).join('')
+                            + (errosDetalhados.length > 30 ? `<div>• ...e mais ${errosDetalhados.length - 30} erro(s)</div>` : '');
+                        loteErrors.classList.remove('hidden');
+                    }
+                    setTimeout(() => loteBox.classList.add('hidden'), erro > 0 ? 12000 : 4000);
                 }
 
                 if (discordExpired) {
@@ -5304,7 +5334,7 @@ self.onmessage = async (e) => {
                     localStorage.removeItem('is_ajudante');
                     if (typeof updateDiscordUI === 'function') updateDiscordUI();
                 } else {
-                    showToast(`Upload concluído! Sucesso: ${sucesso} | Erros: ${erro}`, erro > 0 ? 'warning' : 'success');
+                    showToast(`Lotes concluídos! Sucesso: ${sucesso} | Erros: ${erro}`, erro > 0 ? 'warning' : 'success');
                 }
                 cat.init();
             },
@@ -6838,6 +6868,22 @@ self.onmessage = async (e) => {
             await loadRankingStats(period);
         }
 
+        // Normaliza cada linha do ranking para evitar exceções de renderização
+        // (nomes numéricos, envios_detalhes ausente ou payload fora do formato esperado).
+        function normalizeColab(raw) {
+            const details = Array.isArray(raw && raw.envios_detalhes) ? raw.envios_detalhes.filter(d => d && typeof d === 'object') : [];
+            return {
+                nome: String((raw && (raw.nome || raw.colaborador)) || 'Desconhecido'),
+                discord_id: raw && raw.discord_id ? String(raw.discord_id) : null,
+                avatar: raw && raw.avatar ? String(raw.avatar) : null,
+                count: Number(raw && raw.count) || 0,
+                envios_detalhes: details.map(d => ({
+                    title: String(d.title || d.nome || ''),
+                    type: d.type === 'series' ? 'series' : 'movie'
+                }))
+            };
+        }
+
         async function loadRankingStats(period = 'todos') {
             const tcContainer = document.getElementById('ranking-top-collaborators');
             
@@ -6851,7 +6897,9 @@ self.onmessage = async (e) => {
             try {
                 const resColab = await fetch(API_URL + `/api/colaboradores?periodo=${period}`);
                 if (!resColab.ok) throw new Error("Erro na API de colaboradores");
-                const colaboradores = await resColab.json();
+                const payload = await resColab.json();
+                const lista = Array.isArray(payload) ? payload : (Array.isArray(payload && payload.colaboradores) ? payload.colaboradores : []);
+                const colaboradores = lista.map(normalizeColab);
 
                 let tcHtml = '';
                 if (colaboradores.length === 0) {
@@ -6865,7 +6913,7 @@ self.onmessage = async (e) => {
                         else if (index === 2) medal = '🥉 ';
                         else medal = `<span class="text-zinc-500 font-mono text-xs w-5 inline-block text-center">${index + 1}.</span>`;
 
-                        const details = col.envios_detalhes || [];
+                        const details = col.envios_detalhes;
                         const uniqueTitles = [...new Set(details.map(d => d.title))];
                         const maxToShow = 3;
                         let titlesStr = uniqueTitles.slice(0, maxToShow).join(', ');
@@ -6887,12 +6935,12 @@ self.onmessage = async (e) => {
                         let avatarImgHtml = `<i class="fa-solid fa-user text-zinc-400 text-sm"></i>`;
                         if (col.discord_id && col.avatar) {
                             const avatarUrl = `https://cdn.discordapp.com/avatars/${col.discord_id}/${col.avatar}.png?size=64`;
-                            avatarImgHtml = `<img src="${avatarUrl}" alt="Avatar de ${safeNick}" loading="lazy" decoding="async" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
+                            avatarImgHtml = `<img src="${avatarUrl}" alt="Avatar de ${safeNome}" loading="lazy" decoding="async" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
                         } else if (col.discord_id) {
                             // Calcula avatar padrão caso não tenha hash de avatar mas tenha ID
                             const defaultIdx = (parseInt(col.discord_id.slice(-4)) || 0) % 5;
                             const defaultAvatarUrl = `https://cdn.discordapp.com/embed/avatars/${defaultIdx}.png`;
-                            avatarImgHtml = `<img src="${defaultAvatarUrl}" alt="Avatar de ${safeNick}" loading="lazy" decoding="async" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
+                            avatarImgHtml = `<img src="${defaultAvatarUrl}" alt="Avatar de ${safeNome}" loading="lazy" decoding="async" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
                         }
 
                         tcHtml += `
@@ -6927,7 +6975,7 @@ self.onmessage = async (e) => {
                 tcContainer.innerHTML = tcHtml;
             } catch (e) {
                 console.error(e);
-                tcContainer.innerHTML = '<p class="text-red-500 text-center py-6 text-xs">Falha ao carregar ranking de colaboradores.</p>';
+                tcContainer.innerHTML = `<div class="text-center py-6"><p class="text-red-500 text-xs mb-3">Falha ao carregar ranking de colaboradores.</p><button onclick="loadRankingStats('${period}')" class="px-4 py-2 min-h-[38px] bg-white/5 hover:bg-white/10 border border-white/10 text-zinc-300 rounded-lg text-xs font-semibold transition">Tentar novamente</button></div>`;
             }
         }
         // ==========================
