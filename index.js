@@ -1189,7 +1189,7 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
                 });
             }
 
-            if (!adminAuthed && !isGenerator && !isEdit) {
+            if (!isEdit && !isGenerator && req.body.substituir !== 'true') {
                 const existing = await getContentFromHf(nome);
                 if (existing) {
                     finalConteudo = mergeMediaContents(existing, parsedConteudo, { overrideColaborador: Boolean(uploaderNick) });
@@ -1228,7 +1228,7 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
                 ? JSON.parse(checkRes.rows[0].conteudo)
                 : checkRes.rows[0].conteudo;
 
-            if (!adminAuthed && !isGenerator && !isEdit) {
+            if (!isEdit && !isGenerator && req.body.substituir !== 'true') {
                 finalConteudo = mergeMediaContents(existing, parsedConteudo, { overrideColaborador: Boolean(uploaderNick) });
             }
         }

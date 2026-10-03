@@ -533,7 +533,6 @@ function clearDiscordSession() {
             },
 
             // Envio sem login: cargos autorizados sempre enviam pelo Bot Oficial (@fenix_db).
-            // Não existe mais a opção "Auto Bot": o comportamento é automático.
             shouldUseOfficialBot: () => tg.isPrivileged(),
             
             init: async () => {
@@ -558,14 +557,144 @@ function clearDiscordSession() {
                     });
                 }
 
+                // Observadores para atualizar o checklist de prontidão em tempo real
+                document.getElementById('contentId')?.addEventListener('input', () => tg.updateReadiness());
+                document.getElementById('videoQuality')?.addEventListener('change', () => tg.updateReadiness());
+
                 await tg.checkStatus();
+                tg.updateReadiness();
                 setInterval(tg.checkStatus, 15000);
             },
 
+            updateReadiness: () => {
+                const contentId = (document.getElementById('contentId')?.value || '').trim();
+                const seriesName = (document.getElementById('seriesName')?.value || '').trim();
+                const nuvioTitle = (document.getElementById('nuviometaInfoTitle')?.innerText || '').trim();
+                const quality = (document.getElementById('videoQuality')?.value || '').trim();
+                const fileInput = document.getElementById('tgFile');
+                const hasFiles = fileInput && fileInput.files && fileInput.files.length > 0;
+                const useOfficialBot = tg.shouldUseOfficialBot();
+                const hasSession = localStorage.getItem('fenixflix_tg_session') !== null;
+                const botToken = (document.getElementById('tgBotToken')?.value || '').trim();
+                const channelId = (document.getElementById('tgChannelId')?.value || '').trim();
+                const hasCustomBot = Boolean(botToken && channelId);
+                const isTgConnected = useOfficialBot || hasSession || hasCustomBot;
 
-            syncToMainForm: () => {
-                // Obsolete: inputs removed.
+                // 1. Obra
+                const itemMedia = document.getElementById('readinessItemMedia');
+                const iconMedia = document.getElementById('readinessIconMedia');
+                const textMedia = document.getElementById('readinessTextMedia');
+                const mediaIdentified = Boolean(contentId && contentId !== 'Buscando dados...');
+                
+                if (textMedia && iconMedia) {
+                    if (mediaIdentified) {
+                        const displayName = seriesName || nuvioTitle || contentId;
+                        textMedia.innerText = displayName;
+                        textMedia.className = "block text-emerald-400 truncate font-semibold";
+                        iconMedia.className = "fa-solid fa-circle-check text-emerald-400 shrink-0 text-xs";
+                        if (itemMedia) itemMedia.className = "p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between gap-2 cursor-pointer hover:border-emerald-500/50 transition";
+                    } else {
+                        textMedia.innerText = "Buscar acima";
+                        textMedia.className = "block text-amber-400 truncate font-medium";
+                        iconMedia.className = "fa-solid fa-circle-exclamation text-amber-400 shrink-0 text-xs";
+                        if (itemMedia) itemMedia.className = "p-2.5 rounded-xl bg-amber-950/20 border border-amber-500/30 flex items-center justify-between gap-2 cursor-pointer hover:border-amber-500/50 transition animate-pulse";
+                    }
+                }
+
+                // 2. Qualidade
+                const itemQuality = document.getElementById('readinessItemQuality');
+                const iconQuality = document.getElementById('readinessIconQuality');
+                const textQuality = document.getElementById('readinessTextQuality');
+                if (textQuality && iconQuality) {
+                    textQuality.innerText = quality || "1080p";
+                    iconQuality.className = (quality && quality !== 'Nenhuma') ? "fa-solid fa-circle-check text-emerald-400 shrink-0 text-xs" : "fa-solid fa-circle-exclamation text-amber-400 shrink-0 text-xs";
+                }
+
+                // 3. Telegram
+                const itemTelegram = document.getElementById('readinessItemTelegram');
+                const iconTelegram = document.getElementById('readinessIconTelegram');
+                const textTelegram = document.getElementById('readinessTextTelegram');
+                if (textTelegram && iconTelegram) {
+                    if (isTgConnected) {
+                        textTelegram.innerText = useOfficialBot ? "Bot Oficial" : "Conectado";
+                        textTelegram.className = "block text-emerald-400 truncate font-semibold";
+                        iconTelegram.className = "fa-solid fa-circle-check text-emerald-400 shrink-0 text-xs";
+                        if (itemTelegram) itemTelegram.className = "p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between gap-2 cursor-pointer hover:border-emerald-500/50 transition";
+                    } else {
+                        textTelegram.innerText = "Conectar conta";
+                        textTelegram.className = "block text-amber-400 truncate font-medium";
+                        iconTelegram.className = "fa-solid fa-circle-exclamation text-amber-400 shrink-0 text-xs";
+                        if (itemTelegram) itemTelegram.className = "p-2.5 rounded-xl bg-amber-950/20 border border-amber-500/30 flex items-center justify-between gap-2 cursor-pointer hover:border-amber-500/50 transition animate-pulse";
+                    }
+                }
+
+                // Overall badge
+                const overallBadge = document.getElementById('readinessOverallBadge');
+                if (overallBadge) {
+                    if (mediaIdentified && isTgConnected && hasFiles) {
+                        overallBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
+                        overallBadge.innerText = "Pronto para enviar!";
+                    } else if (!mediaIdentified) {
+                        overallBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30";
+                        overallBadge.innerText = "Falta buscar obra";
+                    } else if (!isTgConnected) {
+                        overallBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30";
+                        overallBadge.innerText = "Conecte o Telegram";
+                    } else {
+                        overallBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700";
+                        overallBadge.innerText = "Selecione o vídeo";
+                    }
+                }
             },
+
+            focusMediaSearch: () => {
+                const el = document.getElementById('contentId');
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.focus();
+                    el.classList.add('ring-2', 'ring-primary');
+                    setTimeout(() => el.classList.remove('ring-2', 'ring-primary'), 2000);
+                }
+            },
+
+            focusQuality: () => {
+                const el = document.getElementById('videoQuality');
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.focus();
+                }
+            },
+
+            focusTelegram: () => {
+                const session = localStorage.getItem('fenixflix_tg_session');
+                const useOfficialBot = tg.shouldUseOfficialBot();
+                if (!session && !useOfficialBot) {
+                    const el = document.getElementById('tgPhoneInput');
+                    const loginPanel = document.getElementById('tgLoginPanel');
+                    if (loginPanel && loginPanel.classList.contains('hidden')) {
+                        loginPanel.classList.remove('hidden');
+                    }
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        el.focus();
+                    }
+                }
+            },
+
+            resetPhoneStep: () => {
+                const phoneStep = document.getElementById('tgLoginPhoneStep');
+                const codeStep = document.getElementById('tgLoginCodeStep');
+                const twoFa = document.getElementById('tg2faContainer');
+                if (phoneStep) phoneStep.classList.remove('hidden');
+                if (codeStep) codeStep.classList.add('hidden');
+                if (twoFa) twoFa.classList.add('hidden');
+                const phoneInput = document.getElementById('tgPhoneInput');
+                if (phoneInput) {
+                    phoneInput.focus();
+                }
+            },
+
+            syncToMainForm: () => {},
 
             toggleAdvanced: () => {
                 const content = document.getElementById('tgAdvancedContent');
@@ -582,7 +711,6 @@ function clearDiscordSession() {
             checkStatus: async () => {
                 const localSession = localStorage.getItem('fenixflix_tg_session');
                 if (localSession) {
-                    // Se o usuário tem uma sessão salva localmente, ele está conectado!
                     tg.status = { configured: true, connected: true, local: true };
                     tg.updateUIStatus();
                     return;
@@ -598,6 +726,7 @@ function clearDiscordSession() {
                 } catch (e) {
                     console.error("Erro ao verificar status do Telegram:", e);
                 }
+                tg.updateUIStatus();
             },
 
             updateUIStatus: () => {
@@ -611,23 +740,28 @@ function clearDiscordSession() {
                 const officialBotNotice = document.getElementById('tgOfficialBotNotice');
                 const botTokenBadge = document.getElementById('tgBotTokenBadge');
                 const channelBadge = document.getElementById('tgChannelBadge');
+                const loginPanel = document.getElementById('tgLoginPanel');
+                const connectedPanel = document.getElementById('tgConnectedPanel');
+                const connectedUserLabel = document.getElementById('tgConnectedUserLabel');
 
                 const hasLocalSession = localStorage.getItem('fenixflix_tg_session') !== null;
                 const useOfficialBot = tg.shouldUseOfficialBot();
 
-                if (officialBotInfo) officialBotInfo.classList.toggle('hidden', !useOfficialBot);
-                if (officialBotNotice) officialBotNotice.classList.toggle('hidden', !useOfficialBot);
-
-                // Cargos autorizados: envio pelo Bot Oficial, sem login e sem credenciais.
+                // 1. CARGOS AUTORIZADOS: Envio pelo Bot Oficial (@fenix_db)
                 if (useOfficialBot) {
+                    if (officialBotInfo) officialBotInfo.classList.remove('hidden');
+                    if (officialBotNotice) officialBotNotice.classList.remove('hidden');
+                    if (loginPanel) loginPanel.classList.add('hidden');
+                    if (connectedPanel) connectedPanel.classList.add('hidden');
+
                     if (badge) {
-                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-900";
+                        badge.className = "text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800";
                         badge.innerText = "Bot Oficial (@fenix_db)";
                     }
                     if (btnToggle) btnToggle.classList.add('hidden');
                     if (btnBrowser) btnBrowser.disabled = false;
                     if (btnLocal) btnLocal.disabled = false;
-                    if (feedbackText) feedbackText.innerText = "Bot Oficial ativo: os vídeos são postados automaticamente em @fenix_db com link de stream direto, sem precisar de login.";
+                    if (feedbackText) feedbackText.innerText = "Bot Oficial ativo: vídeos postados automaticamente em @fenix_db com links diretos.";
 
                     if (botTokenInput) {
                         botTokenInput.disabled = true;
@@ -635,13 +769,15 @@ function clearDiscordSession() {
                     }
                     if (botTokenBadge) botTokenBadge.innerText = "Gerenciado pelo Bot Oficial";
                     if (channelBadge) channelBadge.innerText = "Canal Oficial (@fenix_db)";
+                    tg.updateReadiness();
                     return;
                 }
 
+                // Usuário comum / sem bot oficial
+                if (officialBotInfo) officialBotInfo.classList.add('hidden');
+                if (officialBotNotice) officialBotNotice.classList.add('hidden');
                 if (botTokenBadge) botTokenBadge.innerText = "Obrigatório no Modo Bot";
                 if (channelBadge) channelBadge.innerText = "O bot deve ser admin";
-
-                if (btnToggle) btnToggle.classList.remove('hidden');
 
                 if (botTokenInput && botTokenInput.disabled) {
                     botTokenInput.disabled = false;
@@ -650,56 +786,37 @@ function clearDiscordSession() {
                     botTokenInput.value = localStorage.getItem('fenixflix_tg_bot_token') || '';
                 }
 
+                // 2. CONECTADO VIA SESSÃO WEB
                 if (hasLocalSession) {
+                    if (loginPanel) loginPanel.classList.add('hidden');
+                    if (connectedPanel) connectedPanel.classList.remove('hidden');
+                    const nick = localStorage.getItem('fenix_uploader_nick');
+                    if (connectedUserLabel) {
+                        connectedUserLabel.innerText = nick ? `Conectado como @${nick}. Pronto para enviar!` : "Sua conta está autorizada para envio de vídeos.";
+                    }
+
                     if (badge) {
-                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-900";
-                        badge.innerText = "Conectado (Web)";
+                        badge.className = "text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800";
+                        badge.innerText = "Telegram Conectado";
                     }
-                    if (btnToggle) {
-                        btnToggle.innerText = "Desconectar";
-                        btnToggle.className = "text-[9px] font-semibold text-red-400 hover:underline ml-1";
-                    }
+                    if (btnToggle) btnToggle.classList.add('hidden');
                     if (btnBrowser) btnBrowser.disabled = false;
                     if (btnLocal) btnLocal.disabled = false;
-                    if (feedbackText) feedbackText.innerText = "Conectado usando sua conta do Telegram. Pronto para converter vídeos!";
-                } else if (!tg.status.configured) {
-                    if (badge) {
-                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-900";
-                        badge.innerText = "Não configurado (.env)";
-                    }
-                    if (btnToggle) {
-                        btnToggle.innerText = "Conectar";
-                        btnToggle.className = "text-[9px] font-semibold text-indigo-400 hover:underline ml-1";
-                    }
-                    if (btnBrowser) btnBrowser.disabled = true;
-                    if (btnLocal) btnLocal.disabled = true;
-                    if (feedbackText) feedbackText.innerText = "O Telegram do servidor não está configurado. Conecte sua conta do Telegram para usar.";
-                } else if (!tg.status.connected) {
-                    if (badge) {
-                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-red-950 text-red-300 border border-red-900 animate-pulse";
-                        badge.innerText = "Desconectado";
-                    }
-                    if (btnToggle) {
-                        btnToggle.innerText = "Conectar";
-                        btnToggle.className = "text-[9px] font-semibold text-indigo-400 hover:underline ml-1";
-                    }
-                    if (btnBrowser) btnBrowser.disabled = true;
-                    if (btnLocal) btnLocal.disabled = true;
-                    if (feedbackText) feedbackText.innerText = "Telegram do servidor desconectado. Conecte sua conta do Telegram para usar.";
+                    if (feedbackText) feedbackText.innerText = "Conectado usando sua conta do Telegram. Pronto para converter e publicar vídeos!";
                 } else {
-                    // Conectado com a conta global do servidor
+                    // 3. NÃO CONECTADO: Exibe o painel de conexão de forma clara e visível
+                    if (loginPanel) loginPanel.classList.remove('hidden');
+                    if (connectedPanel) connectedPanel.classList.add('hidden');
+
                     if (badge) {
-                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-900";
-                        badge.innerText = "Conectado (Server)";
+                        badge.className = "text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-800 animate-pulse";
+                        badge.innerText = "Conexão Necessária";
                     }
-                    if (btnToggle) {
-                        btnToggle.innerText = "Conectar Outro";
-                        btnToggle.className = "text-[9px] font-semibold text-indigo-400 hover:underline ml-1";
-                    }
-                    if (btnBrowser) btnBrowser.disabled = false;
-                    if (btnLocal) btnLocal.disabled = false;
-                    if (feedbackText) feedbackText.innerText = "Conectado usando a conta padrão do servidor. Pronto para converter vídeos!";
+                    if (btnToggle) btnToggle.classList.add('hidden');
+                    if (feedbackText) feedbackText.innerText = "Conecte sua conta do Telegram no painel acima para poder enviar vídeos.";
                 }
+
+                tg.updateReadiness();
             },
 
             toggleConnection: () => {
@@ -709,20 +826,15 @@ function clearDiscordSession() {
                 if (hasLocalSession) {
                     tg.logout();
                 } else {
-                    panel.classList.toggle('hidden');
-                    // Reseta estado do form de login
-                    document.getElementById('tgLoginPhoneStep').classList.remove('hidden');
-                    document.getElementById('tgLoginCodeStep').classList.add('hidden');
-                    document.getElementById('tg2faContainer').classList.add('hidden');
-                    document.getElementById('tgPhoneInput').value = '';
-                    document.getElementById('tgCodeInput').value = '';
-                    document.getElementById('tg2faInput').value = '';
+                    if (panel) panel.classList.toggle('hidden');
+                    tg.resetPhoneStep();
                 }
             },
 
             logout: () => {
                 localStorage.removeItem('fenixflix_tg_session');
-                showToast("Sessão do Telegram encerrada localmente.", "info");
+                localStorage.removeItem('fenix_uploader_nick');
+                showToast("Sessão do Telegram desconectada.", "info");
                 tg.updateUIStatus();
             },
 
@@ -731,7 +843,7 @@ function clearDiscordSession() {
                 const phone = phoneInput.value.trim();
                 const btn = document.getElementById('btnTgSendPhone');
 
-                if (!phone) return showToast("Digite seu número de telefone com DDI!", "warning");
+                if (!phone) return showToast("Digite seu número de telefone com DDD e DDI (+55)!", "warning");
 
                 btn.disabled = true;
                 btn.innerHTML = '<div class="loader"></div>';
@@ -748,7 +860,8 @@ function clearDiscordSession() {
                         document.getElementById('tgLoginId').value = data.loginId;
                         document.getElementById('tgLoginPhoneStep').classList.add('hidden');
                         document.getElementById('tgLoginCodeStep').classList.remove('hidden');
-                        showToast("Código de verificação enviado! Verifique seu Telegram.", "success");
+                        document.getElementById('tgCodeInput')?.focus();
+                        showToast("Código de verificação enviado! Verifique seu app do Telegram.", "success");
                     } else {
                         showToast(data.erro || "Falha ao enviar código.", "error");
                     }
@@ -756,7 +869,7 @@ function clearDiscordSession() {
                     showToast("Erro ao conectar com o servidor.", "error");
                 } finally {
                     btn.disabled = false;
-                    btn.innerText = "Enviar Código";
+                    btn.innerHTML = '<i class="fa-solid fa-paper-plane text-xs"></i> Receber Código';
                 }
             },
 
@@ -766,7 +879,7 @@ function clearDiscordSession() {
                 const password = document.getElementById('tg2faInput').value.trim();
                 const btn = document.getElementById('btnTgVerifyCode');
 
-                if (!code) return showToast("Digite o código recebido!", "warning");
+                if (!code) return showToast("Digite o código recebido no seu Telegram!", "warning");
 
                 btn.disabled = true;
                 btn.innerHTML = '<div class="loader"></div>';
@@ -782,6 +895,7 @@ function clearDiscordSession() {
                     if (res.ok) {
                         if (data.precisa2FA) {
                             document.getElementById('tg2faContainer').classList.remove('hidden');
+                            document.getElementById('tg2faInput')?.focus();
                             showToast("Esta conta possui verificação de duas etapas. Digite sua senha de 2FA.", "warning");
                         } else if (data.sucesso && data.session) {
                             localStorage.setItem('fenixflix_tg_session', data.session);
@@ -792,7 +906,6 @@ function clearDiscordSession() {
                                     nickInput.value = data.telegramUser;
                                 }
                             }
-                            document.getElementById('tgLoginPanel').classList.add('hidden');
                             showToast("Telegram conectado com sucesso!", "success");
                             tg.updateUIStatus();
                         } else {
@@ -805,7 +918,7 @@ function clearDiscordSession() {
                     showToast("Erro ao conectar com o servidor.", "error");
                 } finally {
                     btn.disabled = false;
-                    btn.innerText = "Confirmar";
+                    btn.innerHTML = '<i class="fa-solid fa-check text-xs"></i> Confirmar e Conectar';
                 }
             },
 
@@ -819,9 +932,12 @@ function clearDiscordSession() {
                 }
             },
 
-             handleFileChange: (input) => {
-                const files = Array.from(input.files);
+            handleFileChange: (input) => {
+                const files = Array.from(input.files || []);
                 const label = document.getElementById('tgFileName');
+                const subtext = document.getElementById('tgFileSubtext');
+                const dropzone = document.getElementById('tgFileDropzone');
+                
                 if (files && files.length > 0) {
                     const videoExtensions = VIDEO_EXTENSIONS;
                     const invalidFiles = files.filter(file => {
@@ -832,48 +948,86 @@ function clearDiscordSession() {
                     });
 
                     if (invalidFiles.length > 0) {
-                        showToast("Apenas arquivos de vídeo são permitidos (mp4, mkv, etc.)!", "error");
+                        showToast("Apenas arquivos de vídeo são permitidos (mp4, mkv, avi, etc.)!", "error");
                         input.value = '';
-                        label.innerText = "Selecionar vídeo...";
-                        label.classList.remove('text-zinc-200');
-                        label.classList.add('text-zinc-500');
+                        if (label) label.innerText = "Clique para selecionar o vídeo ou arraste aqui";
+                        if (subtext) subtext.innerText = "Formatos suportados: MP4, MKV, AVI, WEBM, TS";
+                        if (dropzone) {
+                            dropzone.classList.remove('border-emerald-500/50', 'bg-emerald-950/20');
+                            dropzone.classList.add('border-zinc-700');
+                        }
+                        tg.updateReadiness();
                         return;
                     }
 
+                    const formatSize = (bytes) => {
+                        if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' GB';
+                        if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+                        return (bytes / 1024).toFixed(0) + ' KB';
+                    };
+
                     if (files.length === 1) {
-                        label.innerText = files[0].name;
+                        const f = files[0];
+                        if (label) label.innerText = f.name;
+                        if (subtext) subtext.innerText = `Tamanho: ${formatSize(f.size)} • Pronto para envio`;
                     } else {
-                        label.innerText = `${files.length} arquivos selecionados`;
+                        const totalSize = files.reduce((acc, f) => acc + f.size, 0);
+                        if (label) label.innerText = `${files.length} vídeos selecionados`;
+                        if (subtext) subtext.innerText = `Tamanho total: ${formatSize(totalSize)} • Fila de envio`;
                     }
-                    label.classList.remove('text-zinc-500');
-                    label.classList.add('text-zinc-200');
+
+                    if (dropzone) {
+                        dropzone.classList.remove('border-zinc-700');
+                        dropzone.classList.add('border-emerald-500/50', 'bg-emerald-950/20');
+                    }
                 } else {
-                    label.innerText = "Selecionar vídeo...";
-                    label.classList.remove('text-zinc-200');
-                    label.classList.add('text-zinc-500');
+                    if (label) label.innerText = "Clique para selecionar o vídeo ou arraste aqui";
+                    if (subtext) subtext.innerText = "Formatos suportados: MP4, MKV, AVI, WEBM, TS";
+                    if (dropzone) {
+                        dropzone.classList.remove('border-emerald-500/50', 'bg-emerald-950/20');
+                        dropzone.classList.add('border-zinc-700');
+                    }
                 }
+                tg.updateReadiness();
             },
 
             sendBrowser: async () => {
                 const fileInput = document.getElementById('tgFile');
-                const files = Array.from(fileInput.files);
-                if (files.length === 0) return showToast("Selecione pelo menos um arquivo primeiro!", "warning");
-
-                // Validar campos obrigatórios
-                const tgImdbId = document.getElementById('contentId').value.trim();
-                const tgQuality = document.getElementById('videoQuality').value.trim();
-
-                if (!tgImdbId) {
-                    return showToast("O ID IMDb é obrigatório para enviar o vídeo!", "error");
+                const files = Array.from(fileInput?.files || []);
+                
+                // 1. Validar seleção de arquivos
+                if (files.length === 0) {
+                    if (fileInput) fileInput.click();
+                    return showToast("Selecione pelo menos um arquivo de vídeo primeiro!", "warning");
                 }
-                if (!/^tt\d{7,10}$/.test(tgImdbId)) {
-                    return showToast("O ID IMDb informado é inválido! Deve começar com 'tt' e conter de 7 a 10 dígitos (ex: tt0903747).", "error");
+
+                // 2. Validar obra (Filme / Série)
+                const tgImdbId = (document.getElementById('contentId')?.value || '').trim();
+                if (!tgImdbId || tgImdbId === 'Buscando dados...') {
+                    tg.focusMediaSearch();
+                    return showToast("Busque o filme ou série por nome ou ID IMDb primeiro!", "error");
                 }
+
+                // 3. Validar qualidade
+                const tgQuality = (document.getElementById('videoQuality')?.value || '').trim();
                 if (!tgQuality || tgQuality === 'Nenhuma') {
-                    return showToast("A qualidade do vídeo é obrigatória para enviar o vídeo! Selecione uma opção (ex: 1080p, 720p).", "error");
+                    tg.focusQuality();
+                    return showToast("A qualidade do vídeo é obrigatória! Selecione uma opção (ex: 1080p, 720p).", "error");
                 }
 
-                // Garantir que todos os arquivos selecionados são vídeos
+                // 4. Validar conexão com o Telegram
+                const useOfficialBot = tg.shouldUseOfficialBot();
+                const session = localStorage.getItem('fenixflix_tg_session');
+                const botTokenInput = (document.getElementById('tgBotToken')?.value || '').trim();
+                const channelId = (document.getElementById('tgChannelId')?.value || '').trim();
+                const hasBotConfig = Boolean(botTokenInput && channelId);
+
+                if (!useOfficialBot && !session && !hasBotConfig) {
+                    tg.focusTelegram();
+                    return showToast("É obrigatório conectar sua conta do Telegram para enviar vídeos!", "warning");
+                }
+
+                // 5. Garantir que todos os arquivos selecionados são vídeos
                 const videoExtensions = VIDEO_EXTENSIONS;
                 const invalidFiles = files.filter(file => {
                     const nameLower = file.name.toLowerCase();
@@ -885,27 +1039,8 @@ function clearDiscordSession() {
                     return showToast("Apenas arquivos de vídeo são permitidos (mp4, mkv, etc.)!", "error");
                 }
 
-
-                // 1. Ordena os arquivos de forma natural (ex: Episódio 2 antes de Episódio 10)
+                // Ordenação natural de arquivos (Episódio 2 antes de 10)
                 files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-
-                const botTokenInput = (document.getElementById('tgBotToken')?.value || '').trim();
-                const channelId = (document.getElementById('tgChannelId')?.value || '').trim();
-                // Sem a opção de Auto Bot: cargos autorizados usam o Bot Oficial automaticamente.
-                const useOfficialBot = tg.shouldUseOfficialBot();
-
-                const isMaskedToken = botTokenInput.includes('••••');
-                const botTokens = (botTokenInput && !isMaskedToken) ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
-                const hasBotConfig = botTokens.length > 0 && channelId;
-                const session = localStorage.getItem('fenixflix_tg_session');
-
-                if (!useOfficialBot && !session && (!botTokenInput || !channelId)) {
-                    const advContent = document.getElementById('tgAdvancedContent');
-                    if (advContent && advContent.classList.contains('hidden')) {
-                        tg.toggleAdvanced();
-                    }
-                    return showToast("Conecte sua conta do Telegram ou informe seu Bot Token e Canal de Backup nas Configurações Avançadas para enviar!", "warning");
-                }
 
                 const progressBox = document.getElementById('tgProgressBox');
                 const progressBar = document.getElementById('tgProgressBar');
@@ -913,26 +1048,28 @@ function clearDiscordSession() {
                 const progressState = document.getElementById('tgProgressState');
                 const btn = document.getElementById('btnTgBrowserSend');
 
-                progressBox.classList.remove('hidden');
-                btn.disabled = true;
-                btn.innerHTML = '<div class="loader"></div> Enviando...';
+                if (progressBox) progressBox.classList.remove('hidden');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Enviando vídeo para o Telegram...</span>';
+                }
 
-                // 2. Insere placeholders ordenados no final do textarea em tempo real
+                // Insere placeholders ordenados no final do textarea em tempo real
                 const textarea = document.getElementById('manualLinks');
-                let currentText = textarea.value.trim();
+                let currentText = textarea ? textarea.value.trim() : '';
                 const startLineIndex = currentText ? textarea.value.split('\n').length : 0;
                 
                 const placeholders = files.map(file => `[Aguardando envio: ${file.name}]`);
-                if (currentText) {
-                    textarea.value = currentText + '\n' + placeholders.join('\n');
-                } else {
-                    textarea.value = placeholders.join('\n');
+                if (textarea) {
+                    if (currentText) {
+                        textarea.value = currentText + '\n' + placeholders.join('\n');
+                    } else {
+                        textarea.value = placeholders.join('\n');
+                    }
+                    textarea.dispatchEvent(new Event('input'));
                 }
-                textarea.dispatchEvent(new Event('input'));
 
-                // Array para armazenar o progresso de cada arquivo (valores de 0 a 1)
                 const progressValues = new Array(files.length).fill(0);
-                // Contador de arquivos concluídos/falhos
                 let completedCount = 0;
                 let successCount = 0;
 
@@ -957,10 +1094,11 @@ function clearDiscordSession() {
                 const updateGlobalProgress = () => {
                     const averageProgress = progressValues.reduce((sum, val) => sum + val, 0) / files.length;
                     const percent = Math.round(averageProgress * 100);
-                    progressBar.style.width = percent + '%';
-                    percentText.innerText = percent + '%';
-                    
-                    progressState.innerText = `Enviando ${files.length} arquivo(s) (${successCount}/${files.length} concluídos)...`;
+                    if (progressBar) progressBar.style.width = percent + '%';
+                    if (percentText) percentText.innerText = percent + '%';
+                    if (progressState) {
+                        progressState.innerText = `Enviando ${files.length} arquivo(s) (${successCount}/${files.length} concluídos)...`;
+                    }
                 };
 
                 updateGlobalProgress();
@@ -981,7 +1119,7 @@ function clearDiscordSession() {
                             xhr.setRequestHeader('X-Telegram-Use-Auto-Bot', 'true');
                             xhr.setRequestHeader('X-Telegram-Channel-Id', channelId || '@fenix_db');
                         } else if (hasBotConfig) {
-                            const activeBotToken = botTokens[index % botTokens.length];
+                            const activeBotToken = botTokenInput.split(',').map(t => t.trim()).filter(Boolean)[0] || botTokenInput;
                             xhr.setRequestHeader('X-Telegram-Bot-Token', activeBotToken);
                             xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
                         } else if (channelId) {
@@ -990,7 +1128,6 @@ function clearDiscordSession() {
 
                         xhr.upload.onprogress = (e) => {
                             if (e.lengthComputable) {
-                                // 0% a 95% para o envio HTTP, os últimos 5% são para a resposta do bot
                                 progressValues[index] = (e.loaded / e.total) * 0.95;
                                 updateGlobalProgress();
                                 const statusEl = document.getElementById(`tg-queue-status-${index}`);
@@ -1006,11 +1143,12 @@ function clearDiscordSession() {
                                 try {
                                     const res = JSON.parse(xhr.responseText);
                                     if (res.sucesso && res.link) {
-                                        // Substitui o placeholder pelo link retornado (preservando o nome do arquivo como comentário)
-                                        const currentLines = textarea.value.split('\n');
-                                        currentLines[startLineIndex + index] = `${res.link} # ${file.name}`;
-                                        textarea.value = currentLines.join('\n');
-                                        textarea.dispatchEvent(new Event('input'));
+                                        if (textarea) {
+                                            const currentLines = textarea.value.split('\n');
+                                            currentLines[startLineIndex + index] = `${res.link} # ${file.name}`;
+                                            textarea.value = currentLines.join('\n');
+                                            textarea.dispatchEvent(new Event('input'));
+                                        }
 
                                         progressValues[index] = 1.0;
                                         successCount++;
@@ -1019,11 +1157,12 @@ function clearDiscordSession() {
                                         if (iconEl) iconEl.className = 'fa-solid fa-circle-check text-emerald-500';
                                         if (statusEl) { statusEl.innerText = 'Concluído'; statusEl.className = 'text-[10px] text-emerald-500 font-medium'; }
                                     } else {
-                                        // Substitui o placeholder por mensagem de erro
-                                        const currentLines = textarea.value.split('\n');
-                                        currentLines[startLineIndex + index] = `[Erro: ${file.name} - ${res.erro || "Desconhecido"}]`;
-                                        textarea.value = currentLines.join('\n');
-                                        textarea.dispatchEvent(new Event('input'));
+                                        if (textarea) {
+                                            const currentLines = textarea.value.split('\n');
+                                            currentLines[startLineIndex + index] = `[Erro: ${file.name} - ${res.erro || "Desconhecido"}]`;
+                                            textarea.value = currentLines.join('\n');
+                                            textarea.dispatchEvent(new Event('input'));
+                                        }
                                         showToast(`Erro no arquivo ${file.name}: ${res.erro || "Desconhecido"}`, "error");
                                         const iconEl = document.getElementById(`tg-queue-icon-${index}`);
                                         const statusEl = document.getElementById(`tg-queue-status-${index}`);
@@ -1038,10 +1177,12 @@ function clearDiscordSession() {
                                     if (statusEl) { statusEl.innerText = 'Erro'; statusEl.className = 'text-[10px] text-red-500 font-medium'; }
                                 }
                             } else {
-                                const currentLines = textarea.value.split('\n');
-                                currentLines[startLineIndex + index] = `[Erro no upload: ${file.name}]`;
-                                textarea.value = currentLines.join('\n');
-                                textarea.dispatchEvent(new Event('input'));
+                                if (textarea) {
+                                    const currentLines = textarea.value.split('\n');
+                                    currentLines[startLineIndex + index] = `[Erro no upload: ${file.name}]`;
+                                    textarea.value = currentLines.join('\n');
+                                    textarea.dispatchEvent(new Event('input'));
+                                }
                                 try {
                                     const res = JSON.parse(xhr.responseText);
                                     showToast(`Falha no upload de ${file.name}: ${res.erro || xhr.statusText}`, "error");
@@ -1059,11 +1200,12 @@ function clearDiscordSession() {
                         };
 
                         xhr.onerror = function () {
-                            const currentLines = textarea.value.split('\n');
-                            currentLines[startLineIndex + index] = `[Erro de rede: ${file.name}]`;
-                            textarea.value = currentLines.join('\n');
-                            textarea.dispatchEvent(new Event('input'));
-
+                            if (textarea) {
+                                const currentLines = textarea.value.split('\n');
+                                currentLines[startLineIndex + index] = `[Erro de rede: ${file.name}]`;
+                                textarea.value = currentLines.join('\n');
+                                textarea.dispatchEvent(new Event('input'));
+                            }
                             showToast(`Erro de rede no upload de ${file.name}`, "error");
                             const iconEl = document.getElementById(`tg-queue-icon-${index}`);
                             const statusEl = document.getElementById(`tg-queue-status-${index}`);
@@ -1075,10 +1217,12 @@ function clearDiscordSession() {
                         };
 
                         xhr.onabort = function () {
-                            const currentLines = textarea.value.split('\n');
-                            currentLines[startLineIndex + index] = `[Upload cancelado: ${file.name}]`;
-                            textarea.value = currentLines.join('\n');
-                            textarea.dispatchEvent(new Event('input'));
+                            if (textarea) {
+                                const currentLines = textarea.value.split('\n');
+                                currentLines[startLineIndex + index] = `[Upload cancelado: ${file.name}]`;
+                                textarea.value = currentLines.join('\n');
+                                textarea.dispatchEvent(new Event('input'));
+                            }
                             showToast(`Upload cancelado: ${file.name}`, "warning");
                             completedCount++;
                             updateGlobalProgress();
@@ -1089,10 +1233,8 @@ function clearDiscordSession() {
                     });
                 };
 
-                // Força upload com concorrência = 2 para agilizar
                 const concurrencyLimit = 2;
                 const queue = [...files.entries()];
-                
                 const workers = Array(Math.min(concurrencyLimit, files.length)).fill(null).map(async () => {
                     while (queue.length > 0) {
                         const [index, file] = queue.shift();
@@ -1102,17 +1244,20 @@ function clearDiscordSession() {
 
                 await Promise.all(workers);
 
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Enviar';
-                progressBox.classList.add('hidden');
-                progressBar.style.width = '0%';
+                if (progressBox) progressBox.classList.add('hidden');
+                if (progressBar) progressBar.style.width = '0%';
 
                 if (successCount === files.length) {
-                    showToast("Todos os vídeos foram enviados e convertidos com sucesso!", "success");
+                    showToast("Upload concluído com sucesso!", "success");
                 } else if (successCount > 0) {
-                    showToast(`Concluído: ${successCount} de ${files.length} vídeos convertidos com sucesso.`, "warning");
+                    showToast(`Concluído: ${successCount} de ${files.length} vídeos enviados.`, "warning");
                 } else {
                     showToast("Falha ao enviar os vídeos.", "error");
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up text-base"></i> <span id="btnTgBrowserSendText">Enviar Vídeo e Salvar no Catálogo</span>';
+                    }
+                    return;
                 }
 
                 if (successCount > 0) {
@@ -1139,17 +1284,27 @@ function clearDiscordSession() {
                     // 2. Processar automaticamente
                     gen.process();
 
-                    // 3. Salvar JSON no banco se auto-salvar estiver ativado
-                    const autoSave = document.getElementById('tgAutoSave')?.checked !== false;
+                    // 3. Salvar automaticamente no catálogo (banco de dados)
                     const keepFields = failedIndices.size > 0;
-                    if (autoSave) {
-                        showToast("Salvando JSON automaticamente no banco de dados...", "info");
+                    if (btn) {
+                        btn.innerHTML = '<i class="fa-solid fa-database fa-fade text-base"></i> <span>Salvando no catálogo...</span>';
+                    }
+                    showToast("Salvando automaticamente no catálogo...", "info");
+                    try {
                         await gen.uploadParaBanco(keepFields);
-                    } else {
-                        showToast("Processamento concluído. JSON gerado no painel lateral para revisão.", "success");
+                        showToast("Vídeo publicado e salvo no catálogo com sucesso!", "success");
+                    } catch (e) {
+                        console.error("Erro ao salvar no banco:", e);
+                        showToast("Vídeo enviado, mas houve erro ao salvar no catálogo: " + e.message, "error");
                     }
 
-                    // 4. Se houveram falhas, restaurar apenas os links que falharam na caixa para revisão
+                    // 4. Limpar seleção de arquivos se tudo deu certo
+                    if (!keepFields && fileInput) {
+                        fileInput.value = '';
+                        tg.handleFileChange(fileInput);
+                    }
+
+                    // 5. Se houveram falhas, restaurar apenas os links que falharam na caixa para revisão
                     if (keepFields) {
                         const failedLines = [];
                         for (let i = 0; i < finalLines.length; i++) {
@@ -1159,12 +1314,14 @@ function clearDiscordSession() {
                         }
                         textarea.value = failedLines.join('\n');
                         textarea.dispatchEvent(new Event('input'));
-                        showToast(`${failedIndices.size} envios falharam e foram mantidos para revisão.`, "warning");
                     }
                 }
 
-                fileInput.value = '';
-                tg.handleFileChange(fileInput);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up text-base"></i> <span id="btnTgBrowserSendText">Enviar Vídeo e Salvar no Catálogo</span>';
+                }
+                tg.updateReadiness();
             },
 
              sendLocal: async () => {
@@ -1759,8 +1916,19 @@ self.onmessage = async (e) => {
 
                 if (successCount === files.length) {
                     showToast(`Todos os ${files.length} vídeos foram enviados com sucesso!`, "success");
-                } else {
+                } else if (successCount > 0) {
                     showToast(`${successCount}/${files.length} vídeos enviados com sucesso.`, "warning");
+                }
+
+                if (successCount > 0) {
+                    gen.process();
+                    try {
+                        showToast("Salvando automaticamente no catálogo...", "info");
+                        await gen.uploadParaBanco();
+                        showToast("Vídeos salvos no catálogo com sucesso!", "success");
+                    } catch (e) {
+                        console.error("Erro ao salvar no banco:", e);
+                    }
                 }
             }
         };
@@ -2275,10 +2443,12 @@ self.onmessage = async (e) => {
                         if (radio) { radio.checked = true; gen.toggleInputs(); }
                         await gen.loadTmdbMovieDetails(tmdbId, imdbId);
                     }
+                    if (typeof tg !== 'undefined' && tg.updateReadiness) tg.updateReadiness();
                 } catch (e) {
                     if (idInput) idInput.value = '';
                     console.error("Erro ao carregar dados do TMDB:", e);
                     showToast("Erro ao carregar dados do TMDB", "error");
+                    if (typeof tg !== 'undefined' && tg.updateReadiness) tg.updateReadiness();
                 }
             },
 
@@ -2918,6 +3088,7 @@ self.onmessage = async (e) => {
                 }
                 
                 showToast("Metadados carregados do Nuviometa!");
+                if (typeof tg !== 'undefined' && tg.updateReadiness) tg.updateReadiness();
             },
 
             fillFromNuviometa: () => {
@@ -3127,6 +3298,7 @@ self.onmessage = async (e) => {
                 if (eSelect) eSelect.value = '1';
                 gen.lastNuviometaResult = null;
                 localStorage.removeItem('fenixflix_draft');
+                if (typeof tg !== 'undefined' && tg.updateReadiness) tg.updateReadiness();
             },
             reset: () => {
                 if(confirm('Limpar todos os campos?')) {

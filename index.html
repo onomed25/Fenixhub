@@ -585,10 +585,15 @@
                                 </div>
                             </div>
                             <textarea id="manualLinks" rows="6" class="input-unified w-full p-4 rounded-xl text-xs font-mono custom-scrollbar" placeholder="Cole os links de vídeo diretos aqui (um por linha)..."></textarea>
+                            <div class="mt-3 flex justify-end">
+                                <button onclick="gen.processAndSave()" id="btnProcessAndSave" class="bg-primary hover:bg-primary-hover active:bg-primary-hover/90 text-white font-display font-medium px-5 py-2.5 rounded-xl transition-all shadow-md flex justify-center items-center gap-2 text-xs">
+                                    <i class="fa-solid fa-paper-plane"></i> Salvar Links Manuais no Catálogo
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Painel Unificado de Upload (Bot vs Teste) -->
-                        <div class="mt-5 bg-zinc-950/40 border border-zinc-800/80 rounded-xl p-4">
+                        <div class="mt-5 bg-zinc-950/40 border border-zinc-800/80 rounded-2xl p-4 sm:p-5">
                             <!-- Seletor Tipo de Upload: Bot vs Teste -->
                             <div id="uploadProviderSwitcher" class="flex items-center justify-between border-b border-zinc-800/60 pb-3 mb-4">
                                 <div class="flex gap-6" id="uploadProviderRadios">
@@ -598,7 +603,7 @@
                                             <div class="absolute w-2 h-2 rounded-full bg-sky-400 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
                                         </div>
                                         <span class="font-medium text-xs text-zinc-400 group-hover:text-zinc-200 peer-checked:text-white transition flex items-center gap-1.5">
-                                            <i class="fa-brands fa-telegram text-sky-400 text-sm"></i> Bot
+                                            <i class="fa-brands fa-telegram text-sky-400 text-sm"></i> Telegram
                                         </span>
                                     </label>
                                     <label id="labelUploadTeste" class="hidden items-center gap-2.5 cursor-pointer group">
@@ -607,157 +612,246 @@
                                             <div class="absolute w-2 h-2 rounded-full bg-amber-400 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
                                         </div>
                                         <span class="font-medium text-xs text-zinc-400 group-hover:text-zinc-200 peer-checked:text-white transition flex items-center gap-1.5">
-                                            <i class="fa-solid fa-flask text-amber-400 text-sm"></i> Teste
+                                            <i class="fa-solid fa-flask text-amber-400 text-sm"></i> Servidor Teste
                                         </span>
                                     </label>
                                 </div>
                                 <div id="uploadProviderBadge">
-                                    <span id="tgStatusBadge" class="text-xs font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-500">Verificando...</span>
-                                    <button onclick="tg.toggleConnection()" id="btnTgConnectToggle" class="text-xs font-semibold text-primary hover:underline ml-1">Conectar</button>
+                                    <span id="tgStatusBadge" class="text-[11px] font-mono px-2 py-0.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800">Verificando...</span>
+                                    <button onclick="tg.toggleConnection()" id="btnTgConnectToggle" class="hidden text-xs font-semibold text-primary hover:underline ml-1">Conectar</button>
                                 </div>
                             </div>
 
                             <!-- SEÇÃO 1: MODO BOT (TELEGRAM) -->
-                            <div id="uploadSectionBot" class="space-y-3">
-                                <!-- Painel de Login/Conexão do Telegram -->
-                                <div id="tgLoginPanel" class="hidden mb-4 p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 space-y-3">
-                                    <p class="text-xs text-zinc-400">Opcional: conecte sua conta do Telegram para converter vídeos usando a sua própria conta. Cargos autorizados já enviam pelo Bot Oficial sem precisar de login.</p>
-                                    
-                                    <!-- Passo 1: Telefone -->
-                                    <div id="tgLoginPhoneStep" class="flex gap-2">
-                                        <input type="text" id="tgPhoneInput" maxlength="30" class="input-unified flex-grow p-2 rounded-lg text-xs" placeholder="Telefone, ex: +5511999999999">
-                                        <button onclick="tg.sendPhone()" id="btnTgSendPhone" class="bg-primary hover:bg-primary-hover text-on-accent font-semibold px-3 py-2 rounded-lg text-xs transition shrink-0">
-                                            Enviar Código
-                                        </button>
+                            <div id="uploadSectionBot" class="space-y-4">
+                                <!-- Guia / Checklist de Prontidão do Envio -->
+                                <div id="uploadReadinessGuide" class="p-3 bg-zinc-900/50 rounded-2xl border border-zinc-800/80 space-y-2.5">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                                            <i class="fa-solid fa-list-check text-primary"></i> Checklist de Envio
+                                        </span>
+                                        <span id="readinessOverallBadge" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">Aguardando dados</span>
                                     </div>
-
-                                    <!-- Passo 2: Código e 2FA -->
-                                    <div id="tgLoginCodeStep" class="hidden space-y-3">
-                                        <input type="hidden" id="tgLoginId">
-                                        <div class="flex gap-2">
-                                            <input type="text" id="tgCodeInput" maxlength="20" class="input-unified flex-grow p-2 rounded-lg text-xs" placeholder="Código do Telegram">
-                                            <button onclick="tg.verifyCode()" id="btnTgVerifyCode" class="bg-primary hover:bg-primary-hover text-on-accent font-semibold px-3 py-2 rounded-lg text-xs transition shrink-0">
-                                                Confirmar
-                                            </button>
+                                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                                        <!-- Item 1: Obra / ID -->
+                                        <div id="readinessItemMedia" onclick="tg.focusMediaSearch()" class="p-2.5 rounded-xl bg-zinc-950/70 border border-zinc-800/80 flex items-center justify-between gap-2 cursor-pointer hover:border-zinc-700 transition" title="Clique para buscar filme ou série">
+                                            <div class="flex items-center gap-2 min-w-0">
+                                                <i id="readinessIconMedia" class="fa-solid fa-circle-exclamation text-amber-400 shrink-0 text-xs"></i>
+                                                <div class="min-w-0">
+                                                    <span class="block text-[10px] uppercase text-zinc-500 font-bold">1. Filme / Série</span>
+                                                    <span id="readinessTextMedia" class="block text-amber-400 truncate font-medium">Buscar acima</span>
+                                                </div>
+                                            </div>
+                                            <i class="fa-solid fa-arrow-up text-[10px] text-zinc-500 shrink-0"></i>
                                         </div>
-                                        <div id="tg2faContainer" class="hidden">
-                                            <label class="block text-xs text-zinc-500 mb-1">Senha de 2 etapas (2FA) necessária:</label>
-                                            <input type="password" id="tg2faInput" maxlength="100" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Sua senha de duas etapas">
+
+                                        <!-- Item 2: Qualidade -->
+                                        <div id="readinessItemQuality" onclick="tg.focusQuality()" class="p-2.5 rounded-xl bg-zinc-950/70 border border-zinc-800/80 flex items-center justify-between gap-2 cursor-pointer hover:border-zinc-700 transition" title="Clique para selecionar qualidade">
+                                            <div class="flex items-center gap-2 min-w-0">
+                                                <i id="readinessIconQuality" class="fa-solid fa-circle-check text-emerald-400 shrink-0 text-xs"></i>
+                                                <div class="min-w-0">
+                                                    <span class="block text-[10px] uppercase text-zinc-500 font-bold">2. Qualidade</span>
+                                                    <span id="readinessTextQuality" class="block text-emerald-400 truncate font-medium">1080p</span>
+                                                </div>
+                                            </div>
+                                            <i class="fa-solid fa-sliders text-[10px] text-zinc-500 shrink-0"></i>
+                                        </div>
+
+                                        <!-- Item 3: Conexão Telegram -->
+                                        <div id="readinessItemTelegram" onclick="tg.focusTelegram()" class="p-2.5 rounded-xl bg-zinc-950/70 border border-zinc-800/80 flex items-center justify-between gap-2 cursor-pointer hover:border-zinc-700 transition" title="Clique para conectar Telegram">
+                                            <div class="flex items-center gap-2 min-w-0">
+                                                <i id="readinessIconTelegram" class="fa-solid fa-circle-exclamation text-amber-400 shrink-0 text-xs"></i>
+                                                <div class="min-w-0">
+                                                    <span class="block text-[10px] uppercase text-zinc-500 font-bold">3. Telegram</span>
+                                                    <span id="readinessTextTelegram" class="block text-amber-400 truncate font-medium">Conectar conta</span>
+                                                </div>
+                                            </div>
+                                            <i class="fa-brands fa-telegram text-sky-400 shrink-0 text-xs"></i>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div class="space-y-3">
-                                    <!-- Opção de Envio: Navegador vs Local -->
-                                    <div class="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/60 pb-2 text-xs">
-                                        <div class="flex gap-4 hidden">
-                                            <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
-                                                <input type="radio" name="tgMode" value="browser" checked onchange="tg.switchMode('browser')" class="text-sky-500 bg-zinc-900 border-zinc-800 focus:ring-sky-500 w-3 h-3">
-                                                <span>Pelo Navegador</span>
-                                            </label>
-                                            <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
-                                                <input type="radio" name="tgMode" value="local" onchange="tg.switchMode('local')" class="text-sky-500 bg-zinc-900 border-zinc-800 focus:ring-sky-500 w-3 h-3">
-                                                <span>Caminho Local (PC)</span>
-                                            </label>
+                                <!-- Painel de Login/Conexão do Telegram (Aberto se não conectado) -->
+                                <div id="tgLoginPanel" class="p-4 bg-zinc-900/80 rounded-2xl border border-sky-500/30 space-y-3 shadow-sm">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div class="flex items-center gap-2.5">
+                                            <div class="w-9 h-9 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
+                                                <i class="fa-brands fa-telegram text-lg"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="text-xs font-bold text-white">Conectar Conta do Telegram</h4>
+                                                <p class="text-[11px] text-zinc-400 mt-0.5">Obrigatório para enviar vídeos. Conecte seu número uma única vez.</p>
+                                            </div>
                                         </div>
-                                        <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
-                                            <input type="checkbox" id="tgAutoSave" checked class="rounded border-zinc-800 bg-zinc-900 text-sky-500 focus:ring-sky-500 w-3 h-3 cursor-pointer">
-                                            <span>Auto-salvar no banco</span>
-                                        </label>
-                                    </div>
-
-                                    <!-- Aviso fixo: cargos autorizados enviam sem login pelo Bot Oficial -->
-                                    <div id="tgOfficialBotInfo" class="hidden flex items-center justify-between gap-3 p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-xl">
-                                        <div class="flex flex-col">
-                                            <span class="text-xs font-semibold text-zinc-100 flex items-center gap-1.5">
-                                                <i class="fa-solid fa-robot text-emerald-400"></i> Envio pelo Bot Oficial (@fenix_db)
-                                            </span>
-                                            <span class="text-xs text-zinc-400">Você não precisa fazer login no Telegram: os vídeos são postados automaticamente pelo bot oficial da equipe.</span>
-                                        </div>
-                                        <span class="text-xs font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 shrink-0 flex items-center gap-1">
-                                            <i class="fa-solid fa-shield-halved text-xs"></i> Protegido
+                                        <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/20 shrink-0">
+                                            Necessário
                                         </span>
                                     </div>
 
-                                    <!-- Upload pelo Navegador -->
-                                    <div id="tgBrowserSection" class="flex flex-col sm:flex-row gap-2">
-                                        <input type="file" id="tgFile" class="hidden" multiple accept="video/*,.mkv,.mp4,.avi,.webm,.ts,.mov,.flv,.3gp,.mpeg,.m4v" onchange="tg.handleFileChange(this)">
-                                        <label for="tgFile" class="input-unified flex-grow p-3 rounded-lg text-xs cursor-pointer flex items-center justify-center sm:justify-start gap-2 hover:bg-zinc-800 transition-colors border-dashed border-zinc-700 hover:border-sky-500 group">
-                                            <i class="fa-solid fa-cloud-arrow-up text-zinc-500 group-hover:text-sky-400 transition-colors"></i>
-                                            <span id="tgFileName" class="text-zinc-400 font-medium group-hover:text-zinc-200 transition-colors">Selecionar Vídeos...</span>
+                                    <!-- Passo 1: Telefone -->
+                                    <div id="tgLoginPhoneStep" class="space-y-2 pt-1">
+                                        <label class="block text-[11px] font-medium text-zinc-400">
+                                            Número de Celular com DDD <span class="text-sky-400 font-normal">(ex: +55 11 99999-9999)</span>:
                                         </label>
-                                        <button onclick="tg.sendBrowser()" id="btnTgBrowserSend" class="bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-lg text-xs font-medium transition-all shadow-sm flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
-                                            Fazer Upload
-                                        </button>
-                                    </div>
-
-                                    <!-- Upload por Caminho Local -->
-                                    <div id="tgLocalSection" class="hidden flex gap-2">
-                                        <input type="text" id="tgLocalPath" maxlength="500" class="input-unified flex-grow p-2.5 rounded-lg text-xs" placeholder="Ex: /home/user/Videos/filme.mp4">
-                                        <button onclick="tg.sendLocal()" id="btnTgLocalSend" class="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2.5 rounded-lg text-xs font-medium transition flex items-center gap-1 shrink-0">
-                                            <i class="fa-solid fa-paper-plane"></i> Enviar
-                                        </button>
-                                    </div>
-
-                                    <!-- Configurações Avançadas (Canal & Bot) -->
-                                    <div class="mt-2 p-3 bg-zinc-950/40 rounded-xl border border-zinc-800/80 space-y-2.5">
-                                        <div class="flex justify-between items-center cursor-pointer select-none" onclick="tg.toggleAdvanced()">
-                                            <span class="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                                                <i class="fa-solid fa-sliders text-primary"></i> Configurações Avançadas (Canal & Bot)
-                                            </span>
-                                            <i id="tgAdvancedIcon" class="fa-solid fa-chevron-down text-zinc-500 text-xs transition-transform duration-300"></i>
-                                        </div>
-                                        <div id="tgAdvancedContent" class="hidden space-y-2.5 pt-2 border-t border-zinc-800/40">
-                                            <div id="tgOfficialBotNotice" class="hidden p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-xs text-emerald-300 flex items-center gap-2">
-                                                <i class="fa-solid fa-lock text-xs text-emerald-400"></i>
-                                                <span>Envio pelo <b>Bot Oficial</b> ativo para o seu cargo. O Token do bot é gerenciado pelo sistema e protegido contra visualização.</span>
-                                            </div>
-                                            <div>
-                                                <div class="flex justify-between items-center mb-1">
-                                                    <label class="block text-xs text-zinc-400 font-medium">Token de Bot (@BotFather):</label>
-                                                    <span id="tgBotTokenBadge" class="text-xs text-primary">Obrigatório no Modo Bot</span>
-                                                </div>
-                                                <div class="relative">
-                                                    <input type="password" id="tgBotToken" maxlength="500" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: 7123456789:AAFlkjw98fjw... (obtido com @BotFather)">
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div class="flex justify-between items-center mb-1">
-                                                    <label class="block text-xs text-zinc-400 font-medium">Canal de Backup do Telegram:</label>
-                                                    <span id="tgChannelBadge" class="text-xs text-primary">O bot deve ser admin</span>
-                                                </div>
-                                                <input type="text" id="tgChannelId" maxlength="200" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: @meucanal ou -100123456789">
-                                            </div>
-                                            <div class="p-2 rounded bg-zinc-900/60 border border-zinc-800/60 text-xs text-zinc-400 leading-relaxed space-y-1">
-                                                <p><i class="fa-solid fa-robot text-primary mr-1"></i><strong>Como funciona o envio:</strong></p>
-                                                <ol class="list-decimal pl-4 space-y-0.5 text-zinc-400">
-                                                    <li>Cargos autorizados (admin, ajudante ou colaborador) enviam pelo <b>Bot Oficial</b> ao canal <b>@fenix_db</b>, sem login e sem configurar nada.</li>
-                                                    <li>Sem cargo autorizado, conecte sua conta do Telegram ou informe seu próprio Token e Canal acima.</li>
-                                                </ol>
-                                            </div>
+                                        <div class="flex flex-col sm:flex-row gap-2">
+                                            <input type="text" id="tgPhoneInput" maxlength="30" class="input-unified flex-grow p-3 rounded-xl text-xs font-mono" placeholder="+55 11 99999-9999" onkeydown="if(event.key === 'Enter') tg.sendPhone()">
+                                            <button onclick="tg.sendPhone()" id="btnTgSendPhone" class="bg-sky-600 hover:bg-sky-500 active:scale-[0.98] text-white font-semibold px-4 py-3 rounded-xl text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 shrink-0 cursor-pointer">
+                                                <i class="fa-solid fa-paper-plane text-xs"></i> Receber Código
+                                            </button>
                                         </div>
                                     </div>
 
-                                    <!-- Progresso e Status -->
-                                    <div id="tgProgressBox" class="hidden space-y-3 mt-4">
-                                        <div class="space-y-1.5">
-                                            <div class="flex justify-between text-xs font-medium text-zinc-400">
-                                                <span id="tgProgressState">Enviando arquivos...</span>
-                                                <span id="tgPercent" class="text-sky-400">0%</span>
+                                    <!-- Passo 2: Código e 2FA -->
+                                    <div id="tgLoginCodeStep" class="hidden space-y-3 pt-2 border-t border-zinc-800">
+                                        <input type="hidden" id="tgLoginId">
+                                        <div class="flex items-center justify-between">
+                                            <label class="block text-[11px] font-medium text-zinc-300">
+                                                Código recebido no app do Telegram:
+                                            </label>
+                                            <button onclick="tg.resetPhoneStep()" class="text-[11px] text-sky-400 hover:underline">
+                                                ← Trocar número
+                                            </button>
+                                        </div>
+                                        <div class="flex flex-col sm:flex-row gap-2">
+                                            <input type="text" id="tgCodeInput" maxlength="20" class="input-unified flex-grow p-3 rounded-xl text-xs font-mono text-center tracking-widest text-sm" placeholder="12345" onkeydown="if(event.key === 'Enter') tg.verifyCode()">
+                                            <button onclick="tg.verifyCode()" id="btnTgVerifyCode" class="bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-semibold px-5 py-3 rounded-xl text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 shrink-0 cursor-pointer">
+                                                <i class="fa-solid fa-check text-xs"></i> Confirmar e Conectar
+                                            </button>
+                                        </div>
+                                        <div id="tg2faContainer" class="hidden space-y-1.5 pt-1">
+                                            <label class="block text-[11px] text-amber-300 font-medium">Sua conta possui senha de duas etapas (2FA):</label>
+                                            <input type="password" id="tg2faInput" maxlength="100" class="input-unified w-full p-2.5 rounded-xl text-xs" placeholder="Digite sua senha de duas etapas" onkeydown="if(event.key === 'Enter') tg.verifyCode()">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Painel de Conta Conectada -->
+                                <div id="tgConnectedPanel" class="hidden p-3.5 bg-emerald-950/25 border border-emerald-500/30 rounded-2xl flex items-center justify-between gap-3">
+                                    <div class="flex items-center gap-3 min-w-0">
+                                        <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                                            <i class="fa-brands fa-telegram text-lg"></i>
+                                        </div>
+                                        <div class="min-w-0">
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-xs font-bold text-white truncate">Telegram Conectado</span>
+                                                <span class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Pronto</span>
                                             </div>
-                                            <div class="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden border border-zinc-800/80">
-                                                <div id="tgProgressBar" class="bg-sky-500 h-full w-0 transition-all duration-300"></div>
+                                            <p id="tgConnectedUserLabel" class="text-[11px] text-zinc-400 mt-0.5 truncate">Sua conta está autorizada para envio de vídeos</p>
+                                        </div>
+                                    </div>
+                                    <button onclick="tg.logout()" class="text-xs text-zinc-400 hover:text-red-400 hover:border-red-500/30 transition font-medium px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 shrink-0 cursor-pointer" title="Desconectar do Telegram">
+                                        Desconectar
+                                    </button>
+                                </div>
+
+                                <!-- Aviso fixo: cargos autorizados enviam sem login pelo Bot Oficial -->
+                                <div id="tgOfficialBotInfo" class="hidden p-3.5 bg-emerald-950/25 border border-emerald-500/30 rounded-2xl flex items-center justify-between gap-3">
+                                    <div class="flex items-center gap-3 min-w-0">
+                                        <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                                            <i class="fa-solid fa-robot text-lg"></i>
+                                        </div>
+                                        <div class="min-w-0">
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-xs font-bold text-white truncate">Bot Oficial da Equipe (@fenix_db)</span>
+                                                <span class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Oficial</span>
+                                            </div>
+                                            <p class="text-[11px] text-zinc-400 mt-0.5 truncate">Envio direto sem login. Seus vídeos são postados pelo bot oficial da equipe.</p>
+                                        </div>
+                                    </div>
+                                    <span class="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-500/20 px-2 py-1 rounded-lg border border-emerald-500/30 shrink-0">
+                                        Ativo ✓
+                                    </span>
+                                </div>
+
+                                <!-- Input invisível de autoSave para manter integridade com scripts -->
+                                <input type="checkbox" id="tgAutoSave" checked class="hidden">
+
+                                <!-- Upload pelo Navegador -->
+                                <div id="tgBrowserSection" class="space-y-3 pt-1">
+                                    <input type="file" id="tgFile" class="hidden" multiple accept="video/*,.mkv,.mp4,.avi,.webm,.ts,.mov,.flv,.3gp,.mpeg,.m4v" onchange="tg.handleFileChange(this)">
+                                    <label for="tgFile" id="tgFileDropzone" class="w-full p-6 rounded-2xl border-2 border-dashed border-zinc-700 hover:border-primary/60 bg-zinc-900/40 hover:bg-zinc-900/70 transition-all cursor-pointer flex flex-col items-center justify-center text-center gap-2 group">
+                                        <div class="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary group-hover:scale-105 transition-transform">
+                                            <i class="fa-solid fa-cloud-arrow-up text-xl"></i>
+                                        </div>
+                                        <div>
+                                            <span id="tgFileName" class="text-sm font-semibold text-zinc-200 group-hover:text-white transition">Clique para selecionar o vídeo ou arraste aqui</span>
+                                            <p id="tgFileSubtext" class="text-xs text-zinc-500 mt-0.5">Formatos suportados: MP4, MKV, AVI, WEBM, TS</p>
+                                        </div>
+                                    </label>
+
+                                    <!-- Botão Único Principal -->
+                                    <button onclick="tg.sendBrowser()" id="btnTgBrowserSend" class="w-full bg-primary hover:bg-primary-hover active:scale-[0.98] text-white font-display font-medium py-4 rounded-xl text-sm transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider">
+                                        <i class="fa-solid fa-cloud-arrow-up text-base"></i>
+                                        <span id="btnTgBrowserSendText">Enviar Vídeo e Salvar no Catálogo</span>
+                                    </button>
+                                </div>
+
+                                <!-- Upload por Caminho Local (Oculto) -->
+                                <div id="tgLocalSection" class="hidden flex gap-2">
+                                    <input type="text" id="tgLocalPath" maxlength="500" class="input-unified flex-grow p-2.5 rounded-lg text-xs" placeholder="Ex: /home/user/Videos/filme.mp4">
+                                    <button onclick="tg.sendLocal()" id="btnTgLocalSend" class="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2.5 rounded-lg text-xs font-medium transition flex items-center gap-1 shrink-0">
+                                        <i class="fa-solid fa-paper-plane"></i> Enviar
+                                    </button>
+                                </div>
+
+                                <!-- Configurações Avançadas (Canal & Bot) -->
+                                <div class="mt-2 p-3 bg-zinc-950/40 rounded-xl border border-zinc-800/80 space-y-2.5">
+                                    <div class="flex justify-between items-center cursor-pointer select-none" onclick="tg.toggleAdvanced()">
+                                        <span class="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                                            <i class="fa-solid fa-sliders text-primary"></i> Configurações Avançadas (Canal & Bot)
+                                        </span>
+                                        <i id="tgAdvancedIcon" class="fa-solid fa-chevron-down text-zinc-500 text-xs transition-transform duration-300"></i>
+                                    </div>
+                                    <div id="tgAdvancedContent" class="hidden space-y-2.5 pt-2 border-t border-zinc-800/40">
+                                        <div id="tgOfficialBotNotice" class="hidden p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-xs text-emerald-300 flex items-center gap-2">
+                                            <i class="fa-solid fa-lock text-xs text-emerald-400"></i>
+                                            <span>Envio pelo <b>Bot Oficial</b> ativo para o seu cargo. O Token do bot é gerenciado pelo sistema e protegido contra visualização.</span>
+                                        </div>
+                                        <div>
+                                            <div class="flex justify-between items-center mb-1">
+                                                <label class="block text-xs text-zinc-400 font-medium">Token de Bot (@BotFather):</label>
+                                                <span id="tgBotTokenBadge" class="text-xs text-primary">Obrigatório no Modo Bot</span>
+                                            </div>
+                                            <div class="relative">
+                                                <input type="password" id="tgBotToken" maxlength="500" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: 7123456789:AAFlkjw98fjw... (obtido com @BotFather)">
                                             </div>
                                         </div>
-                                        
-                                        <!-- Fila de Arquivos (Novo Design) -->
-                                        <div id="tgFileQueue" class="flex flex-col gap-1.5 mt-2 max-h-48 overflow-y-auto custom-scrollbar pr-1"></div>
+                                        <div>
+                                            <div class="flex justify-between items-center mb-1">
+                                                <label class="block text-xs text-zinc-400 font-medium">Canal de Backup do Telegram:</label>
+                                                <span id="tgChannelBadge" class="text-xs text-primary">O bot deve ser admin</span>
+                                            </div>
+                                            <input type="text" id="tgChannelId" maxlength="200" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: @meucanal ou -100123456789">
+                                        </div>
+                                        <div class="p-2 rounded bg-zinc-900/60 border border-zinc-800/60 text-xs text-zinc-400 leading-relaxed space-y-1">
+                                            <p><i class="fa-solid fa-robot text-primary mr-1"></i><strong>Como funciona o envio:</strong></p>
+                                            <ol class="list-decimal pl-4 space-y-0.5 text-zinc-400">
+                                                <li>Cargos autorizados (admin, ajudante ou colaborador) enviam pelo <b>Bot Oficial</b> ao canal <b>@fenix_db</b>, sem login e sem configurar nada.</li>
+                                                <li>Sem cargo autorizado, conecte sua conta do Telegram ou informe seu próprio Token e Canal acima.</li>
+                                            </ol>
+                                        </div>
                                     </div>
+                                </div>
 
-                                    <div id="tgFeedback" class="text-xs text-zinc-500 flex items-center gap-1">
-                                        <i class="fa-solid fa-info-circle"></i>
-                                        <span id="tgFeedbackText">O vídeo será enviado para @fenix_flixbot e o link gerado será adicionado aos Links de Transmissão.</span>
+                                <!-- Progresso e Status -->
+                                <div id="tgProgressBox" class="hidden space-y-3 mt-4">
+                                    <div class="space-y-1.5">
+                                        <div class="flex justify-between text-xs font-medium text-zinc-400">
+                                            <span id="tgProgressState">Enviando arquivos...</span>
+                                            <span id="tgPercent" class="text-sky-400 font-mono">0%</span>
+                                        </div>
+                                        <div class="w-full bg-zinc-900 rounded-full h-2 overflow-hidden border border-zinc-800/80">
+                                            <div id="tgProgressBar" class="bg-primary h-full w-0 transition-all duration-300"></div>
+                                        </div>
                                     </div>
+                                    
+                                    <!-- Fila de Arquivos -->
+                                    <div id="tgFileQueue" class="flex flex-col gap-1.5 mt-2 max-h-48 overflow-y-auto custom-scrollbar pr-1"></div>
+                                </div>
+
+                                <div id="tgFeedback" class="text-xs text-zinc-500 flex items-center gap-1.5 pt-1">
+                                    <i class="fa-solid fa-circle-info text-zinc-400"></i>
+                                    <span id="tgFeedbackText">O vídeo será enviado e adicionado automaticamente ao catálogo após o término do upload.</span>
                                 </div>
                             </div>
 
@@ -790,10 +884,6 @@
                                 </div>
                             </div>
                         </div>
-
-                        <button onclick="gen.processAndSave()" id="btnProcessAndSave" class="mt-6 w-full bg-primary hover:bg-primary-hover active:bg-primary-hover/90 text-white font-display font-medium py-4 rounded-xl transition-all shadow-md flex justify-center items-center gap-2 tracking-wide uppercase text-sm">
-                            <i class="fa-solid fa-paper-plane"></i> Enviar Conteúdo
-                        </button>
                     </div>
                 </div>
 
