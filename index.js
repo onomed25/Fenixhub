@@ -66,6 +66,7 @@ if (!process.env.JWT_SECRET && !isTestEnv) {
 }
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const AJUDANTE_PASSWORD = (process.env.AJUDANTE_PASSWORD || process.env.COLABORADOR_PASSWORD || '').trim();
 const JWT_SECRET = process.env.JWT_SECRET;
 const HTTP_TIMEOUT_MS = 8000;
 
@@ -220,6 +221,26 @@ function isAdmin(req) {
     return Boolean(pass && checkPassword(pass, ADMIN_PASSWORD));
 }
 
+function getAjudantePassword(req) {
+    const headerPass = req.headers && (req.headers['x-ajudante-password'] || req.headers['x-colaborador-password']);
+    if (typeof headerPass === 'string' && headerPass.trim()) {
+        return headerPass.trim();
+    }
+    if (req.body && typeof req.body.senha === 'string' && req.body.senha.trim()) {
+        return req.body.senha.trim();
+    }
+    if (req.headers && req.headers['x-admin-password']) {
+        return req.headers['x-admin-password'].trim();
+    }
+    return null;
+}
+
+function isAjudanteAuth(req) {
+    if (!AJUDANTE_PASSWORD) return false;
+    const pass = getAjudantePassword(req);
+    return Boolean(pass && checkPassword(pass, AJUDANTE_PASSWORD));
+}
+
 function getAuthUser(req) {
     const token = extractToken(req);
     return token ? verifyToken(token) : null;
@@ -231,6 +252,7 @@ function isAjudante(user) {
 
 function isPrivileged(req) {
     if (isAdmin(req)) return true;
+    if (isAjudanteAuth(req)) return true;
     const user = getAuthUser(req);
     return isAjudante(user);
 }
@@ -982,7 +1004,7 @@ app.get('/stream/{*splat}', (req, res) => {
 // ROTA 1: ENVIAR CONTEÚDO / UPLOAD JSON
 // ============================================================================
 app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
-    const { nome, conteudo } = req.body;
+    const { nome, conteudo } = req.body || {};
 
     if (!nome || !conteudo) {
         return res.status(400).json({ erro: 'O nome e o conteúdo do JSON são obrigatórios.' });
@@ -1017,19 +1039,20 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
         return res.status(400).json({ erro: 'Para séries, "streams" deve ser um objeto.' });
     }
 
-    // Autenticação Unificada (Header Admin, Body Admin ou Discord Token)
+    // Autenticação Unificada (Header Admin/Ajudante, Body Admin/Ajudante ou Discord Token)
     const adminAuthed = isAdmin(req);
+    const ajudanteAuthed = isAjudanteAuth(req);
     const user = getAuthUser(req);
 
-    if (!adminAuthed && !user) {
-        return res.status(401).json({ erro: 'Você precisa estar logado com o Discord ou autenticado como Admin para salvar links.' });
+    if (!adminAuthed && !ajudanteAuthed && !user) {
+        return res.status(401).json({ erro: 'Você precisa estar logado com o Discord ou autenticado como Admin/Ajudante para salvar links.' });
     }
 
     if (!hasStreamLinks(parsedConteudo.streams, parsedConteudo.type)) {
         return res.status(400).json({ erro: 'O JSON deve conter pelo menos uma stream (link) para ser enviado.' });
     }
 
-    const isAjudanteUser = Boolean(user && user.isAjudante);
+    const isAjudanteUser = Boolean((user && user.isAjudante) || ajudanteAuthed);
     const forcePendente = req.query.force_pendente === 'true' || req.body.force_pendente === 'true';
     const isPendente = (!adminAuthed && !isAjudanteUser) || forcePendente;
     const isGenerator = req.query.generator === 'true';
@@ -1043,13 +1066,15 @@ app.post('/upload', uploadLimiter, upload.none(), async (req, res) => {
         }
     }
     // Identifica quem está enviando (via Discord Token ou nick de uploader)
-    const uploaderNick = user ? (user.global_name || user.username) : (req.body.uploader_nick || req.headers['x-uploader-nick'] || (adminAuthed ? 'Admin' : null));
+    const requestedNick = req.body.uploader_nick || req.headers['x-uploader-nick'] || (parsedConteudo.colaborador && !isPlaceholder(parsedConteudo.colaborador) ? parsedConteudo.colaborador : null);
+    const uploaderNick = user ? (user.global_name || user.username) : (requestedNick || (adminAuthed ? 'Admin' : (ajudanteAuthed ? 'Colaborador' : null)));
     const uploaderId = user ? user.id : null;
     const uploaderAvatar = user ? (user.avatar || null) : null;
-    const isColaboradorUser = Boolean(user && (user.isColaborador || (Array.isArray(user.cargos) && user.cargos.includes(process.env.DISCORD_COLABORADOR_ROLE_ID))));
+    const isColaboradorUser = Boolean((user && (user.isColaborador || (Array.isArray(user.cargos) && user.cargos.includes(process.env.DISCORD_COLABORADOR_ROLE_ID)))) || ajudanteAuthed);
     const isColab = adminAuthed || isAjudanteUser || isColaboradorUser;
     let roleStr = 'membro';
     if (adminAuthed) roleStr = 'admin';
+    else if (ajudanteAuthed) roleStr = (req.body.uploader_role || req.headers['x-uploader-role'] || 'colaborador');
     else if (isAjudanteUser) roleStr = 'ajudante';
     else if (isColaboradorUser) roleStr = 'colaborador';
     else if (user) roleStr = 'membro';
