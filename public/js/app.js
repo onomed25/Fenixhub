@@ -531,18 +531,13 @@ function clearDiscordSession() {
                 const isColaborador = localStorage.getItem('is_colaborador') === 'true';
                 return isAdmin || isAjudante || isColaborador;
             },
-
-            // Envio sem login: cargos autorizados sempre enviam pelo Bot Oficial (@fenix_db).
-            shouldUseOfficialBot: () => tg.isPrivileged(),
             
             init: async () => {
                 // Carrega configurações avançadas do localStorage
                 const botTokenInput = document.getElementById('tgBotToken');
                 const channelIdInput = document.getElementById('tgChannelId');
-
-                // Limpa a preferência antiga do modo Auto Bot (opção removida).
                 localStorage.removeItem('fenixflix_tg_use_bot_direct');
-
+                
                 if (botTokenInput && channelIdInput) {
                     botTokenInput.value = localStorage.getItem('fenixflix_tg_bot_token') || '';
                     channelIdInput.value = localStorage.getItem('fenixflix_tg_channel_id') || '';
@@ -557,144 +552,13 @@ function clearDiscordSession() {
                     });
                 }
 
-                // Observadores para atualizar o checklist de prontidão em tempo real
-                document.getElementById('contentId')?.addEventListener('input', () => tg.updateReadiness());
-                document.getElementById('videoQuality')?.addEventListener('change', () => tg.updateReadiness());
-
                 await tg.checkStatus();
-                tg.updateReadiness();
                 setInterval(tg.checkStatus, 15000);
             },
 
-            updateReadiness: () => {
-                const contentId = (document.getElementById('contentId')?.value || '').trim();
-                const seriesName = (document.getElementById('seriesName')?.value || '').trim();
-                const nuvioTitle = (document.getElementById('nuviometaInfoTitle')?.innerText || '').trim();
-                const quality = (document.getElementById('videoQuality')?.value || '').trim();
-                const fileInput = document.getElementById('tgFile');
-                const hasFiles = fileInput && fileInput.files && fileInput.files.length > 0;
-                const useOfficialBot = tg.shouldUseOfficialBot();
-                const hasSession = localStorage.getItem('fenixflix_tg_session') !== null;
-                const botToken = (document.getElementById('tgBotToken')?.value || '').trim();
-                const channelId = (document.getElementById('tgChannelId')?.value || '').trim();
-                const hasCustomBot = Boolean(botToken && channelId);
-                const isTgConnected = useOfficialBot || hasSession || hasCustomBot;
-
-                // 1. Obra
-                const itemMedia = document.getElementById('readinessItemMedia');
-                const iconMedia = document.getElementById('readinessIconMedia');
-                const textMedia = document.getElementById('readinessTextMedia');
-                const mediaIdentified = Boolean(contentId && contentId !== 'Buscando dados...');
-                
-                if (textMedia && iconMedia) {
-                    if (mediaIdentified) {
-                        const displayName = seriesName || nuvioTitle || contentId;
-                        textMedia.innerText = displayName;
-                        textMedia.className = "block text-emerald-400 truncate font-semibold";
-                        iconMedia.className = "fa-solid fa-circle-check text-emerald-400 shrink-0 text-xs";
-                        if (itemMedia) itemMedia.className = "p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between gap-2 cursor-pointer hover:border-emerald-500/50 transition";
-                    } else {
-                        textMedia.innerText = "Buscar acima";
-                        textMedia.className = "block text-amber-400 truncate font-medium";
-                        iconMedia.className = "fa-solid fa-circle-exclamation text-amber-400 shrink-0 text-xs";
-                        if (itemMedia) itemMedia.className = "p-2.5 rounded-xl bg-amber-950/20 border border-amber-500/30 flex items-center justify-between gap-2 cursor-pointer hover:border-amber-500/50 transition animate-pulse";
-                    }
-                }
-
-                // 2. Qualidade
-                const itemQuality = document.getElementById('readinessItemQuality');
-                const iconQuality = document.getElementById('readinessIconQuality');
-                const textQuality = document.getElementById('readinessTextQuality');
-                if (textQuality && iconQuality) {
-                    textQuality.innerText = quality || "1080p";
-                    iconQuality.className = (quality && quality !== 'Nenhuma') ? "fa-solid fa-circle-check text-emerald-400 shrink-0 text-xs" : "fa-solid fa-circle-exclamation text-amber-400 shrink-0 text-xs";
-                }
-
-                // 3. Telegram
-                const itemTelegram = document.getElementById('readinessItemTelegram');
-                const iconTelegram = document.getElementById('readinessIconTelegram');
-                const textTelegram = document.getElementById('readinessTextTelegram');
-                if (textTelegram && iconTelegram) {
-                    if (isTgConnected) {
-                        textTelegram.innerText = useOfficialBot ? "Bot Oficial" : "Conectado";
-                        textTelegram.className = "block text-emerald-400 truncate font-semibold";
-                        iconTelegram.className = "fa-solid fa-circle-check text-emerald-400 shrink-0 text-xs";
-                        if (itemTelegram) itemTelegram.className = "p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between gap-2 cursor-pointer hover:border-emerald-500/50 transition";
-                    } else {
-                        textTelegram.innerText = "Conectar conta";
-                        textTelegram.className = "block text-amber-400 truncate font-medium";
-                        iconTelegram.className = "fa-solid fa-circle-exclamation text-amber-400 shrink-0 text-xs";
-                        if (itemTelegram) itemTelegram.className = "p-2.5 rounded-xl bg-amber-950/20 border border-amber-500/30 flex items-center justify-between gap-2 cursor-pointer hover:border-amber-500/50 transition animate-pulse";
-                    }
-                }
-
-                // Overall badge
-                const overallBadge = document.getElementById('readinessOverallBadge');
-                if (overallBadge) {
-                    if (mediaIdentified && isTgConnected && hasFiles) {
-                        overallBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
-                        overallBadge.innerText = "Pronto para enviar!";
-                    } else if (!mediaIdentified) {
-                        overallBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30";
-                        overallBadge.innerText = "Falta buscar obra";
-                    } else if (!isTgConnected) {
-                        overallBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30";
-                        overallBadge.innerText = "Conecte o Telegram";
-                    } else {
-                        overallBadge.className = "text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700";
-                        overallBadge.innerText = "Selecione o vídeo";
-                    }
-                }
+            syncToMainForm: () => {
+                // Obsolete: inputs removed.
             },
-
-            focusMediaSearch: () => {
-                const el = document.getElementById('contentId');
-                if (el) {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    el.focus();
-                    el.classList.add('ring-2', 'ring-primary');
-                    setTimeout(() => el.classList.remove('ring-2', 'ring-primary'), 2000);
-                }
-            },
-
-            focusQuality: () => {
-                const el = document.getElementById('videoQuality');
-                if (el) {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    el.focus();
-                }
-            },
-
-            focusTelegram: () => {
-                const session = localStorage.getItem('fenixflix_tg_session');
-                const useOfficialBot = tg.shouldUseOfficialBot();
-                if (!session && !useOfficialBot) {
-                    const el = document.getElementById('tgPhoneInput');
-                    const loginPanel = document.getElementById('tgLoginPanel');
-                    if (loginPanel && loginPanel.classList.contains('hidden')) {
-                        loginPanel.classList.remove('hidden');
-                    }
-                    if (el) {
-                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        el.focus();
-                    }
-                }
-            },
-
-            resetPhoneStep: () => {
-                const phoneStep = document.getElementById('tgLoginPhoneStep');
-                const codeStep = document.getElementById('tgLoginCodeStep');
-                const twoFa = document.getElementById('tg2faContainer');
-                if (phoneStep) phoneStep.classList.remove('hidden');
-                if (codeStep) codeStep.classList.add('hidden');
-                if (twoFa) twoFa.classList.add('hidden');
-                const phoneInput = document.getElementById('tgPhoneInput');
-                if (phoneInput) {
-                    phoneInput.focus();
-                }
-            },
-
-            syncToMainForm: () => {},
 
             toggleAdvanced: () => {
                 const content = document.getElementById('tgAdvancedContent');
@@ -711,6 +575,7 @@ function clearDiscordSession() {
             checkStatus: async () => {
                 const localSession = localStorage.getItem('fenixflix_tg_session');
                 if (localSession) {
+                    // Se o usuário tem uma sessão salva localmente, ele está conectado!
                     tg.status = { configured: true, connected: true, local: true };
                     tg.updateUIStatus();
                     return;
@@ -726,7 +591,6 @@ function clearDiscordSession() {
                 } catch (e) {
                     console.error("Erro ao verificar status do Telegram:", e);
                 }
-                tg.updateUIStatus();
             },
 
             updateUIStatus: () => {
@@ -735,88 +599,39 @@ function clearDiscordSession() {
                 const btnBrowser = document.getElementById('btnTgBrowserSend');
                 const btnLocal = document.getElementById('btnTgLocalSend');
                 const feedbackText = document.getElementById('tgFeedbackText');
-                const botTokenInput = document.getElementById('tgBotToken');
-                const officialBotInfo = document.getElementById('tgOfficialBotInfo');
-                const officialBotNotice = document.getElementById('tgOfficialBotNotice');
-                const botTokenBadge = document.getElementById('tgBotTokenBadge');
-                const channelBadge = document.getElementById('tgChannelBadge');
-                const loginPanel = document.getElementById('tgLoginPanel');
-                const connectedPanel = document.getElementById('tgConnectedPanel');
-                const connectedUserLabel = document.getElementById('tgConnectedUserLabel');
+                const botNoLoginContainer = document.getElementById('tgBotNoLoginOption');
+                if (botNoLoginContainer) botNoLoginContainer.remove();
 
                 const hasLocalSession = localStorage.getItem('fenixflix_tg_session') !== null;
-                const useOfficialBot = tg.shouldUseOfficialBot();
 
-                // 1. CARGOS AUTORIZADOS: Envio pelo Bot Oficial (@fenix_db)
-                if (useOfficialBot) {
-                    if (officialBotInfo) officialBotInfo.classList.remove('hidden');
-                    if (officialBotNotice) officialBotNotice.classList.remove('hidden');
-                    if (loginPanel) loginPanel.classList.add('hidden');
-                    if (connectedPanel) connectedPanel.classList.add('hidden');
-
-                    if (badge) {
-                        badge.className = "text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800";
-                        badge.innerText = "Bot Oficial (@fenix_db)";
-                    }
-                    if (btnToggle) btnToggle.classList.add('hidden');
-                    if (btnBrowser) btnBrowser.disabled = false;
-                    if (btnLocal) btnLocal.disabled = false;
-                    if (feedbackText) feedbackText.innerText = "Bot Oficial ativo: vídeos postados automaticamente em @fenix_db com links diretos.";
-
-                    if (botTokenInput) {
-                        botTokenInput.disabled = true;
-                        botTokenInput.placeholder = "Gerenciado automaticamente pelo Bot Oficial";
-                    }
-                    if (botTokenBadge) botTokenBadge.innerText = "Gerenciado pelo Bot Oficial";
-                    if (channelBadge) channelBadge.innerText = "Canal Oficial (@fenix_db)";
-                    tg.updateReadiness();
-                    return;
-                }
-
-                // Usuário comum / sem bot oficial
-                if (officialBotInfo) officialBotInfo.classList.add('hidden');
-                if (officialBotNotice) officialBotNotice.classList.add('hidden');
-                if (botTokenBadge) botTokenBadge.innerText = "Obrigatório no Modo Bot";
-                if (channelBadge) channelBadge.innerText = "O bot deve ser admin";
-
-                if (botTokenInput && botTokenInput.disabled) {
-                    botTokenInput.disabled = false;
-                    botTokenInput.type = "password";
-                    botTokenInput.placeholder = "Ex: 7123456789:AAFlkjw98fjw... (obtido com @BotFather)";
-                    botTokenInput.value = localStorage.getItem('fenixflix_tg_bot_token') || '';
-                }
-
-                // 2. CONECTADO VIA SESSÃO WEB
                 if (hasLocalSession) {
-                    if (loginPanel) loginPanel.classList.add('hidden');
-                    if (connectedPanel) connectedPanel.classList.remove('hidden');
-                    const nick = localStorage.getItem('fenix_uploader_nick');
-                    if (connectedUserLabel) {
-                        connectedUserLabel.innerText = nick ? `Conectado como @${nick}. Pronto para enviar!` : "Sua conta está autorizada para envio de vídeos.";
-                    }
-
                     if (badge) {
-                        badge.className = "text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800";
-                        badge.innerText = "Telegram Conectado";
+                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-900";
+                        badge.innerText = "Conectado (Web)";
                     }
-                    if (btnToggle) btnToggle.classList.add('hidden');
+                    if (btnToggle) {
+                        btnToggle.innerText = "Desconectar";
+                        btnToggle.className = "text-[9px] font-semibold text-red-400 hover:underline ml-1";
+                    }
                     if (btnBrowser) btnBrowser.disabled = false;
                     if (btnLocal) btnLocal.disabled = false;
-                    if (feedbackText) feedbackText.innerText = "Conectado usando sua conta do Telegram. Pronto para converter e publicar vídeos!";
+                    if (feedbackText) feedbackText.innerText = "Conectado usando sua conta do Telegram. Pronto para converter vídeos!";
                 } else {
-                    // 3. NÃO CONECTADO: Exibe o painel de conexão de forma clara e visível
-                    if (loginPanel) loginPanel.classList.remove('hidden');
-                    if (connectedPanel) connectedPanel.classList.add('hidden');
-
                     if (badge) {
-                        badge.className = "text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-800 animate-pulse";
-                        badge.innerText = "Conexão Necessária";
+                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-900";
+                        badge.innerText = "Login Obrigatório";
                     }
-                    if (btnToggle) btnToggle.classList.add('hidden');
-                    if (feedbackText) feedbackText.innerText = "Conecte sua conta do Telegram no painel acima para poder enviar vídeos.";
+                    if (btnToggle) {
+                        btnToggle.innerText = "Conectar Telegram";
+                        btnToggle.className = "text-[9px] font-semibold text-primary hover:underline ml-1";
+                    }
+                    if (btnBrowser) btnBrowser.disabled = true;
+                    if (btnLocal) btnLocal.disabled = true;
+                    if (feedbackText) feedbackText.innerText = "Atenção: É obrigatório conectar sua conta do Telegram para poder enviar vídeos.";
+                    
+                    const panel = document.getElementById('tgLoginPanel');
+                    if (panel) panel.classList.remove('hidden');
                 }
-
-                tg.updateReadiness();
             },
 
             toggleConnection: () => {
@@ -826,15 +641,20 @@ function clearDiscordSession() {
                 if (hasLocalSession) {
                     tg.logout();
                 } else {
-                    if (panel) panel.classList.toggle('hidden');
-                    tg.resetPhoneStep();
+                    panel.classList.toggle('hidden');
+                    // Reseta estado do form de login
+                    document.getElementById('tgLoginPhoneStep').classList.remove('hidden');
+                    document.getElementById('tgLoginCodeStep').classList.add('hidden');
+                    document.getElementById('tg2faContainer').classList.add('hidden');
+                    document.getElementById('tgPhoneInput').value = '';
+                    document.getElementById('tgCodeInput').value = '';
+                    document.getElementById('tg2faInput').value = '';
                 }
             },
 
             logout: () => {
                 localStorage.removeItem('fenixflix_tg_session');
-                localStorage.removeItem('fenix_uploader_nick');
-                showToast("Sessão do Telegram desconectada.", "info");
+                showToast("Sessão do Telegram encerrada localmente.", "info");
                 tg.updateUIStatus();
             },
 
@@ -843,7 +663,7 @@ function clearDiscordSession() {
                 const phone = phoneInput.value.trim();
                 const btn = document.getElementById('btnTgSendPhone');
 
-                if (!phone) return showToast("Digite seu número de telefone com DDD e DDI (+55)!", "warning");
+                if (!phone) return showToast("Digite seu número de telefone com DDI!", "warning");
 
                 btn.disabled = true;
                 btn.innerHTML = '<div class="loader"></div>';
@@ -860,8 +680,7 @@ function clearDiscordSession() {
                         document.getElementById('tgLoginId').value = data.loginId;
                         document.getElementById('tgLoginPhoneStep').classList.add('hidden');
                         document.getElementById('tgLoginCodeStep').classList.remove('hidden');
-                        document.getElementById('tgCodeInput')?.focus();
-                        showToast("Código de verificação enviado! Verifique seu app do Telegram.", "success");
+                        showToast("Código de verificação enviado! Verifique seu Telegram.", "success");
                     } else {
                         showToast(data.erro || "Falha ao enviar código.", "error");
                     }
@@ -869,7 +688,7 @@ function clearDiscordSession() {
                     showToast("Erro ao conectar com o servidor.", "error");
                 } finally {
                     btn.disabled = false;
-                    btn.innerHTML = '<i class="fa-solid fa-paper-plane text-xs"></i> Receber Código';
+                    btn.innerText = "Enviar Código";
                 }
             },
 
@@ -879,7 +698,7 @@ function clearDiscordSession() {
                 const password = document.getElementById('tg2faInput').value.trim();
                 const btn = document.getElementById('btnTgVerifyCode');
 
-                if (!code) return showToast("Digite o código recebido no seu Telegram!", "warning");
+                if (!code) return showToast("Digite o código recebido!", "warning");
 
                 btn.disabled = true;
                 btn.innerHTML = '<div class="loader"></div>';
@@ -895,7 +714,6 @@ function clearDiscordSession() {
                     if (res.ok) {
                         if (data.precisa2FA) {
                             document.getElementById('tg2faContainer').classList.remove('hidden');
-                            document.getElementById('tg2faInput')?.focus();
                             showToast("Esta conta possui verificação de duas etapas. Digite sua senha de 2FA.", "warning");
                         } else if (data.sucesso && data.session) {
                             localStorage.setItem('fenixflix_tg_session', data.session);
@@ -906,6 +724,7 @@ function clearDiscordSession() {
                                     nickInput.value = data.telegramUser;
                                 }
                             }
+                            document.getElementById('tgLoginPanel').classList.add('hidden');
                             showToast("Telegram conectado com sucesso!", "success");
                             tg.updateUIStatus();
                         } else {
@@ -918,7 +737,7 @@ function clearDiscordSession() {
                     showToast("Erro ao conectar com o servidor.", "error");
                 } finally {
                     btn.disabled = false;
-                    btn.innerHTML = '<i class="fa-solid fa-check text-xs"></i> Confirmar e Conectar';
+                    btn.innerText = "Confirmar";
                 }
             },
 
@@ -932,12 +751,9 @@ function clearDiscordSession() {
                 }
             },
 
-            handleFileChange: (input) => {
-                const files = Array.from(input.files || []);
+             handleFileChange: (input) => {
+                const files = Array.from(input.files);
                 const label = document.getElementById('tgFileName');
-                const subtext = document.getElementById('tgFileSubtext');
-                const dropzone = document.getElementById('tgFileDropzone');
-                
                 if (files && files.length > 0) {
                     const videoExtensions = VIDEO_EXTENSIONS;
                     const invalidFiles = files.filter(file => {
@@ -948,86 +764,48 @@ function clearDiscordSession() {
                     });
 
                     if (invalidFiles.length > 0) {
-                        showToast("Apenas arquivos de vídeo são permitidos (mp4, mkv, avi, etc.)!", "error");
+                        showToast("Apenas arquivos de vídeo são permitidos (mp4, mkv, etc.)!", "error");
                         input.value = '';
-                        if (label) label.innerText = "Clique para selecionar o vídeo ou arraste aqui";
-                        if (subtext) subtext.innerText = "Formatos suportados: MP4, MKV, AVI, WEBM, TS";
-                        if (dropzone) {
-                            dropzone.classList.remove('border-emerald-500/50', 'bg-emerald-950/20');
-                            dropzone.classList.add('border-zinc-700');
-                        }
-                        tg.updateReadiness();
+                        label.innerText = "Selecionar vídeo...";
+                        label.classList.remove('text-zinc-200');
+                        label.classList.add('text-zinc-500');
                         return;
                     }
 
-                    const formatSize = (bytes) => {
-                        if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' GB';
-                        if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
-                        return (bytes / 1024).toFixed(0) + ' KB';
-                    };
-
                     if (files.length === 1) {
-                        const f = files[0];
-                        if (label) label.innerText = f.name;
-                        if (subtext) subtext.innerText = `Tamanho: ${formatSize(f.size)} • Pronto para envio`;
+                        label.innerText = files[0].name;
                     } else {
-                        const totalSize = files.reduce((acc, f) => acc + f.size, 0);
-                        if (label) label.innerText = `${files.length} vídeos selecionados`;
-                        if (subtext) subtext.innerText = `Tamanho total: ${formatSize(totalSize)} • Fila de envio`;
+                        label.innerText = `${files.length} arquivos selecionados`;
                     }
-
-                    if (dropzone) {
-                        dropzone.classList.remove('border-zinc-700');
-                        dropzone.classList.add('border-emerald-500/50', 'bg-emerald-950/20');
-                    }
+                    label.classList.remove('text-zinc-500');
+                    label.classList.add('text-zinc-200');
                 } else {
-                    if (label) label.innerText = "Clique para selecionar o vídeo ou arraste aqui";
-                    if (subtext) subtext.innerText = "Formatos suportados: MP4, MKV, AVI, WEBM, TS";
-                    if (dropzone) {
-                        dropzone.classList.remove('border-emerald-500/50', 'bg-emerald-950/20');
-                        dropzone.classList.add('border-zinc-700');
-                    }
+                    label.innerText = "Selecionar vídeo...";
+                    label.classList.remove('text-zinc-200');
+                    label.classList.add('text-zinc-500');
                 }
-                tg.updateReadiness();
             },
 
             sendBrowser: async () => {
                 const fileInput = document.getElementById('tgFile');
-                const files = Array.from(fileInput?.files || []);
-                
-                // 1. Validar seleção de arquivos
-                if (files.length === 0) {
-                    if (fileInput) fileInput.click();
-                    return showToast("Selecione pelo menos um arquivo de vídeo primeiro!", "warning");
-                }
+                const files = Array.from(fileInput.files);
+                if (files.length === 0) return showToast("Selecione pelo menos um arquivo primeiro!", "warning");
 
-                // 2. Validar obra (Filme / Série)
-                const tgImdbId = (document.getElementById('contentId')?.value || '').trim();
-                if (!tgImdbId || tgImdbId === 'Buscando dados...') {
-                    tg.focusMediaSearch();
-                    return showToast("Busque o filme ou série por nome ou ID IMDb primeiro!", "error");
-                }
+                // Validar campos obrigatórios
+                const tgImdbId = document.getElementById('contentId').value.trim();
+                const tgQuality = document.getElementById('videoQuality').value.trim();
 
-                // 3. Validar qualidade
-                const tgQuality = (document.getElementById('videoQuality')?.value || '').trim();
+                if (!tgImdbId) {
+                    return showToast("O ID IMDb é obrigatório para enviar o vídeo!", "error");
+                }
+                if (!/^tt\d{7,10}$/.test(tgImdbId)) {
+                    return showToast("O ID IMDb informado é inválido! Deve começar com 'tt' e conter de 7 a 10 dígitos (ex: tt0903747).", "error");
+                }
                 if (!tgQuality || tgQuality === 'Nenhuma') {
-                    tg.focusQuality();
-                    return showToast("A qualidade do vídeo é obrigatória! Selecione uma opção (ex: 1080p, 720p).", "error");
+                    return showToast("A qualidade do vídeo é obrigatória para enviar o vídeo! Selecione uma opção (ex: 1080p, 720p).", "error");
                 }
 
-                // 4. Validar conexão com o Telegram
-                const useOfficialBot = tg.shouldUseOfficialBot();
-                const session = localStorage.getItem('fenixflix_tg_session');
-                const botTokenInput = (document.getElementById('tgBotToken')?.value || '').trim();
-                const channelId = (document.getElementById('tgChannelId')?.value || '').trim();
-                const hasBotConfig = Boolean(botTokenInput && channelId);
-
-                if (!useOfficialBot && !session && !hasBotConfig) {
-                    tg.focusTelegram();
-                    return showToast("É obrigatório conectar sua conta do Telegram para enviar vídeos!", "warning");
-                }
-
-                // 5. Garantir que todos os arquivos selecionados são vídeos
+                // Garantir que todos os arquivos selecionados são vídeos
                 const videoExtensions = VIDEO_EXTENSIONS;
                 const invalidFiles = files.filter(file => {
                     const nameLower = file.name.toLowerCase();
@@ -1039,8 +817,23 @@ function clearDiscordSession() {
                     return showToast("Apenas arquivos de vídeo são permitidos (mp4, mkv, etc.)!", "error");
                 }
 
-                // Ordenação natural de arquivos (Episódio 2 antes de 10)
+
+                // 1. Ordena os arquivos de forma natural (ex: Episódio 2 antes de Episódio 10)
                 files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+                const session = localStorage.getItem('fenixflix_tg_session');
+                if (!session) {
+                    const panel = document.getElementById('tgLoginPanel');
+                    if (panel) panel.classList.remove('hidden');
+                    const phoneInput = document.getElementById('tgPhoneInput');
+                    if (phoneInput) phoneInput.focus();
+                    return showToast("É obrigatório conectar sua conta do Telegram para enviar vídeos!", "warning");
+                }
+
+                const botTokenInput = document.getElementById('tgBotToken').value.trim();
+                const channelId = document.getElementById('tgChannelId').value.trim();
+                const botTokens = botTokenInput ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
+                const hasBotConfig = botTokens.length > 0 && channelId;
 
                 const progressBox = document.getElementById('tgProgressBox');
                 const progressBar = document.getElementById('tgProgressBar');
@@ -1048,28 +841,26 @@ function clearDiscordSession() {
                 const progressState = document.getElementById('tgProgressState');
                 const btn = document.getElementById('btnTgBrowserSend');
 
-                if (progressBox) progressBox.classList.remove('hidden');
-                if (btn) {
-                    btn.disabled = true;
-                    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Enviando vídeo para o Telegram...</span>';
-                }
+                progressBox.classList.remove('hidden');
+                btn.disabled = true;
+                btn.innerHTML = '<div class="loader"></div> Enviando...';
 
-                // Insere placeholders ordenados no final do textarea em tempo real
+                // 2. Insere placeholders ordenados no final do textarea em tempo real
                 const textarea = document.getElementById('manualLinks');
-                let currentText = textarea ? textarea.value.trim() : '';
+                let currentText = textarea.value.trim();
                 const startLineIndex = currentText ? textarea.value.split('\n').length : 0;
                 
                 const placeholders = files.map(file => `[Aguardando envio: ${file.name}]`);
-                if (textarea) {
-                    if (currentText) {
-                        textarea.value = currentText + '\n' + placeholders.join('\n');
-                    } else {
-                        textarea.value = placeholders.join('\n');
-                    }
-                    textarea.dispatchEvent(new Event('input'));
+                if (currentText) {
+                    textarea.value = currentText + '\n' + placeholders.join('\n');
+                } else {
+                    textarea.value = placeholders.join('\n');
                 }
+                textarea.dispatchEvent(new Event('input'));
 
+                // Array para armazenar o progresso de cada arquivo (valores de 0 a 1)
                 const progressValues = new Array(files.length).fill(0);
+                // Contador de arquivos concluídos/falhos
                 let completedCount = 0;
                 let successCount = 0;
 
@@ -1094,11 +885,10 @@ function clearDiscordSession() {
                 const updateGlobalProgress = () => {
                     const averageProgress = progressValues.reduce((sum, val) => sum + val, 0) / files.length;
                     const percent = Math.round(averageProgress * 100);
-                    if (progressBar) progressBar.style.width = percent + '%';
-                    if (percentText) percentText.innerText = percent + '%';
-                    if (progressState) {
-                        progressState.innerText = `Enviando ${files.length} arquivo(s) (${successCount}/${files.length} concluídos)...`;
-                    }
+                    progressBar.style.width = percent + '%';
+                    percentText.innerText = percent + '%';
+                    
+                    progressState.innerText = `Enviando ${files.length} arquivo(s) (${successCount}/${files.length} concluídos)...`;
                 };
 
                 updateGlobalProgress();
@@ -1111,23 +901,35 @@ function clearDiscordSession() {
                         const xhr = new XMLHttpRequest();
                         xhr.open('POST', TELEGRAM_API_URL + '/api/telegram/upload', true);
 
-                        if (session && !useOfficialBot) {
+                        const session = localStorage.getItem('fenixflix_tg_session');
+                        const useBotDirect = tg.isPrivileged() && (localStorage.getItem('fenixflix_tg_use_bot_direct') === 'true' || !session);
+
+                        if (session && !useBotDirect) {
                             xhr.setRequestHeader('X-Telegram-Session', session);
                         }
 
-                        if (useOfficialBot) {
-                            xhr.setRequestHeader('X-Telegram-Use-Auto-Bot', 'true');
-                            xhr.setRequestHeader('X-Telegram-Channel-Id', channelId || '@fenix_db');
-                        } else if (hasBotConfig) {
-                            const activeBotToken = botTokenInput.split(',').map(t => t.trim()).filter(Boolean)[0] || botTokenInput;
-                            xhr.setRequestHeader('X-Telegram-Bot-Token', activeBotToken);
-                            xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
+                        if (hasBotConfig) {
+                            if (useBotDirect || !session) {
+                                const activeBotToken = botTokens[index % botTokens.length];
+                                xhr.setRequestHeader('X-Telegram-Bot-Token', activeBotToken);
+                                xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
+                            } else {
+                                const uploaderIndex = index % (botTokens.length + 1);
+                                if (uploaderIndex === 0) {
+                                    xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
+                                } else {
+                                    const activeBotToken = botTokens[uploaderIndex - 1];
+                                    xhr.setRequestHeader('X-Telegram-Bot-Token', activeBotToken);
+                                    xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
+                                }
+                            }
                         } else if (channelId) {
                             xhr.setRequestHeader('X-Telegram-Channel-Id', channelId);
                         }
 
                         xhr.upload.onprogress = (e) => {
                             if (e.lengthComputable) {
+                                // 0% a 95% para o envio HTTP, os últimos 5% são para a resposta do bot
                                 progressValues[index] = (e.loaded / e.total) * 0.95;
                                 updateGlobalProgress();
                                 const statusEl = document.getElementById(`tg-queue-status-${index}`);
@@ -1143,12 +945,11 @@ function clearDiscordSession() {
                                 try {
                                     const res = JSON.parse(xhr.responseText);
                                     if (res.sucesso && res.link) {
-                                        if (textarea) {
-                                            const currentLines = textarea.value.split('\n');
-                                            currentLines[startLineIndex + index] = `${res.link} # ${file.name}`;
-                                            textarea.value = currentLines.join('\n');
-                                            textarea.dispatchEvent(new Event('input'));
-                                        }
+                                        // Substitui o placeholder pelo link retornado (preservando o nome do arquivo como comentário)
+                                        const currentLines = textarea.value.split('\n');
+                                        currentLines[startLineIndex + index] = `${res.link} # ${file.name}`;
+                                        textarea.value = currentLines.join('\n');
+                                        textarea.dispatchEvent(new Event('input'));
 
                                         progressValues[index] = 1.0;
                                         successCount++;
@@ -1157,12 +958,11 @@ function clearDiscordSession() {
                                         if (iconEl) iconEl.className = 'fa-solid fa-circle-check text-emerald-500';
                                         if (statusEl) { statusEl.innerText = 'Concluído'; statusEl.className = 'text-[10px] text-emerald-500 font-medium'; }
                                     } else {
-                                        if (textarea) {
-                                            const currentLines = textarea.value.split('\n');
-                                            currentLines[startLineIndex + index] = `[Erro: ${file.name} - ${res.erro || "Desconhecido"}]`;
-                                            textarea.value = currentLines.join('\n');
-                                            textarea.dispatchEvent(new Event('input'));
-                                        }
+                                        // Substitui o placeholder por mensagem de erro
+                                        const currentLines = textarea.value.split('\n');
+                                        currentLines[startLineIndex + index] = `[Erro: ${file.name} - ${res.erro || "Desconhecido"}]`;
+                                        textarea.value = currentLines.join('\n');
+                                        textarea.dispatchEvent(new Event('input'));
                                         showToast(`Erro no arquivo ${file.name}: ${res.erro || "Desconhecido"}`, "error");
                                         const iconEl = document.getElementById(`tg-queue-icon-${index}`);
                                         const statusEl = document.getElementById(`tg-queue-status-${index}`);
@@ -1177,12 +977,10 @@ function clearDiscordSession() {
                                     if (statusEl) { statusEl.innerText = 'Erro'; statusEl.className = 'text-[10px] text-red-500 font-medium'; }
                                 }
                             } else {
-                                if (textarea) {
-                                    const currentLines = textarea.value.split('\n');
-                                    currentLines[startLineIndex + index] = `[Erro no upload: ${file.name}]`;
-                                    textarea.value = currentLines.join('\n');
-                                    textarea.dispatchEvent(new Event('input'));
-                                }
+                                const currentLines = textarea.value.split('\n');
+                                currentLines[startLineIndex + index] = `[Erro no upload: ${file.name}]`;
+                                textarea.value = currentLines.join('\n');
+                                textarea.dispatchEvent(new Event('input'));
                                 try {
                                     const res = JSON.parse(xhr.responseText);
                                     showToast(`Falha no upload de ${file.name}: ${res.erro || xhr.statusText}`, "error");
@@ -1200,12 +998,11 @@ function clearDiscordSession() {
                         };
 
                         xhr.onerror = function () {
-                            if (textarea) {
-                                const currentLines = textarea.value.split('\n');
-                                currentLines[startLineIndex + index] = `[Erro de rede: ${file.name}]`;
-                                textarea.value = currentLines.join('\n');
-                                textarea.dispatchEvent(new Event('input'));
-                            }
+                            const currentLines = textarea.value.split('\n');
+                            currentLines[startLineIndex + index] = `[Erro de rede: ${file.name}]`;
+                            textarea.value = currentLines.join('\n');
+                            textarea.dispatchEvent(new Event('input'));
+
                             showToast(`Erro de rede no upload de ${file.name}`, "error");
                             const iconEl = document.getElementById(`tg-queue-icon-${index}`);
                             const statusEl = document.getElementById(`tg-queue-status-${index}`);
@@ -1217,12 +1014,10 @@ function clearDiscordSession() {
                         };
 
                         xhr.onabort = function () {
-                            if (textarea) {
-                                const currentLines = textarea.value.split('\n');
-                                currentLines[startLineIndex + index] = `[Upload cancelado: ${file.name}]`;
-                                textarea.value = currentLines.join('\n');
-                                textarea.dispatchEvent(new Event('input'));
-                            }
+                            const currentLines = textarea.value.split('\n');
+                            currentLines[startLineIndex + index] = `[Upload cancelado: ${file.name}]`;
+                            textarea.value = currentLines.join('\n');
+                            textarea.dispatchEvent(new Event('input'));
                             showToast(`Upload cancelado: ${file.name}`, "warning");
                             completedCount++;
                             updateGlobalProgress();
@@ -1233,8 +1028,10 @@ function clearDiscordSession() {
                     });
                 };
 
+                // Força upload com concorrência = 2 para agilizar
                 const concurrencyLimit = 2;
                 const queue = [...files.entries()];
+                
                 const workers = Array(Math.min(concurrencyLimit, files.length)).fill(null).map(async () => {
                     while (queue.length > 0) {
                         const [index, file] = queue.shift();
@@ -1244,20 +1041,17 @@ function clearDiscordSession() {
 
                 await Promise.all(workers);
 
-                if (progressBox) progressBox.classList.add('hidden');
-                if (progressBar) progressBar.style.width = '0%';
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Enviar';
+                progressBox.classList.add('hidden');
+                progressBar.style.width = '0%';
 
                 if (successCount === files.length) {
-                    showToast("Upload concluído com sucesso!", "success");
+                    showToast("Todos os vídeos foram enviados e convertidos com sucesso!", "success");
                 } else if (successCount > 0) {
-                    showToast(`Concluído: ${successCount} de ${files.length} vídeos enviados.`, "warning");
+                    showToast(`Concluído: ${successCount} de ${files.length} vídeos convertidos com sucesso.`, "warning");
                 } else {
                     showToast("Falha ao enviar os vídeos.", "error");
-                    if (btn) {
-                        btn.disabled = false;
-                        btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up text-base"></i> <span id="btnTgBrowserSendText">Enviar Vídeo e Salvar no Catálogo</span>';
-                    }
-                    return;
                 }
 
                 if (successCount > 0) {
@@ -1284,27 +1078,17 @@ function clearDiscordSession() {
                     // 2. Processar automaticamente
                     gen.process();
 
-                    // 3. Salvar automaticamente no catálogo (banco de dados)
+                    // 3. Salvar JSON no banco se auto-salvar estiver ativado
+                    const autoSave = document.getElementById('tgAutoSave')?.checked !== false;
                     const keepFields = failedIndices.size > 0;
-                    if (btn) {
-                        btn.innerHTML = '<i class="fa-solid fa-database fa-fade text-base"></i> <span>Salvando no catálogo...</span>';
-                    }
-                    showToast("Salvando automaticamente no catálogo...", "info");
-                    try {
+                    if (autoSave) {
+                        showToast("Salvando JSON automaticamente no banco de dados...", "info");
                         await gen.uploadParaBanco(keepFields);
-                        showToast("Vídeo publicado e salvo no catálogo com sucesso!", "success");
-                    } catch (e) {
-                        console.error("Erro ao salvar no banco:", e);
-                        showToast("Vídeo enviado, mas houve erro ao salvar no catálogo: " + e.message, "error");
+                    } else {
+                        showToast("Processamento concluído. JSON gerado no painel lateral para revisão.", "success");
                     }
 
-                    // 4. Limpar seleção de arquivos se tudo deu certo
-                    if (!keepFields && fileInput) {
-                        fileInput.value = '';
-                        tg.handleFileChange(fileInput);
-                    }
-
-                    // 5. Se houveram falhas, restaurar apenas os links que falharam na caixa para revisão
+                    // 4. Se houveram falhas, restaurar apenas os links que falharam na caixa para revisão
                     if (keepFields) {
                         const failedLines = [];
                         for (let i = 0; i < finalLines.length; i++) {
@@ -1314,14 +1098,12 @@ function clearDiscordSession() {
                         }
                         textarea.value = failedLines.join('\n');
                         textarea.dispatchEvent(new Event('input'));
+                        showToast(`${failedIndices.size} envios falharam e foram mantidos para revisão.`, "warning");
                     }
                 }
 
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up text-base"></i> <span id="btnTgBrowserSendText">Enviar Vídeo e Salvar no Catálogo</span>';
-                }
-                tg.updateReadiness();
+                fileInput.value = '';
+                tg.handleFileChange(fileInput);
             },
 
              sendLocal: async () => {
@@ -1350,23 +1132,18 @@ function clearDiscordSession() {
                     return showToast("O arquivo local precisa ser um vídeo (mp4, mkv, etc.)!", "error");
                 }
 
-                const botTokenInput = (document.getElementById('tgBotToken')?.value || '').trim();
-                const channelId = (document.getElementById('tgChannelId')?.value || '').trim();
-                // Sem a opção de Auto Bot: cargos autorizados usam o Bot Oficial automaticamente.
-                const useOfficialBot = tg.shouldUseOfficialBot();
-                const isMaskedToken = botTokenInput.includes('••••');
-                const botTokens = (botTokenInput && !isMaskedToken) ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
                 const session = localStorage.getItem('fenixflix_tg_session');
-
-                if (!useOfficialBot && !session && (!botTokenInput || !channelId)) {
-                    const advContent = document.getElementById('tgAdvancedContent');
-                    if (advContent && advContent.classList.contains('hidden')) {
-                        tg.toggleAdvanced();
-                    }
-                    const botInputEl = document.getElementById('tgBotToken');
-                    if (botInputEl) botInputEl.focus();
-                    return showToast("Conecte sua conta do Telegram ou informe seu Bot Token e Canal de Backup nas Configurações Avançadas para enviar!", "warning");
+                if (!session) {
+                    const panel = document.getElementById('tgLoginPanel');
+                    if (panel) panel.classList.remove('hidden');
+                    const phoneInput = document.getElementById('tgPhoneInput');
+                    if (phoneInput) phoneInput.focus();
+                    return showToast("É obrigatório conectar sua conta do Telegram para enviar vídeos!", "warning");
                 }
+
+                const botTokenInput = document.getElementById('tgBotToken').value.trim();
+                const channelId = document.getElementById('tgChannelId').value.trim();
+                const botTokens = botTokenInput ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
 
                 const btn = document.getElementById('btnTgLocalSend');
                 const progressBox = document.getElementById('tgProgressBox');
@@ -1384,20 +1161,15 @@ function clearDiscordSession() {
 
                 const tgAdminSenha = sessionStorage.getItem('fenixflix_senha') || '';
                 const headers = { 'Content-Type': 'application/json' , 'x-admin-password': tgAdminSenha };
-                if (session && !useOfficialBot) {
+                if (session) {
                     headers['X-Telegram-Session'] = session;
                 }
 
-                if (useOfficialBot) {
-                    headers['X-Telegram-Use-Auto-Bot'] = 'true';
-                    headers['X-Telegram-Channel-Id'] = channelId || '@fenix_db';
-                } else {
-                    if (botTokens.length > 0) {
-                        headers['X-Telegram-Bot-Token'] = botTokens[0];
-                    }
-                    if (channelId) {
-                        headers['X-Telegram-Channel-Id'] = channelId;
-                    }
+                if (botTokens.length > 0) {
+                    headers['X-Telegram-Bot-Token'] = botTokens[0];
+                }
+                if (channelId) {
+                    headers['X-Telegram-Channel-Id'] = channelId;
                 }
 
                 try {
@@ -1454,12 +1226,9 @@ function clearDiscordSession() {
                     return showToast("Nenhum link externo pendente para conversão.", "info");
                 }
 
-                const botTokenInput = (document.getElementById('tgBotToken')?.value || '').trim();
-                const channelId = (document.getElementById('tgChannelId')?.value || '').trim();
-                // Sem a opção de Auto Bot: cargos autorizados usam o Bot Oficial automaticamente.
-                const useOfficialBot = tg.shouldUseOfficialBot();
-                const isMaskedToken = botTokenInput.includes('••••');
-                const botTokens = (botTokenInput && !isMaskedToken) ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
+                const botTokenInput = document.getElementById('tgBotToken').value.trim();
+                const channelId = document.getElementById('tgChannelId').value.trim();
+                const botTokens = botTokenInput ? botTokenInput.split(',').map(t => t.trim()).filter(Boolean) : [];
                 const hasBotConfig = botTokens.length > 0 && channelId;
                 // Força concorrência = 2
                 const concurrencyLimit = 2;
@@ -1511,18 +1280,27 @@ function clearDiscordSession() {
                     const tgAdminSenha = sessionStorage.getItem('fenixflix_senha') || '';
                     const headers = { 'Content-Type': 'application/json' , 'x-admin-password': tgAdminSenha };
                     const session = localStorage.getItem('fenixflix_tg_session');
+                    const useBotDirect = tg.isPrivileged() && (localStorage.getItem('fenixflix_tg_use_bot_direct') === 'true' || !session);
 
-                    if (session && !useOfficialBot) {
+                    if (session && !useBotDirect) {
                         headers['X-Telegram-Session'] = session;
                     }
 
-                    if (useOfficialBot) {
-                        headers['X-Telegram-Use-Auto-Bot'] = 'true';
-                        headers['X-Telegram-Channel-Id'] = channelId || '@fenix_db';
-                    } else if (hasBotConfig) {
-                        const activeBotToken = botTokens[index % botTokens.length];
-                        headers['X-Telegram-Bot-Token'] = activeBotToken;
-                        headers['X-Telegram-Channel-Id'] = channelId;
+                    if (hasBotConfig) {
+                        if (useBotDirect || !session) {
+                            const activeBotToken = botTokens[index % botTokens.length];
+                            headers['X-Telegram-Bot-Token'] = activeBotToken;
+                            headers['X-Telegram-Channel-Id'] = channelId;
+                        } else {
+                            const uploaderIndex = index % (botTokens.length + 1);
+                            if (uploaderIndex === 0) {
+                                headers['X-Telegram-Channel-Id'] = channelId;
+                            } else {
+                                const activeBotToken = botTokens[uploaderIndex - 1];
+                                headers['X-Telegram-Bot-Token'] = activeBotToken;
+                                headers['X-Telegram-Channel-Id'] = channelId;
+                            }
+                        }
                     } else if (channelId) {
                         headers['X-Telegram-Channel-Id'] = channelId;
                     }
@@ -1916,19 +1694,8 @@ self.onmessage = async (e) => {
 
                 if (successCount === files.length) {
                     showToast(`Todos os ${files.length} vídeos foram enviados com sucesso!`, "success");
-                } else if (successCount > 0) {
+                } else {
                     showToast(`${successCount}/${files.length} vídeos enviados com sucesso.`, "warning");
-                }
-
-                if (successCount > 0) {
-                    gen.process();
-                    try {
-                        showToast("Salvando automaticamente no catálogo...", "info");
-                        await gen.uploadParaBanco();
-                        showToast("Vídeos salvos no catálogo com sucesso!", "success");
-                    } catch (e) {
-                        console.error("Erro ao salvar no banco:", e);
-                    }
                 }
             }
         };
@@ -2443,12 +2210,10 @@ self.onmessage = async (e) => {
                         if (radio) { radio.checked = true; gen.toggleInputs(); }
                         await gen.loadTmdbMovieDetails(tmdbId, imdbId);
                     }
-                    if (typeof tg !== 'undefined' && tg.updateReadiness) tg.updateReadiness();
                 } catch (e) {
                     if (idInput) idInput.value = '';
                     console.error("Erro ao carregar dados do TMDB:", e);
                     showToast("Erro ao carregar dados do TMDB", "error");
-                    if (typeof tg !== 'undefined' && tg.updateReadiness) tg.updateReadiness();
                 }
             },
 
@@ -3088,7 +2853,6 @@ self.onmessage = async (e) => {
                 }
                 
                 showToast("Metadados carregados do Nuviometa!");
-                if (typeof tg !== 'undefined' && tg.updateReadiness) tg.updateReadiness();
             },
 
             fillFromNuviometa: () => {
@@ -3298,7 +3062,6 @@ self.onmessage = async (e) => {
                 if (eSelect) eSelect.value = '1';
                 gen.lastNuviometaResult = null;
                 localStorage.removeItem('fenixflix_draft');
-                if (typeof tg !== 'undefined' && tg.updateReadiness) tg.updateReadiness();
             },
             reset: () => {
                 if(confirm('Limpar todos os campos?')) {
@@ -4605,7 +4368,7 @@ self.onmessage = async (e) => {
                     if (discordToken) headers['Authorization'] = `Bearer ${discordToken}`;
                     if (adminSenha) headers['x-admin-password'] = adminSenha;
 
-                    const response = await fetch(API_URL + '/api/catalog', { headers });
+                    const response = await fetch(API_URL + '/api/catalog?_t=' + Date.now(), { headers });
                     if (!response.ok) {
                         const errData = await response.json().catch(() => ({}));
                         if (errData.isHf || errData.hfError) {
@@ -5007,7 +4770,7 @@ self.onmessage = async (e) => {
                 const safeYear = escapeHTML(item.year || '');
                 const jsId = JSON.stringify(item.id).replace(/"/g, '&quot;');
                 
-                const posterHtml = item.poster ? `<img src="${safePoster}" alt="${safeTitle}" loading="lazy" decoding="async" onerror="this.onerror=null; this.classList.add('hidden'); if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 opacity-90 group-hover:opacity-100"><div class="hidden flex flex-col items-center justify-center h-full bg-zinc-900 text-zinc-600 p-3 text-center"><i class="fa-solid fa-image text-2xl mb-1.5 text-zinc-700"></i><span class="text-xs line-clamp-2">${safeTitle}</span></div>` : `<div class="flex flex-col items-center justify-center h-full bg-zinc-900 text-zinc-700 p-3 text-center"><i class="fa-solid fa-image text-2xl mb-1.5 text-zinc-700"></i><span class="text-xs line-clamp-2">${safeTitle}</span></div>`;
+                const posterHtml = item.poster ? `<img src="${safePoster}" alt="${safeTitle}" loading="lazy" decoding="async" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 opacity-90 group-hover:opacity-100">` : `<div class="flex flex-col items-center justify-center h-full bg-zinc-900 text-zinc-700"><i class="fa-solid fa-image text-3xl mb-2"></i><span class="text-[10px]">${safeId}</span></div>`;
 
                 let footerHtml = '';
                 if (item.type === 'series') {
@@ -5023,16 +4786,16 @@ self.onmessage = async (e) => {
                         if (totalExpected > 0) {
                             if (missing === 0) {
                                 barColor = 'bg-emerald-500';
-                                statusText = `<span class="text-emerald-500 font-semibold text-xs">${seasonLabel ? `${seasonLabel} • ` : ''}Completo</span>`;
+                                statusText = `<span class="text-emerald-500 font-semibold text-[10px]">${seasonLabel ? `${seasonLabel} • ` : ''}Completo</span>`;
                             } else {
                                 barColor = 'bg-amber-500';
-                                statusText = `<span class="text-amber-500 font-semibold text-xs">${seasonLabel ? `${seasonLabel} • ` : ''}Faltam ${missing}</span>`;
+                                statusText = `<span class="text-amber-500 font-semibold text-[10px]">${seasonLabel ? `${seasonLabel} • ` : ''}Faltam ${missing}</span>`;
                             }
-                            countHtml = `<span class="text-zinc-400 text-xs font-mono">${foundCount}/${totalExpected}</span>`;
+                            countHtml = `<span class="text-zinc-400 text-[10px] font-mono">${foundCount}/${totalExpected}</span>`;
                         } else {
                             barColor = 'bg-indigo-500';
-                            statusText = `<span class="text-zinc-400 font-semibold text-xs">${seasonLabel || 'Série'}</span>`;
-                            countHtml = `<span class="text-zinc-400 text-xs font-mono">${foundCount} eps</span>`;
+                            statusText = `<span class="text-zinc-400 font-semibold text-[10px]">${seasonLabel || 'Série'}</span>`;
+                            countHtml = `<span class="text-zinc-400 text-[10px] font-mono">${foundCount} eps</span>`;
                         }
                     }
                     const fillPercent = (totalExpected > 0) ? percent : (foundCount > 0 ? 100 : 0);
@@ -5040,7 +4803,7 @@ self.onmessage = async (e) => {
                 } else {
                     const streamCount = item.streams ? item.streams.length : 0;
                     const hasLink = streamCount > 0;
-                    footerHtml = `<div class="mt-auto pt-2.5 flex justify-between items-center"><span class="text-xs text-zinc-500 font-mono">${safeYear}</span><span class="${hasLink ? 'text-zinc-300' : 'text-red-400'} text-xs font-medium flex items-center gap-1.5">${hasLink ? streamCount + ' opções' : 'Sem links'}</span></div>`;
+                    footerHtml = `<div class="mt-auto pt-2.5 flex justify-between items-center"><span class="text-[10px] text-zinc-500 font-mono">${safeYear}</span><span class="${hasLink ? 'text-zinc-300' : 'text-red-400'} text-[10px] font-medium flex items-center gap-1.5">${hasLink ? streamCount + ' opções' : 'Sem links'}</span></div>`;
                 }
 
                 const isAdminLogged = sessionStorage.getItem('fenixflix_senha') !== null;
@@ -5052,7 +4815,7 @@ self.onmessage = async (e) => {
                 ` : '';
 
                 const pendenteBadge = item.is_pendente ? `
-                    <div class="absolute top-2 right-2 z-30 bg-amber-500/90 text-black text-xs font-bold px-2 py-0.5 rounded-full shadow-md backdrop-blur-sm flex items-center gap-1">
+                    <div class="absolute top-2 right-2 z-30 bg-amber-500/90 text-black text-[9px] font-bold px-2 py-0.5 rounded-full shadow-md backdrop-blur-sm flex items-center gap-1">
                         <i class="fa-solid fa-clock"></i> Moderação
                     </div>
                 ` : '';
@@ -5359,37 +5122,16 @@ self.onmessage = async (e) => {
                     return;
                 }
 
-                const fileList = Array.from(files);
                 let sucesso = 0;
                 let erro = 0;
                 let discordExpired = false;
-                const errosDetalhados = [];
-                let concluidos = 0;
 
                 const currentUploader = localStorage.getItem('discord_global_name') || localStorage.getItem('discord_username') || localStorage.getItem('fenix_uploader_nick') || (hasAdminSession ? 'Admin' : '');
 
-                // Painel de progresso: permite importar vários lotes (.json) de uma só vez
-                const loteBox = document.getElementById('loteImportBox');
-                const loteTitle = document.getElementById('loteImportTitle');
-                const loteCount = document.getElementById('loteImportCount');
-                const loteBar = document.getElementById('loteImportBar');
-                const loteErrors = document.getElementById('loteImportErrors');
+                showToast(`A processar ${files.length} ficheiros... aguarde.`, 'info');
 
-                const updateLoteProgress = () => {
-                    if (loteCount) loteCount.innerText = `${concluidos}/${fileList.length}`;
-                    if (loteBar) loteBar.style.width = Math.round((concluidos / fileList.length) * 100) + '%';
-                };
-
-                if (loteBox) {
-                    loteBox.classList.remove('hidden');
-                    if (loteErrors) { loteErrors.classList.add('hidden'); loteErrors.innerHTML = ''; }
-                    if (loteTitle) loteTitle.innerText = `Importando ${fileList.length} lote(s)...`;
-                }
-                updateLoteProgress();
-
-                showToast(`A processar ${fileList.length} ficheiros... aguarde.`, 'info');
-
-                const uploadSingleLote = async (file) => {
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
                     try {
                         const text = await file.text();
                         const json = JSON.parse(text);
@@ -5457,43 +5199,11 @@ self.onmessage = async (e) => {
                         } else {
                             if (response.status === 401) discordExpired = true;
                             erro++;
-                            let motivo = `HTTP ${response.status}`;
-                            try {
-                                const data = await response.json();
-                                if (data && data.erro) motivo = data.erro;
-                            } catch (_) {}
-                            errosDetalhados.push(`${file.name}: ${motivo}`);
                         }
                     } catch (error) {
                         erro++;
-                        errosDetalhados.push(`${file.name}: ${error && error.message ? error.message : 'arquivo inválido'}`);
                         console.error(`Erro no ficheiro ${file.name}:`, error);
-                    } finally {
-                        concluidos++;
-                        updateLoteProgress();
-                        if (loteTitle) loteTitle.innerText = `Importando lotes (${sucesso} ok / ${erro} erro)...`;
                     }
-                };
-
-                // Concorrência limitada: importa lotes grandes sem travar o navegador
-                const concurrency = 4;
-                const queue = [...fileList];
-                const workers = Array(Math.min(concurrency, queue.length)).fill(null).map(async () => {
-                    while (queue.length > 0) {
-                        const nextFile = queue.shift();
-                        await uploadSingleLote(nextFile);
-                    }
-                });
-                await Promise.all(workers);
-
-                if (loteBox) {
-                    if (loteTitle) loteTitle.innerText = erro > 0 ? `Lote concluído com ${erro} erro(s)` : 'Lote importado com sucesso';
-                    if (loteErrors && errosDetalhados.length > 0) {
-                        loteErrors.innerHTML = errosDetalhados.slice(0, 30).map(e => `<div>• ${escapeHTML(e)}</div>`).join('')
-                            + (errosDetalhados.length > 30 ? `<div>• ...e mais ${errosDetalhados.length - 30} erro(s)</div>` : '');
-                        loteErrors.classList.remove('hidden');
-                    }
-                    setTimeout(() => loteBox.classList.add('hidden'), erro > 0 ? 12000 : 4000);
                 }
 
                 if (discordExpired) {
@@ -5506,7 +5216,7 @@ self.onmessage = async (e) => {
                     localStorage.removeItem('is_ajudante');
                     if (typeof updateDiscordUI === 'function') updateDiscordUI();
                 } else {
-                    showToast(`Lotes concluídos! Sucesso: ${sucesso} | Erros: ${erro}`, erro > 0 ? 'warning' : 'success');
+                    showToast(`Upload concluído! Sucesso: ${sucesso} | Erros: ${erro}`, erro > 0 ? 'warning' : 'success');
                 }
                 cat.init();
             },
@@ -7040,22 +6750,6 @@ self.onmessage = async (e) => {
             await loadRankingStats(period);
         }
 
-        // Normaliza cada linha do ranking para evitar exceções de renderização
-        // (nomes numéricos, envios_detalhes ausente ou payload fora do formato esperado).
-        function normalizeColab(raw) {
-            const details = Array.isArray(raw && raw.envios_detalhes) ? raw.envios_detalhes.filter(d => d && typeof d === 'object') : [];
-            return {
-                nome: String((raw && (raw.nome || raw.colaborador)) || 'Desconhecido'),
-                discord_id: raw && raw.discord_id ? String(raw.discord_id) : null,
-                avatar: raw && raw.avatar ? String(raw.avatar) : null,
-                count: Number(raw && raw.count) || 0,
-                envios_detalhes: details.map(d => ({
-                    title: String(d.title || d.nome || ''),
-                    type: d.type === 'series' ? 'series' : 'movie'
-                }))
-            };
-        }
-
         async function loadRankingStats(period = 'todos') {
             const tcContainer = document.getElementById('ranking-top-collaborators');
             
@@ -7069,9 +6763,7 @@ self.onmessage = async (e) => {
             try {
                 const resColab = await fetch(API_URL + `/api/colaboradores?periodo=${period}`);
                 if (!resColab.ok) throw new Error("Erro na API de colaboradores");
-                const payload = await resColab.json();
-                const lista = Array.isArray(payload) ? payload : (Array.isArray(payload && payload.colaboradores) ? payload.colaboradores : []);
-                const colaboradores = lista.map(normalizeColab);
+                const colaboradores = await resColab.json();
 
                 let tcHtml = '';
                 if (colaboradores.length === 0) {
@@ -7085,7 +6777,7 @@ self.onmessage = async (e) => {
                         else if (index === 2) medal = '🥉 ';
                         else medal = `<span class="text-zinc-500 font-mono text-xs w-5 inline-block text-center">${index + 1}.</span>`;
 
-                        const details = col.envios_detalhes;
+                        const details = col.envios_detalhes || [];
                         const uniqueTitles = [...new Set(details.map(d => d.title))];
                         const maxToShow = 3;
                         let titlesStr = uniqueTitles.slice(0, maxToShow).join(', ');
@@ -7107,12 +6799,12 @@ self.onmessage = async (e) => {
                         let avatarImgHtml = `<i class="fa-solid fa-user text-zinc-400 text-sm"></i>`;
                         if (col.discord_id && col.avatar) {
                             const avatarUrl = `https://cdn.discordapp.com/avatars/${col.discord_id}/${col.avatar}.png?size=64`;
-                            avatarImgHtml = `<img src="${avatarUrl}" alt="Avatar de ${safeNome}" loading="lazy" decoding="async" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
+                            avatarImgHtml = `<img src="${avatarUrl}" alt="Avatar de ${safeNick}" loading="lazy" decoding="async" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
                         } else if (col.discord_id) {
                             // Calcula avatar padrão caso não tenha hash de avatar mas tenha ID
                             const defaultIdx = (parseInt(col.discord_id.slice(-4)) || 0) % 5;
                             const defaultAvatarUrl = `https://cdn.discordapp.com/embed/avatars/${defaultIdx}.png`;
-                            avatarImgHtml = `<img src="${defaultAvatarUrl}" alt="Avatar de ${safeNome}" loading="lazy" decoding="async" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
+                            avatarImgHtml = `<img src="${defaultAvatarUrl}" alt="Avatar de ${safeNick}" loading="lazy" decoding="async" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
                         }
 
                         tcHtml += `
@@ -7147,7 +6839,7 @@ self.onmessage = async (e) => {
                 tcContainer.innerHTML = tcHtml;
             } catch (e) {
                 console.error(e);
-                tcContainer.innerHTML = `<div class="text-center py-6"><p class="text-red-500 text-xs mb-3">Falha ao carregar ranking de colaboradores.</p><button onclick="loadRankingStats('${period}')" class="px-4 py-2 min-h-[38px] bg-white/5 hover:bg-white/10 border border-white/10 text-zinc-300 rounded-lg text-xs font-semibold transition">Tentar novamente</button></div>`;
+                tcContainer.innerHTML = '<p class="text-red-500 text-center py-6 text-xs">Falha ao carregar ranking de colaboradores.</p>';
             }
         }
         // ==========================
@@ -7156,7 +6848,7 @@ self.onmessage = async (e) => {
         async function loadApprovalsList() {
             const tableBody = document.getElementById('approvals-table-body');
             const emptyState = document.getElementById('approvals-empty-state');
-            tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-zinc-500"><i class="fa-solid fa-spinner animate-spin mr-1.5"></i> Carregando pendentes...</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="3" class="py-12 text-center text-zinc-500"><i class="fa-solid fa-spinner animate-spin mr-1.5"></i> Carregando pendentes...</td></tr>`;
             emptyState.classList.add('hidden');
 
             const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
@@ -7164,10 +6856,7 @@ self.onmessage = async (e) => {
             const isAjudante = localStorage.getItem('is_ajudante') === 'true';
             
             if (!adminSenha && !isAjudante) {
-                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">
-                    <p class="mb-3 font-medium">Acesso restrito. Faça login como admin ou ajudante.</p>
-                    <button onclick="document.getElementById('loginModal')?.classList.remove('hidden')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition">Fazer Login</button>
-                </td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="3" class="py-12 text-center text-red-400">Acesso negado. Faça login como admin ou ajudante.</td></tr>`;
                 return;
             }
 
@@ -7176,7 +6865,7 @@ self.onmessage = async (e) => {
                 if (discordToken) headers['Authorization'] = `Bearer ${discordToken}`;
                 if (adminSenha) headers['x-admin-password'] = adminSenha;
                 
-                const res = await fetch(API_URL + `/api/arquivos/pendentes`, { headers });
+                const res = await fetch(API_URL + `/api/arquivos/pendentes?_t=${Date.now()}`, { headers });
                 if (!res.ok) throw new Error("Falha ao carregar pendentes");
                 
                 const pendentes = await res.json();
@@ -7189,75 +6878,31 @@ self.onmessage = async (e) => {
                 }
 
                 let html = '';
-                const itemsToResolve = [];
-
                 pendentes.forEach(p => {
-                    let dataStr = 'Data indisponível';
-                    if (p.criado_em) {
-                        try {
-                            const d = new Date(p.criado_em);
-                            if (!isNaN(d.getTime())) dataStr = d.toLocaleString('pt-BR');
-                        } catch (_) {}
-                    }
+                    const dataStr = new Date(p.criado_em).toLocaleString('pt-BR');
                     const jsNome = JSON.stringify(p.nome_do_json).replace(/"/g, '&quot;');
                     
-                    const cType = p.conteudo?.type || (p.conteudo?.streams && typeof p.conteudo?.streams === 'object' && !Array.isArray(p.conteudo?.streams) ? 'series' : 'movie');
-                    const isMovie = cType === 'movie';
-                    const typeBadge = isMovie
-                        ? `<span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 shrink-0"><i class="fa-solid fa-film text-xs"></i> Filme</span>`
-                        : `<span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 shrink-0"><i class="fa-solid fa-tv text-xs"></i> Série</span>`;
-
-                    const imdbId = p.conteudo?.id || String(p.nome_do_json).replace(/\.json$/, '');
-                    let title = p.conteudo?.title || p.conteudo?.name || '';
-                    const titleDomId = `pending-title-${p.nome_do_json.replace(/[^a-zA-Z0-9_-]/g, '')}`;
-
-                    if (!title && imdbId.startsWith('tt')) {
-                        itemsToResolve.push({ id: imdbId, type: cType, domId: titleDomId });
-                    }
-
-                    const displayTitle = title || imdbId;
-
-                    const uploader = p.conteudo?.colaborador || p.conteudo?.uploader || p.conteudo?.uploader_nick || 'Anônimo';
-                    const isColab = p.conteudo?.is_colaborador === true || ['colaborador', 'ajudante', 'admin'].includes(String(p.conteudo?.colaborador_role).toLowerCase());
-                    const colabBadge = isColab
-                        ? `<span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm"><i class="fa-solid fa-shield-check text-xs"></i> Colaborador</span>`
-                        : `<span class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700/60"><i class="fa-solid fa-user text-xs"></i> Usuário</span>`;
+                    let title = p.nome_do_json;
+                    if (p.conteudo && p.conteudo.id) title = p.conteudo.title || p.conteudo.id;
 
                     html += `
                         <tr class="border-b border-zinc-800/40 hover:bg-zinc-900/20 transition-colors">
-                            <td class="py-3.5 pr-4 max-w-[260px]">
-                                <div class="flex items-center gap-2 mb-1 min-w-0">
-                                    ${typeBadge}
-                                    <span id="${titleDomId}" class="text-sm font-bold text-white hover:text-indigo-300 transition-colors truncate block" title="${escapeHTML(displayTitle)}">${escapeHTML(displayTitle)}</span>
-                                </div>
-                                <div class="flex items-center gap-2 text-xs text-zinc-500 font-mono min-w-0">
-                                    <span class="truncate block" title="${escapeHTML(p.nome_do_json)}"><i class="fa-regular fa-file-code mr-1"></i>${escapeHTML(p.nome_do_json)}</span>
-                                    ${p.conteudo?.year ? `<span class="shrink-0">• ${escapeHTML(String(p.conteudo.year))}</span>` : ''}
-                                </div>
+                            <td class="py-3.5 pr-4 font-semibold text-white">
+                                <span class="text-indigo-400">${escapeHTML(title)}</span>
+                                <span class="block text-[10px] text-zinc-500 font-mono font-normal mt-0.5">${escapeHTML(p.nome_do_json)}</span>
                             </td>
-                            <td class="py-3.5 px-3">
-                                <div class="flex items-center gap-2">
-                                    <div class="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs text-zinc-400 shrink-0">
-                                        <i class="fa-solid fa-user-astronaut"></i>
-                                    </div>
-                                    <span class="text-xs font-semibold text-zinc-200 truncate max-w-[140px]" title="${escapeHTML(uploader)}">${escapeHTML(uploader)}</span>
-                                </div>
-                            </td>
-                            <td class="py-3.5 px-3 text-center">
-                                ${colabBadge}
-                            </td>
-                            <td class="py-3.5 px-3 text-center text-xs text-zinc-400 font-mono">
+                            <td class="py-3.5 px-4 text-center text-[10px] text-zinc-500 font-mono">
                                 ${dataStr}
                             </td>
-                            <td class="py-3.5 pl-3 text-center">
-                                <div class="flex items-center justify-center gap-2">
-                                    <button onclick="previewFile(${jsNome})" aria-label="Visualizar e testar ${escapeHTML(displayTitle)}" class="w-8 h-8 rounded-full bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 transition-colors flex items-center justify-center" title="Visualizar / Testar">
+                            <td class="py-3.5 pl-4 text-center">
+                                <div class="flex items-center justify-center gap-2.5">
+                                    <button onclick="previewFile(${jsNome})" aria-label="Visualizar e testar ${escapeHTML(title)}" class="w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 transition-colors flex items-center justify-center" title="Visualizar/Testar">
                                         <i class="fa-solid fa-eye text-xs"></i>
                                     </button>
-                                    <button onclick="approveFile(${jsNome}, this)" aria-label="Aprovar e publicar ${escapeHTML(displayTitle)}" class="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 transition-colors flex items-center justify-center" title="Aprovar Direto">
+                                    <button onclick="approveFile(${jsNome})" aria-label="Aprovar e publicar ${escapeHTML(title)}" class="w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 transition-colors flex items-center justify-center" title="Aprovar">
                                         <i class="fa-solid fa-check text-xs"></i>
                                     </button>
-                                    <button onclick="rejectFile(${jsNome}, this)" aria-label="Rejeitar envio de ${escapeHTML(displayTitle)}" class="w-8 h-8 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30 transition-colors flex items-center justify-center" title="Rejeitar">
+                                    <button onclick="rejectFile(${jsNome})" aria-label="Rejeitar envio de ${escapeHTML(title)}" class="w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30 transition-colors flex items-center justify-center" title="Rejeitar">
                                         <i class="fa-solid fa-xmark text-xs"></i>
                                     </button>
                                 </div>
@@ -7266,40 +6911,18 @@ self.onmessage = async (e) => {
                     `;
                 });
                 tableBody.innerHTML = html;
-
-                if (itemsToResolve.length > 0 && typeof fetchMediaMetadata === 'function') {
-                    itemsToResolve.forEach(async item => {
-                        try {
-                            const metaData = await fetchMediaMetadata(item.id, item.type);
-                            if (metaData && metaData.meta && (metaData.meta.name || metaData.meta.title)) {
-                                const el = document.getElementById(item.domId);
-                                if (el) el.innerText = metaData.meta.name || metaData.meta.title;
-                            }
-                        } catch (_) {}
-                    });
-                }
             } catch (e) {
                 console.error(e);
-                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">
-                    <p class="mb-3 font-medium">Erro ao carregar arquivos pendentes.</p>
-                    <button onclick="loadApprovalsList()" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-lg text-xs font-semibold transition inline-flex items-center gap-1.5"><i class="fa-solid fa-rotate-right"></i> Tentar Novamente</button>
-                </td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="3" class="py-12 text-center text-red-500">Erro ao carregar arquivos pendentes.</td></tr>`;
             }
         }
 
-        async function actionPendingFile(nome, action, btnElement = null) {
+        async function actionPendingFile(nome, action) {
             const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
             const discordToken = localStorage.getItem('discord_token');
             const isAjudante = localStorage.getItem('is_ajudante') === 'true';
 
             if (!adminSenha && !isAjudante) return showToast("Acesso negado. Necessário Admin ou Ajudante.", "error");
-
-            let originalContent = '';
-            if (btnElement) {
-                btnElement.disabled = true;
-                originalContent = btnElement.innerHTML;
-                btnElement.innerHTML = `<i class="fa-solid fa-spinner animate-spin text-xs"></i>`;
-            }
 
             try {
                 const headers = { 'Content-Type': 'application/json' , 'x-admin-password': typeof adminSenha !== 'undefined' ? adminSenha : (sessionStorage.getItem('fenixflix_senha') || '') };
@@ -7314,19 +6937,17 @@ self.onmessage = async (e) => {
 
                 const data = await res.json();
                 if (res.ok) {
-                    showToast(data.mensagem || (action === 'approve' ? 'Arquivo aprovado!' : 'Arquivo rejeitado!'), "success");
+                    showToast(data.mensagem, "success");
                     loadApprovalsList();
+                    if (typeof cat !== 'undefined' && typeof cat.init === 'function') {
+                        cat.init();
+                    }
                 } else {
-                    showToast(data.erro || 'Erro ao processar arquivo.', "error");
+                    showToast(data.erro, "error");
                 }
             } catch (e) {
                 console.error(e);
                 showToast(`Erro ao ${action === 'approve' ? 'aprovar' : 'rejeitar'} arquivo.`, "error");
-            } finally {
-                if (btnElement) {
-                    btnElement.disabled = false;
-                    btnElement.innerHTML = originalContent;
-                }
             }
         }
 
@@ -7507,15 +7128,6 @@ self.onmessage = async (e) => {
                 const headers = { 'Content-Type': 'application/json', 'x-admin-password': adminSenha };
                 if (discordToken) headers['Authorization'] = `Bearer ${discordToken}`;
 
-                const saveBtn = document.getElementById('btnPreviewSaveChanges');
-                let originalBtnHtml = '';
-                if (saveBtn) {
-                    if (saveBtn.disabled) return;
-                    saveBtn.disabled = true;
-                    originalBtnHtml = saveBtn.innerHTML;
-                    saveBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-1"></i> Publicando...`;
-                }
-
                 try {
                     const res = await fetch(API_URL + '/api/arquivos/aprovar', {
                         method: 'POST',
@@ -7530,17 +7142,9 @@ self.onmessage = async (e) => {
                         loadApprovalsList();
                     } else {
                         showToast(data.erro || 'Erro ao aprovar', "error");
-                        if (saveBtn) {
-                            saveBtn.disabled = false;
-                            saveBtn.innerHTML = originalBtnHtml;
-                        }
                     }
                 } catch (e) {
                     showToast("Erro ao conectar ao servidor para aprovar", "error");
-                    if (saveBtn) {
-                        saveBtn.disabled = false;
-                        saveBtn.innerHTML = originalBtnHtml;
-                    }
                 }
             };
 
@@ -7646,18 +7250,12 @@ self.onmessage = async (e) => {
                 streamsHtml = '<p class="text-zinc-500 text-xs mt-4">Formato de stream não reconhecido.</p>';
             }
             
-            const uploader = pendente.conteudo?.colaborador || pendente.conteudo?.uploader || 'Anônimo';
-            const isColab = pendente.conteudo?.is_colaborador === true || ['colaborador', 'ajudante', 'admin'].includes(String(pendente.conteudo?.colaborador_role).toLowerCase());
-            const colabBadge = isColab
-                ? `<span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"><i class="fa-solid fa-shield-check text-[9px]"></i> Colaborador</span>`
-                : `<span class="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700/60"><i class="fa-solid fa-user text-[9px]"></i> Usuário</span>`;
-
             const modalHtml = `
             <div id="previewModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[9999] flex items-center justify-center p-3 sm:p-6">
                 <div class="bg-zinc-950 border border-zinc-800 rounded-3xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
-                    <div class="px-6 py-4 border-b border-zinc-800/80 flex flex-wrap justify-between items-center gap-3 bg-zinc-900/60">
+                    <div class="px-6 py-4 border-b border-zinc-800/80 flex justify-between items-center bg-zinc-900/60">
                         <div class="flex items-center gap-3">
-                            <div class="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+                            <div class="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
                                 <i class="fa-solid fa-clipboard-check text-sm"></i>
                             </div>
                             <div>
@@ -7667,16 +7265,9 @@ self.onmessage = async (e) => {
                                 <span class="text-[10px] text-zinc-500 font-mono">${escapeHTML(nome)} ${year ? '• ' + year : ''}</span>
                             </div>
                         </div>
-                        <div class="flex items-center gap-3">
-                            <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800">
-                                <span class="text-[10px] text-zinc-400">Enviado por:</span>
-                                <span class="text-xs font-bold text-white truncate max-w-[130px]">${escapeHTML(uploader)}</span>
-                                ${colabBadge}
-                            </div>
-                            <button onclick="document.getElementById('previewModal').remove()" aria-label="Fechar janela de revisão" class="text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 w-9 h-9 rounded-full flex items-center justify-center transition">
-                                <i class="fa-solid fa-xmark text-sm"></i>
-                            </button>
-                        </div>
+                        <button onclick="document.getElementById('previewModal').remove()" aria-label="Fechar janela de revisão" class="text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 w-9 h-9 rounded-full flex items-center justify-center transition">
+                            <i class="fa-solid fa-xmark text-sm"></i>
+                        </button>
                     </div>
                     
                     <div class="flex flex-col md:flex-row flex-1 overflow-hidden">
@@ -7699,13 +7290,13 @@ self.onmessage = async (e) => {
                     
                     <!-- Rodapé Fixo com Ação Rápida (Evita Scroll Trap) -->
                     <div class="px-6 py-3 border-t border-zinc-800/80 bg-zinc-900/95 backdrop-blur-md shrink-0 sticky bottom-0 z-20 flex justify-between items-center gap-3">
-                        <span class="text-xs text-zinc-400 flex items-center gap-1.5 hidden sm:flex">
+                        <span class="text-[11px] text-zinc-400 flex items-center gap-1.5 hidden sm:flex">
                             <i class="fa-solid fa-circle-info text-indigo-400"></i> 
                             Apenas os streams marcados com "Aprovar" serão adicionados ao catálogo.
                         </span>
                         <div class="flex gap-2 w-full sm:w-auto justify-end">
                             <button onclick="document.getElementById('previewModal').remove()" class="flex-1 sm:flex-none px-4 py-2.5 min-h-[44px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded-xl text-xs font-semibold transition flex items-center justify-center">Cancelar</button>
-                            <button id="btnPreviewSaveChanges" onclick="previewSaveChanges()" class="flex-1 sm:flex-none px-5 py-2.5 min-h-[44px] bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20">
+                            <button onclick="previewSaveChanges()" class="flex-1 sm:flex-none px-5 py-2.5 min-h-[44px] bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20">
                                 <i class="fa-solid fa-check"></i> Salvar e Publicar
                             </button>
                         </div>
@@ -7724,15 +7315,15 @@ self.onmessage = async (e) => {
             }
         }
 
-        async function approveFile(nome, btn = null) {
+        async function approveFile(nome) {
             if (confirm(`Deseja aprovar e publicar o arquivo ${nome} diretamente no catálogo?`)) {
-                await actionPendingFile(nome, 'approve', btn);
+                actionPendingFile(nome, 'approve');
             }
         }
 
-        async function rejectFile(nome, btn = null) {
+        async function rejectFile(nome) {
             if (confirm(`Deseja REJEITAR e excluir o envio pendente de ${nome}?`)) {
-                await actionPendingFile(nome, 'reject', btn);
+                actionPendingFile(nome, 'reject');
             }
         }
         async function loadReportsList() {
@@ -7746,10 +7337,7 @@ self.onmessage = async (e) => {
             const isAjudante = localStorage.getItem('is_ajudante') === 'true';
             
             if (!adminSenha && !isAjudante) {
-                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">
-                    <p class="mb-3 font-medium">Acesso restrito. Faça login como admin ou ajudante.</p>
-                    <button onclick="document.getElementById('loginModal')?.classList.remove('hidden')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition">Fazer Login</button>
-                </td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">Acesso negado. Faça login como admin ou ajudante.</td></tr>`;
                 return;
             }
 
@@ -7760,10 +7348,7 @@ self.onmessage = async (e) => {
                 const res = await fetch(API_URL + `/api/denuncias`, { headers });
                 if (!res.ok) {
                     if (res.status === 401) {
-                        return tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">
-                            <p class="mb-3 font-medium">Sessão expirada ou senha incorreta.</p>
-                            <button onclick="document.getElementById('loginModal')?.classList.remove('hidden')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition">Fazer Login</button>
-                        </td></tr>`;
+                        return tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">Senha expirada ou incorreta.</td></tr>`;
                     }
                     throw new Error("Falha ao carregar denúncias");
                 }
@@ -7777,32 +7362,26 @@ self.onmessage = async (e) => {
 
                 let html = '';
                 reports.forEach(rep => {
-                    let dataStr = 'Data indisponível';
-                    if (rep.criado_em) {
-                        try {
-                            const d = new Date(rep.criado_em);
-                            if (!isNaN(d.getTime())) dataStr = d.toLocaleString('pt-BR');
-                        } catch (_) {}
-                    }
+                    const dataStr = new Date(rep.criado_em).toLocaleString('pt-BR');
                     const jsNome = JSON.stringify(rep.nome_do_json).replace(/"/g, '&quot;');
                     html += `
                         <tr class="border-b border-zinc-800/40 hover:bg-zinc-900/20 transition-colors">
-                            <td class="py-3.5 pr-4 font-semibold text-white max-w-[240px]">
-                                <span class="cursor-pointer hover:underline text-indigo-400 truncate block" onclick="switchView('catalog'); setTimeout(() => cat.openLinks(${jsNome}), 100);" title="${escapeHTML(rep.titulo)}">${escapeHTML(rep.titulo)}</span>
-                                <span class="block text-xs text-zinc-500 font-mono font-normal mt-0.5 truncate" title="${escapeHTML(rep.nome_do_json)}">${escapeHTML(rep.nome_do_json)}</span>
+                            <td class="py-3.5 pr-4 font-semibold text-white">
+                                <span class="cursor-pointer hover:underline text-indigo-400" onclick="switchView('catalog'); setTimeout(() => cat.openLinks(${jsNome}), 100);">${escapeHTML(rep.titulo)}</span>
+                                <span class="block text-[10px] text-zinc-500 font-mono font-normal mt-0.5">${escapeHTML(rep.nome_do_json)}</span>
                             </td>
                             <td class="py-3.5 px-4">
-                                <span class="px-2 py-0.5 bg-red-950/60 border border-red-900/30 text-red-400 rounded text-xs font-medium">${escapeHTML(rep.motivo)}</span>
+                                <span class="px-2 py-0.5 bg-red-950/60 border border-red-900/30 text-red-400 rounded text-[10px] font-medium">${escapeHTML(rep.motivo)}</span>
                             </td>
                             <td class="py-3.5 px-4 text-xs text-zinc-400 max-w-xs truncate" title="${escapeHTML(rep.detalhes || '')}">
-                                ${rep.detalhes ? escapeHTML(rep.detalhes) : '<span class="text-zinc-600 italic">Sem detalhes</span>'}
+                                ${rep.detalhes ? escapeHTML(rep.detalhes) : '<span class="text-zinc-650 italic">Sem detalhes</span>'}
                             </td>
                             <td class="py-3.5 px-4 text-xs text-zinc-500 font-mono">
                                 ${dataStr}
                             </td>
                             <td class="py-3.5 pl-4 text-right">
                                 <div class="flex justify-end gap-2">
-                                    <button onclick="deleteReport(${rep.id}, this)" class="bg-emerald-950 hover:bg-emerald-900 text-emerald-400 border border-emerald-900/30 px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1 min-h-[32px]" title="Marcar como Resolvido / Excluir Denúncia">
+                                    <button onclick="deleteReport(${rep.id})" class="bg-emerald-950 hover:bg-emerald-900 text-emerald-400 border border-emerald-900/30 px-3 py-1.5 rounded-lg text-xs font-semibold transition" title="Marcar como Resolvido / Excluir Denúncia">
                                         <i class="fa-solid fa-check mr-1"></i> Resolver
                                     </button>
                                 </div>
@@ -7813,14 +7392,11 @@ self.onmessage = async (e) => {
                 tableBody.innerHTML = html;
             } catch (e) {
                 console.error(e);
-                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-400">
-                    <p class="mb-3 font-medium">Erro ao carregar denúncias.</p>
-                    <button onclick="loadReportsList()" class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded-lg text-xs font-semibold transition inline-flex items-center gap-1.5"><i class="fa-solid fa-rotate-right"></i> Tentar Novamente</button>
-                </td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-red-500">Erro ao carregar denúncias.</td></tr>`;
             }
         }
 
-        async function deleteReport(id, btn = null) {
+        async function deleteReport(id) {
             if (!confirm("Deseja realmente marcar essa denúncia como resolvida? Ela será removida da lista.")) return;
 
             const adminSenha = sessionStorage.getItem('fenixflix_senha') || '';
@@ -7828,13 +7404,6 @@ self.onmessage = async (e) => {
             const isAjudante = localStorage.getItem('is_ajudante') === 'true';
 
             if (!adminSenha && !isAjudante) return showToast("Acesso negado. Necessário Admin ou Ajudante.", "error");
-
-            let originalContent = '';
-            if (btn) {
-                btn.disabled = true;
-                originalContent = btn.innerHTML;
-                btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-1"></i> Resolvendo...`;
-            }
 
             try {
                 const headers = { 'Content-Type': 'application/json' , 'x-admin-password': typeof adminSenha !== 'undefined' ? adminSenha : (sessionStorage.getItem('fenixflix_senha') || '') };
@@ -7856,11 +7425,6 @@ self.onmessage = async (e) => {
             } catch (e) {
                 console.error(e);
                 showToast("Erro ao conectar com o servidor.", "error");
-            } finally {
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerHTML = originalContent;
-                }
             }
         }
 

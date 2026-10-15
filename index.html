@@ -215,7 +215,6 @@
             -webkit-backdrop-filter: blur(24px);
             border: 1px solid rgba(255,255,255,0.08);
             border-radius: 24px;
-            padding: 1.5rem;
         }
 
         @keyframes slideIn {
@@ -342,7 +341,7 @@
                 <span id="discordUserName" class="hidden"></span>
                 <button id="discordLogoutBtn" onclick="discordLogout()" aria-label="Sair da conta Discord" class="text-red-400/80 hover:text-red-400 hover:bg-red-500/10 px-2.5 py-1.5 rounded-full transition-colors flex items-center gap-1.5" title="Sair do Discord">
                     <span class="text-xs font-medium">Sair</span>
-                    <i class="fa-solid fa-right-from-bracket text-xs"></i>
+                    <i class="fa-solid fa-right-from-bracket text-[10px]"></i>
                 </button>
             </div>
             <button onclick="toggleAdminLogin()" id="btn-login-admin" aria-label="Painel de login do administrador" class="px-3.5 sm:px-4 py-2 min-h-[38px] sm:min-h-[40px] rounded-full text-xs font-medium transition-colors flex items-center gap-2 border border-obsidian-800 bg-obsidian-900 text-zinc-400 hover:text-white hover:border-zinc-600 shrink-0">
@@ -480,19 +479,19 @@
                                     <img id="tmdbMiniPoster" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E" alt="Poster da obra" loading="lazy" decoding="async" class="w-8 h-12 rounded-lg object-cover border border-zinc-800 shrink-0 bg-black/40">
                                     <div class="min-w-0">
                                         <div class="flex items-center gap-2">
-                                            <span class="text-xs uppercase tracking-wider text-primary font-bold border border-primary/30 bg-primary/10 px-1.5 py-0.5 rounded">TMDB</span>
+                                            <span class="text-[9px] uppercase tracking-wider text-primary font-bold border border-primary/30 bg-primary/10 px-1.5 py-0.5 rounded">TMDB</span>
                                             <span id="tmdbMiniTitle" class="font-bold text-white truncate text-xs"></span>
-                                            <span id="tmdbMiniYear" class="text-zinc-500 text-xs font-mono"></span>
+                                            <span id="tmdbMiniYear" class="text-zinc-500 text-[10px] font-mono"></span>
                                         </div>
-                                        <p id="tmdbMiniStats" class="text-xs text-zinc-400 mt-0.5 truncate"></p>
+                                        <p id="tmdbMiniStats" class="text-[11px] text-zinc-400 mt-0.5 truncate"></p>
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-2 shrink-0">
-                                    <span class="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 font-medium">Sincronizado ✓</span>
+                                    <span class="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 font-medium">Sincronizado ✓</span>
                                 </div>
                             </div>
 
-                            <div id="smartDetectHint" class="text-xs text-zinc-500 mt-4 flex items-center gap-2 bg-white/5 p-2.5 rounded-lg border border-white/5">
+                            <div id="smartDetectHint" class="text-[11px] text-zinc-500 mt-4 flex items-center gap-2 bg-white/5 p-2.5 rounded-lg border border-white/5">
                                 <i class="fa-solid fa-wand-magic-sparkles text-ember-400"></i>
                                 <span><span class="text-zinc-300 font-medium">Smart Detect:</span> Os seletores acima vinculam os links diretamente ao episódio selecionado.</span>
                             </div>
@@ -516,7 +515,7 @@
                             <div>
                                 <div class="flex justify-between items-center mb-2">
                                     <label class="block text-xs font-medium text-zinc-500">Qualidade</label>
-                                    <button type="button" onclick="gen.openVisualEditor()" class="text-xs text-primary hover:text-primary-hover font-medium transition flex items-center gap-1" title="Gerir episódios e aplicar qualidade em massa">
+                                    <button type="button" onclick="gen.openVisualEditor()" class="text-[10px] text-primary hover:text-primary-hover font-medium transition flex items-center gap-1" title="Gerir episódios e aplicar qualidade em massa">
                                         <i class="fa-solid fa-sliders"></i> Gerir / Em Massa
                                     </button>
                                 </div>
@@ -539,21 +538,21 @@
                         <div id="nuviometaInfoBox" class="hidden bg-zinc-950/40 border border-zinc-800/80 rounded-xl p-4 mb-6 flex flex-col gap-3">
                             <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
                                 <div>
-                                    <span id="nuviometaInfoType" class="text-xs uppercase tracking-wider text-primary font-semibold border border-primary/30 px-1.5 py-0.5 rounded">SÉRIE</span>
+                                    <span id="nuviometaInfoType" class="text-[9px] uppercase tracking-wider text-primary font-semibold border border-primary/30 px-1.5 py-0.5 rounded">SÉRIE</span>
                                     <h3 id="nuviometaInfoTitle" class="font-medium text-white text-sm mt-1.5">-</h3>
                                 </div>
                             </div>
                             <div id="nuviometaInfoSeriesDetails" class="grid grid-cols-2 gap-4 mt-1 text-xs border-t border-white/5 pt-3">
                                 <div>
-                                    <span class="text-zinc-500 block text-xs uppercase tracking-wider">Temporada Máxima</span>
+                                    <span class="text-zinc-500 block text-[10px] uppercase tracking-wider">Temporada Máxima</span>
                                     <span id="nuviometaInfoMaxSeason" class="text-zinc-100 font-bold text-base">-</span>
                                 </div>
                                 <div>
-                                    <span class="text-zinc-500 block text-xs uppercase tracking-wider">Total de Episódios</span>
+                                    <span class="text-zinc-500 block text-[10px] uppercase tracking-wider">Total de Episódios</span>
                                     <span id="nuviometaInfoTotalEps" class="text-zinc-100 font-bold text-base">-</span>
                                 </div>
                             </div>
-                            <div id="nuviometaInfoEpsBreakdown" class="text-xs text-zinc-400 border-t border-zinc-850 pt-2 flex flex-col gap-1">
+                            <div id="nuviometaInfoEpsBreakdown" class="text-[11px] text-zinc-400 border-t border-zinc-850 pt-2 flex flex-col gap-1">
                                 <span class="text-zinc-500 font-medium">Episódios por Temporada:</span>
                                 <div id="nuviometaInfoEpsList" class="flex flex-wrap gap-1.5 mt-1">
                                     <!-- Badges of seasons and their episode counts -->
@@ -566,34 +565,29 @@
                             <div class="flex justify-between items-end mb-3">
                                 <label class="block text-xs font-medium text-zinc-500">Links de Transmissão (Cole aqui para não enviar arquivos)</label>
                                 <div class="flex gap-2">
-                                    <button onclick="gen.deduplicateManualLinks()" class="text-xs text-rose-400 hover:text-rose-300 px-2 py-1 rounded transition flex items-center gap-1" title="Remover Links Duplicados">
+                                    <button onclick="gen.deduplicateManualLinks()" class="text-[10px] text-rose-400 hover:text-rose-300 px-2 py-1 rounded transition flex items-center gap-1" title="Remover Links Duplicados">
                                         <i class="fa-solid fa-clone"></i> <span class="hidden sm:inline">Limpar Duplicados</span>
                                     </button>
-                                    <button onclick="tg.migrateAllLinks()" class="text-xs text-sky-400 hover:text-sky-300 px-2 py-1 rounded transition flex items-center gap-1" title="Converter p/ Telegram">
+                                    <button onclick="tg.migrateAllLinks()" class="text-[10px] text-sky-400 hover:text-sky-300 px-2 py-1 rounded transition flex items-center gap-1" title="Converter p/ Telegram">
                                         <i class="fa-brands fa-telegram"></i> <span class="hidden sm:inline">Converter p/ Telegram</span>
                                     </button>
-                                    <button onclick="gen.sortLinksByName()" class="text-xs text-primary hover:text-primary-hover px-2 py-1 rounded transition flex items-center gap-1" title="Ordenar p/ Nome">
+                                    <button onclick="gen.sortLinksByName()" class="text-[10px] text-primary hover:text-primary-hover px-2 py-1 rounded transition flex items-center gap-1" title="Ordenar p/ Nome">
                                         <i class="fa-solid fa-arrow-down-a-z"></i> <span class="hidden sm:inline">Ordenar p/ Nome</span>
                                     </button>
-                                    <button onclick="gen.migrateHost()" class="text-xs text-zinc-400 hover:text-white px-2 py-1 rounded transition flex items-center gap-1" title="Migrar Render">
+                                    <button onclick="gen.migrateHost()" class="text-[10px] text-zinc-400 hover:text-white px-2 py-1 rounded transition flex items-center gap-1" title="Migrar Render">
                                         <i class="fa-solid fa-rotate"></i> <span class="hidden sm:inline">Migrar Render</span>
                                     </button>
-                                    <label class="text-xs text-zinc-400 hover:text-white px-2 py-1 rounded cursor-pointer transition flex items-center gap-1" title="Importar TXT">
+                                    <label class="text-[10px] text-zinc-400 hover:text-white px-2 py-1 rounded cursor-pointer transition flex items-center gap-1" title="Importar TXT">
                                         <input type="file" accept=".txt" class="hidden" onchange="gen.loadTxt(this)">
                                         <i class="fa-solid fa-file-lines"></i> <span class="hidden sm:inline">TXT</span>
                                     </label>
                                 </div>
                             </div>
                             <textarea id="manualLinks" rows="6" class="input-unified w-full p-4 rounded-xl text-xs font-mono custom-scrollbar" placeholder="Cole os links de vídeo diretos aqui (um por linha)..."></textarea>
-                            <div class="mt-3 flex justify-end">
-                                <button onclick="gen.processAndSave()" id="btnProcessAndSave" class="bg-primary hover:bg-primary-hover active:bg-primary-hover/90 text-white font-display font-medium px-5 py-2.5 rounded-xl transition-all shadow-md flex justify-center items-center gap-2 text-xs">
-                                    <i class="fa-solid fa-paper-plane"></i> Salvar Links Manuais no Catálogo
-                                </button>
-                            </div>
                         </div>
 
                         <!-- Painel Unificado de Upload (Bot vs Teste) -->
-                        <div class="mt-5 bg-zinc-950/40 border border-zinc-800/80 rounded-2xl p-4 sm:p-5">
+                        <div class="mt-5 bg-zinc-950/40 border border-zinc-800/80 rounded-xl p-4">
                             <!-- Seletor Tipo de Upload: Bot vs Teste -->
                             <div id="uploadProviderSwitcher" class="flex items-center justify-between border-b border-zinc-800/60 pb-3 mb-4">
                                 <div class="flex gap-6" id="uploadProviderRadios">
@@ -603,7 +597,7 @@
                                             <div class="absolute w-2 h-2 rounded-full bg-sky-400 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
                                         </div>
                                         <span class="font-medium text-xs text-zinc-400 group-hover:text-zinc-200 peer-checked:text-white transition flex items-center gap-1.5">
-                                            <i class="fa-brands fa-telegram text-sky-400 text-sm"></i> Telegram
+                                            <i class="fa-brands fa-telegram text-sky-400 text-sm"></i> Bot
                                         </span>
                                     </label>
                                     <label id="labelUploadTeste" class="hidden items-center gap-2.5 cursor-pointer group">
@@ -612,246 +606,155 @@
                                             <div class="absolute w-2 h-2 rounded-full bg-amber-400 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
                                         </div>
                                         <span class="font-medium text-xs text-zinc-400 group-hover:text-zinc-200 peer-checked:text-white transition flex items-center gap-1.5">
-                                            <i class="fa-solid fa-flask text-amber-400 text-sm"></i> Servidor Teste
+                                            <i class="fa-solid fa-flask text-amber-400 text-sm"></i> Teste
                                         </span>
                                     </label>
                                 </div>
                                 <div id="uploadProviderBadge">
-                                    <span id="tgStatusBadge" class="text-[11px] font-mono px-2 py-0.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800">Verificando...</span>
-                                    <button onclick="tg.toggleConnection()" id="btnTgConnectToggle" class="hidden text-xs font-semibold text-primary hover:underline ml-1">Conectar</button>
+                                    <span id="tgStatusBadge" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-500">Verificando...</span>
+                                    <button onclick="tg.toggleConnection()" id="btnTgConnectToggle" class="text-[9px] font-semibold text-primary hover:underline ml-1">Conectar</button>
                                 </div>
                             </div>
 
                             <!-- SEÇÃO 1: MODO BOT (TELEGRAM) -->
-                            <div id="uploadSectionBot" class="space-y-4">
-                                <!-- Guia / Checklist de Prontidão do Envio -->
-                                <div id="uploadReadinessGuide" class="p-3 bg-zinc-900/50 rounded-2xl border border-zinc-800/80 space-y-2.5">
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-                                            <i class="fa-solid fa-list-check text-primary"></i> Checklist de Envio
-                                        </span>
-                                        <span id="readinessOverallBadge" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">Aguardando dados</span>
-                                    </div>
-                                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                                        <!-- Item 1: Obra / ID -->
-                                        <div id="readinessItemMedia" onclick="tg.focusMediaSearch()" class="p-2.5 rounded-xl bg-zinc-950/70 border border-zinc-800/80 flex items-center justify-between gap-2 cursor-pointer hover:border-zinc-700 transition" title="Clique para buscar filme ou série">
-                                            <div class="flex items-center gap-2 min-w-0">
-                                                <i id="readinessIconMedia" class="fa-solid fa-circle-exclamation text-amber-400 shrink-0 text-xs"></i>
-                                                <div class="min-w-0">
-                                                    <span class="block text-[10px] uppercase text-zinc-500 font-bold">1. Filme / Série</span>
-                                                    <span id="readinessTextMedia" class="block text-amber-400 truncate font-medium">Buscar acima</span>
-                                                </div>
-                                            </div>
-                                            <i class="fa-solid fa-arrow-up text-[10px] text-zinc-500 shrink-0"></i>
-                                        </div>
-
-                                        <!-- Item 2: Qualidade -->
-                                        <div id="readinessItemQuality" onclick="tg.focusQuality()" class="p-2.5 rounded-xl bg-zinc-950/70 border border-zinc-800/80 flex items-center justify-between gap-2 cursor-pointer hover:border-zinc-700 transition" title="Clique para selecionar qualidade">
-                                            <div class="flex items-center gap-2 min-w-0">
-                                                <i id="readinessIconQuality" class="fa-solid fa-circle-check text-emerald-400 shrink-0 text-xs"></i>
-                                                <div class="min-w-0">
-                                                    <span class="block text-[10px] uppercase text-zinc-500 font-bold">2. Qualidade</span>
-                                                    <span id="readinessTextQuality" class="block text-emerald-400 truncate font-medium">1080p</span>
-                                                </div>
-                                            </div>
-                                            <i class="fa-solid fa-sliders text-[10px] text-zinc-500 shrink-0"></i>
-                                        </div>
-
-                                        <!-- Item 3: Conexão Telegram -->
-                                        <div id="readinessItemTelegram" onclick="tg.focusTelegram()" class="p-2.5 rounded-xl bg-zinc-950/70 border border-zinc-800/80 flex items-center justify-between gap-2 cursor-pointer hover:border-zinc-700 transition" title="Clique para conectar Telegram">
-                                            <div class="flex items-center gap-2 min-w-0">
-                                                <i id="readinessIconTelegram" class="fa-solid fa-circle-exclamation text-amber-400 shrink-0 text-xs"></i>
-                                                <div class="min-w-0">
-                                                    <span class="block text-[10px] uppercase text-zinc-500 font-bold">3. Telegram</span>
-                                                    <span id="readinessTextTelegram" class="block text-amber-400 truncate font-medium">Conectar conta</span>
-                                                </div>
-                                            </div>
-                                            <i class="fa-brands fa-telegram text-sky-400 shrink-0 text-xs"></i>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Painel de Login/Conexão do Telegram (Aberto se não conectado) -->
-                                <div id="tgLoginPanel" class="p-4 bg-zinc-900/80 rounded-2xl border border-sky-500/30 space-y-3 shadow-sm">
-                                    <div class="flex items-start justify-between gap-3">
-                                        <div class="flex items-center gap-2.5">
-                                            <div class="w-9 h-9 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
-                                                <i class="fa-brands fa-telegram text-lg"></i>
-                                            </div>
-                                            <div>
-                                                <h4 class="text-xs font-bold text-white">Conectar Conta do Telegram</h4>
-                                                <p class="text-[11px] text-zinc-400 mt-0.5">Obrigatório para enviar vídeos. Conecte seu número uma única vez.</p>
-                                            </div>
-                                        </div>
-                                        <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/20 shrink-0">
-                                            Necessário
-                                        </span>
-                                    </div>
-
+                            <div id="uploadSectionBot" class="space-y-3">
+                                <!-- Painel de Login/Conexão do Telegram -->
+                                <div id="tgLoginPanel" class="hidden mb-4 p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 space-y-3">
+                                    <p class="text-[10px] text-zinc-400">Conecte sua conta do Telegram para poder converter vídeos usando sua própria conta:</p>
+                                    
                                     <!-- Passo 1: Telefone -->
-                                    <div id="tgLoginPhoneStep" class="space-y-2 pt-1">
-                                        <label class="block text-[11px] font-medium text-zinc-400">
-                                            Número de Celular com DDD <span class="text-sky-400 font-normal">(ex: +55 11 99999-9999)</span>:
-                                        </label>
-                                        <div class="flex flex-col sm:flex-row gap-2">
-                                            <input type="text" id="tgPhoneInput" maxlength="30" class="input-unified flex-grow p-3 rounded-xl text-xs font-mono" placeholder="+55 11 99999-9999" onkeydown="if(event.key === 'Enter') tg.sendPhone()">
-                                            <button onclick="tg.sendPhone()" id="btnTgSendPhone" class="bg-sky-600 hover:bg-sky-500 active:scale-[0.98] text-white font-semibold px-4 py-3 rounded-xl text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 shrink-0 cursor-pointer">
-                                                <i class="fa-solid fa-paper-plane text-xs"></i> Receber Código
-                                            </button>
-                                        </div>
+                                    <div id="tgLoginPhoneStep" class="flex gap-2">
+                                        <input type="text" id="tgPhoneInput" maxlength="30" class="input-unified flex-grow p-2 rounded-lg text-xs" placeholder="Telefone, ex: +5511999999999">
+                                        <button onclick="tg.sendPhone()" id="btnTgSendPhone" class="bg-primary hover:bg-primary-hover text-on-accent font-semibold px-3 py-2 rounded-lg text-xs transition shrink-0">
+                                            Enviar Código
+                                        </button>
                                     </div>
 
                                     <!-- Passo 2: Código e 2FA -->
-                                    <div id="tgLoginCodeStep" class="hidden space-y-3 pt-2 border-t border-zinc-800">
+                                    <div id="tgLoginCodeStep" class="hidden space-y-3">
                                         <input type="hidden" id="tgLoginId">
-                                        <div class="flex items-center justify-between">
-                                            <label class="block text-[11px] font-medium text-zinc-300">
-                                                Código recebido no app do Telegram:
+                                        <div class="flex gap-2">
+                                            <input type="text" id="tgCodeInput" maxlength="20" class="input-unified flex-grow p-2 rounded-lg text-xs" placeholder="Código do Telegram">
+                                            <button onclick="tg.verifyCode()" id="btnTgVerifyCode" class="bg-primary hover:bg-primary-hover text-on-accent font-semibold px-3 py-2 rounded-lg text-xs transition shrink-0">
+                                                Confirmar
+                                            </button>
+                                        </div>
+                                        <div id="tg2faContainer" class="hidden">
+                                            <label class="block text-[9px] text-zinc-500 mb-1">Senha de 2 etapas (2FA) necessária:</label>
+                                            <input type="password" id="tg2faInput" maxlength="100" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Sua senha de duas etapas">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-3">
+                                    <!-- Opção de Envio: Navegador vs Local -->
+                                    <div class="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/60 pb-2 text-[11px]">
+                                        <div class="flex gap-4 hidden">
+                                            <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
+                                                <input type="radio" name="tgMode" value="browser" checked onchange="tg.switchMode('browser')" class="text-sky-500 bg-zinc-900 border-zinc-800 focus:ring-sky-500 w-3 h-3">
+                                                <span>Pelo Navegador</span>
                                             </label>
-                                            <button onclick="tg.resetPhoneStep()" class="text-[11px] text-sky-400 hover:underline">
-                                                ← Trocar número
-                                            </button>
+                                            <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
+                                                <input type="radio" name="tgMode" value="local" onchange="tg.switchMode('local')" class="text-sky-500 bg-zinc-900 border-zinc-800 focus:ring-sky-500 w-3 h-3">
+                                                <span>Caminho Local (PC)</span>
+                                            </label>
                                         </div>
-                                        <div class="flex flex-col sm:flex-row gap-2">
-                                            <input type="text" id="tgCodeInput" maxlength="20" class="input-unified flex-grow p-3 rounded-xl text-xs font-mono text-center tracking-widest text-sm" placeholder="12345" onkeydown="if(event.key === 'Enter') tg.verifyCode()">
-                                            <button onclick="tg.verifyCode()" id="btnTgVerifyCode" class="bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-semibold px-5 py-3 rounded-xl text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 shrink-0 cursor-pointer">
-                                                <i class="fa-solid fa-check text-xs"></i> Confirmar e Conectar
-                                            </button>
-                                        </div>
-                                        <div id="tg2faContainer" class="hidden space-y-1.5 pt-1">
-                                            <label class="block text-[11px] text-amber-300 font-medium">Sua conta possui senha de duas etapas (2FA):</label>
-                                            <input type="password" id="tg2faInput" maxlength="100" class="input-unified w-full p-2.5 rounded-xl text-xs" placeholder="Digite sua senha de duas etapas" onkeydown="if(event.key === 'Enter') tg.verifyCode()">
-                                        </div>
+                                        <label class="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-200">
+                                            <input type="checkbox" id="tgAutoSave" checked class="rounded border-zinc-800 bg-zinc-900 text-sky-500 focus:ring-sky-500 w-3 h-3 cursor-pointer">
+                                            <span>Auto-salvar no banco</span>
+                                        </label>
                                     </div>
-                                </div>
 
-                                <!-- Painel de Conta Conectada -->
-                                <div id="tgConnectedPanel" class="hidden p-3.5 bg-emerald-950/25 border border-emerald-500/30 rounded-2xl flex items-center justify-between gap-3">
-                                    <div class="flex items-center gap-3 min-w-0">
-                                        <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                                            <i class="fa-brands fa-telegram text-lg"></i>
-                                        </div>
-                                        <div class="min-w-0">
-                                            <div class="flex items-center gap-2">
-                                                <span class="text-xs font-bold text-white truncate">Telegram Conectado</span>
-                                                <span class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Pronto</span>
+                                    <!-- Opção Exclusiva: Upload via Bot sem Login (Apenas Colaboradores, Ajudantes e Admin) -->
+                                    <div id="tgBotNoLoginOption" class="hidden flex items-center justify-between p-2.5 bg-indigo-950/40 border border-indigo-500/30 rounded-xl">
+                                        <label class="flex items-center gap-2.5 cursor-pointer select-none">
+                                            <input type="checkbox" id="tgUseBotDirect" onchange="tg.onBotModeToggle()" class="rounded border-zinc-700 bg-zinc-900 text-indigo-500 focus:ring-indigo-500 w-4 h-4 cursor-pointer">
+                                            <div class="flex flex-col">
+                                                <span class="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                                                    <i class="fa-solid fa-robot text-indigo-400"></i> Usar Bot do Telegram (Sem login de telefone)
+                                                </span>
+                                                <span class="text-[10px] text-zinc-400">Envio automático via Bot sem precisar conectar seu número pessoal</span>
                                             </div>
-                                            <p id="tgConnectedUserLabel" class="text-[11px] text-zinc-400 mt-0.5 truncate">Sua conta está autorizada para envio de vídeos</p>
-                                        </div>
-                                    </div>
-                                    <button onclick="tg.logout()" class="text-xs text-zinc-400 hover:text-red-400 hover:border-red-500/30 transition font-medium px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 shrink-0 cursor-pointer" title="Desconectar do Telegram">
-                                        Desconectar
-                                    </button>
-                                </div>
-
-                                <!-- Aviso fixo: cargos autorizados enviam sem login pelo Bot Oficial -->
-                                <div id="tgOfficialBotInfo" class="hidden p-3.5 bg-emerald-950/25 border border-emerald-500/30 rounded-2xl flex items-center justify-between gap-3">
-                                    <div class="flex items-center gap-3 min-w-0">
-                                        <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                                            <i class="fa-solid fa-robot text-lg"></i>
-                                        </div>
-                                        <div class="min-w-0">
-                                            <div class="flex items-center gap-2">
-                                                <span class="text-xs font-bold text-white truncate">Bot Oficial da Equipe (@fenix_db)</span>
-                                                <span class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Oficial</span>
-                                            </div>
-                                            <p class="text-[11px] text-zinc-400 mt-0.5 truncate">Envio direto sem login. Seus vídeos são postados pelo bot oficial da equipe.</p>
-                                        </div>
-                                    </div>
-                                    <span class="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-500/20 px-2 py-1 rounded-lg border border-emerald-500/30 shrink-0">
-                                        Ativo ✓
-                                    </span>
-                                </div>
-
-                                <!-- Input invisível de autoSave para manter integridade com scripts -->
-                                <input type="checkbox" id="tgAutoSave" checked class="hidden">
-
-                                <!-- Upload pelo Navegador -->
-                                <div id="tgBrowserSection" class="space-y-3 pt-1">
-                                    <input type="file" id="tgFile" class="hidden" multiple accept="video/*,.mkv,.mp4,.avi,.webm,.ts,.mov,.flv,.3gp,.mpeg,.m4v" onchange="tg.handleFileChange(this)">
-                                    <label for="tgFile" id="tgFileDropzone" class="w-full p-6 rounded-2xl border-2 border-dashed border-zinc-700 hover:border-primary/60 bg-zinc-900/40 hover:bg-zinc-900/70 transition-all cursor-pointer flex flex-col items-center justify-center text-center gap-2 group">
-                                        <div class="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary group-hover:scale-105 transition-transform">
-                                            <i class="fa-solid fa-cloud-arrow-up text-xl"></i>
-                                        </div>
-                                        <div>
-                                            <span id="tgFileName" class="text-sm font-semibold text-zinc-200 group-hover:text-white transition">Clique para selecionar o vídeo ou arraste aqui</span>
-                                            <p id="tgFileSubtext" class="text-xs text-zinc-500 mt-0.5">Formatos suportados: MP4, MKV, AVI, WEBM, TS</p>
-                                        </div>
-                                    </label>
-
-                                    <!-- Botão Único Principal -->
-                                    <button onclick="tg.sendBrowser()" id="btnTgBrowserSend" class="w-full bg-primary hover:bg-primary-hover active:scale-[0.98] text-white font-display font-medium py-4 rounded-xl text-sm transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider">
-                                        <i class="fa-solid fa-cloud-arrow-up text-base"></i>
-                                        <span id="btnTgBrowserSendText">Enviar Vídeo e Salvar no Catálogo</span>
-                                    </button>
-                                </div>
-
-                                <!-- Upload por Caminho Local (Oculto) -->
-                                <div id="tgLocalSection" class="hidden flex gap-2">
-                                    <input type="text" id="tgLocalPath" maxlength="500" class="input-unified flex-grow p-2.5 rounded-lg text-xs" placeholder="Ex: /home/user/Videos/filme.mp4">
-                                    <button onclick="tg.sendLocal()" id="btnTgLocalSend" class="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2.5 rounded-lg text-xs font-medium transition flex items-center gap-1 shrink-0">
-                                        <i class="fa-solid fa-paper-plane"></i> Enviar
-                                    </button>
-                                </div>
-
-                                <!-- Configurações Avançadas (Canal & Bot) -->
-                                <div class="mt-2 p-3 bg-zinc-950/40 rounded-xl border border-zinc-800/80 space-y-2.5">
-                                    <div class="flex justify-between items-center cursor-pointer select-none" onclick="tg.toggleAdvanced()">
-                                        <span class="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                                            <i class="fa-solid fa-sliders text-primary"></i> Configurações Avançadas (Canal & Bot)
+                                        </label>
+                                        <span class="text-[9px] font-mono px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30 shrink-0">
+                                            Cargo Autorizado
                                         </span>
-                                        <i id="tgAdvancedIcon" class="fa-solid fa-chevron-down text-zinc-500 text-xs transition-transform duration-300"></i>
                                     </div>
-                                    <div id="tgAdvancedContent" class="hidden space-y-2.5 pt-2 border-t border-zinc-800/40">
-                                        <div id="tgOfficialBotNotice" class="hidden p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-xs text-emerald-300 flex items-center gap-2">
-                                            <i class="fa-solid fa-lock text-xs text-emerald-400"></i>
-                                            <span>Envio pelo <b>Bot Oficial</b> ativo para o seu cargo. O Token do bot é gerenciado pelo sistema e protegido contra visualização.</span>
-                                        </div>
-                                        <div>
-                                            <div class="flex justify-between items-center mb-1">
-                                                <label class="block text-xs text-zinc-400 font-medium">Token de Bot (@BotFather):</label>
-                                                <span id="tgBotTokenBadge" class="text-xs text-primary">Obrigatório no Modo Bot</span>
-                                            </div>
-                                            <div class="relative">
-                                                <input type="password" id="tgBotToken" maxlength="500" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: 7123456789:AAFlkjw98fjw... (obtido com @BotFather)">
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div class="flex justify-between items-center mb-1">
-                                                <label class="block text-xs text-zinc-400 font-medium">Canal de Backup do Telegram:</label>
-                                                <span id="tgChannelBadge" class="text-xs text-primary">O bot deve ser admin</span>
-                                            </div>
-                                            <input type="text" id="tgChannelId" maxlength="200" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: @meucanal ou -100123456789">
-                                        </div>
-                                        <div class="p-2 rounded bg-zinc-900/60 border border-zinc-800/60 text-xs text-zinc-400 leading-relaxed space-y-1">
-                                            <p><i class="fa-solid fa-robot text-primary mr-1"></i><strong>Como funciona o envio:</strong></p>
-                                            <ol class="list-decimal pl-4 space-y-0.5 text-zinc-400">
-                                                <li>Cargos autorizados (admin, ajudante ou colaborador) enviam pelo <b>Bot Oficial</b> ao canal <b>@fenix_db</b>, sem login e sem configurar nada.</li>
-                                                <li>Sem cargo autorizado, conecte sua conta do Telegram ou informe seu próprio Token e Canal acima.</li>
-                                            </ol>
-                                        </div>
-                                    </div>
-                                </div>
 
-                                <!-- Progresso e Status -->
-                                <div id="tgProgressBox" class="hidden space-y-3 mt-4">
-                                    <div class="space-y-1.5">
-                                        <div class="flex justify-between text-xs font-medium text-zinc-400">
-                                            <span id="tgProgressState">Enviando arquivos...</span>
-                                            <span id="tgPercent" class="text-sky-400 font-mono">0%</span>
+                                    <!-- Upload pelo Navegador -->
+                                    <div id="tgBrowserSection" class="flex flex-col sm:flex-row gap-2">
+                                        <input type="file" id="tgFile" class="hidden" multiple accept="video/*,.mkv,.mp4,.avi,.webm,.ts,.mov,.flv,.3gp,.mpeg,.m4v" onchange="tg.handleFileChange(this)">
+                                        <label for="tgFile" class="input-unified flex-grow p-3 rounded-lg text-xs cursor-pointer flex items-center justify-center sm:justify-start gap-2 hover:bg-zinc-800 transition-colors border-dashed border-zinc-700 hover:border-sky-500 group">
+                                            <i class="fa-solid fa-cloud-arrow-up text-zinc-500 group-hover:text-sky-400 transition-colors"></i>
+                                            <span id="tgFileName" class="text-zinc-400 font-medium group-hover:text-zinc-200 transition-colors">Selecionar Vídeos...</span>
+                                        </label>
+                                        <button onclick="tg.sendBrowser()" id="btnTgBrowserSend" class="bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-lg text-xs font-medium transition-all shadow-sm flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
+                                            Fazer Upload
+                                        </button>
+                                    </div>
+
+                                    <!-- Upload por Caminho Local -->
+                                    <div id="tgLocalSection" class="hidden flex gap-2">
+                                        <input type="text" id="tgLocalPath" maxlength="500" class="input-unified flex-grow p-2.5 rounded-lg text-xs" placeholder="Ex: /home/user/Videos/filme.mp4">
+                                        <button onclick="tg.sendLocal()" id="btnTgLocalSend" class="bg-sky-600 hover:bg-sky-500 text-white px-4 py-2.5 rounded-lg text-xs font-medium transition flex items-center gap-1 shrink-0">
+                                            <i class="fa-solid fa-paper-plane"></i> Enviar
+                                        </button>
+                                    </div>
+
+                                    <!-- Configurações Avançadas (Canal & Bot) -->
+                                    <div class="mt-2 p-3 bg-zinc-950/40 rounded-xl border border-zinc-800/80 space-y-2.5">
+                                        <div class="flex justify-between items-center cursor-pointer select-none" onclick="tg.toggleAdvanced()">
+                                            <span class="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                <i class="fa-solid fa-sliders text-primary"></i> Configurações Avançadas (Canal & Bot)
+                                            </span>
+                                            <i id="tgAdvancedIcon" class="fa-solid fa-chevron-down text-zinc-500 text-[10px] transition-transform duration-300"></i>
                                         </div>
-                                        <div class="w-full bg-zinc-900 rounded-full h-2 overflow-hidden border border-zinc-800/80">
-                                            <div id="tgProgressBar" class="bg-primary h-full w-0 transition-all duration-300"></div>
+                                        <div id="tgAdvancedContent" class="hidden space-y-2.5 pt-2 border-t border-zinc-800/40">
+                                            <div>
+                                                <div class="flex justify-between items-center mb-1">
+                                                    <label class="block text-[9px] text-zinc-400 font-medium">Token de Bot (@BotFather):</label>
+                                                    <span class="text-[9px] text-primary">Obrigatório no Modo Bot</span>
+                                                </div>
+                                                <input type="text" id="tgBotToken" maxlength="500" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: 7123456789:AAFlkjw98fjw... (obtido com @BotFather)">
+                                            </div>
+                                            <div>
+                                                <div class="flex justify-between items-center mb-1">
+                                                    <label class="block text-[9px] text-zinc-400 font-medium">Canal de Backup do Telegram:</label>
+                                                    <span class="text-[9px] text-primary">O bot deve ser admin</span>
+                                                </div>
+                                                <input type="text" id="tgChannelId" maxlength="200" class="input-unified w-full p-2 rounded-lg text-xs" placeholder="Ex: @meucanal ou -100123456789">
+                                            </div>
+                                            <div class="p-2 rounded bg-zinc-900/60 border border-zinc-800/60 text-[9px] text-zinc-400 leading-relaxed space-y-1">
+                                                <p><i class="fa-solid fa-robot text-primary mr-1"></i><strong>Como usar o Modo Bot Seguro:</strong></p>
+                                                <ol class="list-decimal pl-4 space-y-0.5 text-zinc-400">
+                                                    <li>Crie um bot no Telegram com o <b>@BotFather</b> e copie o Token gerado.</li>
+                                                    <li>Crie um Canal no Telegram e adicione seu bot como <b>Administrador</b> (com permissão de postar).</li>
+                                                    <li>Cole o Token e o Canal acima. O upload irá direto pelo bot para o canal, sem usar sua conta pessoal!</li>
+                                                </ol>
+                                            </div>
                                         </div>
                                     </div>
-                                    
-                                    <!-- Fila de Arquivos -->
-                                    <div id="tgFileQueue" class="flex flex-col gap-1.5 mt-2 max-h-48 overflow-y-auto custom-scrollbar pr-1"></div>
-                                </div>
 
-                                <div id="tgFeedback" class="text-xs text-zinc-500 flex items-center gap-1.5 pt-1">
-                                    <i class="fa-solid fa-circle-info text-zinc-400"></i>
-                                    <span id="tgFeedbackText">O vídeo será enviado e adicionado automaticamente ao catálogo após o término do upload.</span>
+                                    <!-- Progresso e Status -->
+                                    <div id="tgProgressBox" class="hidden space-y-3 mt-4">
+                                        <div class="space-y-1.5">
+                                            <div class="flex justify-between text-[10px] font-medium text-zinc-400">
+                                                <span id="tgProgressState">Enviando arquivos...</span>
+                                                <span id="tgPercent" class="text-sky-400">0%</span>
+                                            </div>
+                                            <div class="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden border border-zinc-800/80">
+                                                <div id="tgProgressBar" class="bg-sky-500 h-full w-0 transition-all duration-300"></div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Fila de Arquivos (Novo Design) -->
+                                        <div id="tgFileQueue" class="flex flex-col gap-1.5 mt-2 max-h-48 overflow-y-auto custom-scrollbar pr-1"></div>
+                                    </div>
+
+                                    <div id="tgFeedback" class="text-[10px] text-zinc-500 flex items-center gap-1">
+                                        <i class="fa-solid fa-info-circle"></i>
+                                        <span id="tgFeedbackText">O vídeo será enviado para @fenix_flixbot e o link gerado será adicionado aos Links de Transmissão.</span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -871,7 +774,7 @@
                                 <!-- Progresso e Status Teste -->
                                 <div id="hfProgressBox" class="hidden space-y-3 mt-4">
                                     <div class="space-y-1.5">
-                                        <div class="flex justify-between text-xs font-medium text-zinc-400">
+                                        <div class="flex justify-between text-[10px] font-medium text-zinc-400">
                                             <span id="hfProgressState">Enviando vídeo diretamente...</span>
                                             <span id="hfPercent" class="text-amber-400">0%</span>
                                         </div>
@@ -884,6 +787,10 @@
                                 </div>
                             </div>
                         </div>
+
+                        <button onclick="gen.processAndSave()" id="btnProcessAndSave" class="mt-6 w-full bg-primary hover:bg-primary-hover active:bg-primary-hover/90 text-white font-display font-medium py-4 rounded-xl transition-all shadow-md flex justify-center items-center gap-2 tracking-wide uppercase text-sm">
+                            <i class="fa-solid fa-paper-plane"></i> Enviar Conteúdo
+                        </button>
                     </div>
                 </div>
 
@@ -892,11 +799,11 @@
                     <div class="glass-panel rounded-3xl border border-white/5 flex flex-col h-full shadow-2xl relative overflow-hidden">
                         <div class="p-5 border-b border-white/5 flex justify-between items-center bg-black/20">
                             <h3 class="font-medium text-white text-sm">Preview JSON</h3>
-                            <span id="jsonStats" class="text-xs font-mono text-zinc-500">Vazio</span>
+                            <span id="jsonStats" class="text-[10px] font-mono text-zinc-500">Vazio</span>
                         </div>
                         
                         <div class="flex-grow relative bg-transparent p-5 overflow-hidden">
-                            <textarea id="jsonOutput" class="w-full text-xs leading-relaxed text-ember-400/80 bg-transparent font-mono h-full min-h-[400px] focus:outline-none resize-none custom-scrollbar" spellcheck="false" oninput="gen.syncManualEdit()" placeholder="// O resultado aparecerá aqui..."></textarea>
+                            <textarea id="jsonOutput" class="w-full text-[11px] leading-relaxed text-ember-400/80 bg-transparent font-mono h-full min-h-[400px] focus:outline-none resize-none custom-scrollbar" spellcheck="false" oninput="gen.syncManualEdit()" placeholder="// O resultado aparecerá aqui..."></textarea>
                             
                             <div id="resultActions" class="absolute bottom-5 right-5 flex gap-2 hidden">
                                 <button onclick="gen.openVisualEditor()" class="bg-obsidian-800/80 backdrop-blur-sm hover:bg-obsidian-800 text-white px-4 py-2 rounded-xl border border-white/10 text-xs font-medium flex items-center gap-2 transition-all shadow-lg" title="Gerir Links Visualmente">
@@ -927,19 +834,19 @@
             <!-- Cards de Status -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 <div class="glass-panel p-4 md:p-5 rounded-2xl md:rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-sm transition-all">
-                    <p class="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-1">Filmes</p>
+                    <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Filmes</p>
                     <p id="countMovies" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
                 <div class="glass-panel p-4 md:p-5 rounded-2xl md:rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-sm transition-all">
-                    <p class="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-1">Séries</p>
+                    <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Séries</p>
                     <p id="countSeries" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
                 <div class="glass-panel p-4 md:p-5 rounded-2xl md:rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-sm transition-all">
-                    <p class="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-1">Episódios Totais</p>
+                    <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Episódios Totais</p>
                     <p id="countTotalEps" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
                 <div class="glass-panel p-4 md:p-5 rounded-2xl md:rounded-3xl border border-white/5 flex flex-col justify-center shadow-lg hover:shadow-red-500/5 transition-all">
-                    <p class="text-red-400/80 text-xs font-bold uppercase tracking-widest mb-1">Incompletos</p>
+                    <p class="text-red-400/80 text-[10px] font-bold uppercase tracking-widest mb-1">Incompletos</p>
                     <p id="countMissing" class="text-3xl font-display font-medium text-white">0</p>
                 </div>
             </div>
@@ -991,7 +898,7 @@
             
             <!-- Status API Canto Inferior -->
             <div class="fixed bottom-6 right-6 hidden md:block z-40 bg-zinc-900/80 backdrop-blur border border-zinc-800 px-4 py-2 rounded-full shadow-lg">
-                <span id="apiStatus" class="text-xs text-zinc-400 flex items-center gap-2 font-medium uppercase tracking-wider">
+                <span id="apiStatus" class="text-[10px] text-zinc-400 flex items-center gap-2 font-medium uppercase tracking-wider">
                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Conectado
                 </span>
             </div>
@@ -1027,19 +934,19 @@
 
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                     <div class="bg-zinc-950 p-4 rounded-xl border border-zinc-800/50">
-                        <p class="text-zinc-500 text-xs font-semibold uppercase mb-1">Linhas Analisadas</p>
+                        <p class="text-zinc-500 text-[10px] font-semibold uppercase mb-1">Linhas Analisadas</p>
                         <p id="req-total-lines" class="text-xl font-medium text-white">0</p>
                     </div>
                     <div class="bg-zinc-950 p-4 rounded-xl border border-zinc-800/50">
-                        <p class="text-zinc-500 text-xs font-semibold uppercase mb-1">Ocorrências</p>
+                        <p class="text-zinc-500 text-[10px] font-semibold uppercase mb-1">Ocorrências</p>
                         <p id="req-total-requests" class="text-xl font-medium text-white">0</p>
                     </div>
                     <div class="bg-zinc-950 p-4 rounded-xl border border-zinc-800/50">
-                        <p class="text-zinc-500 text-xs font-semibold uppercase mb-1">Filmes Únicos</p>
+                        <p class="text-zinc-500 text-[10px] font-semibold uppercase mb-1">Filmes Únicos</p>
                         <p id="req-movies-count" class="text-xl font-medium text-white">0</p>
                     </div>
                     <div class="bg-zinc-950 p-4 rounded-xl border border-zinc-800/50">
-                        <p class="text-zinc-500 text-xs font-semibold uppercase mb-1">Séries Únicas</p>
+                        <p class="text-zinc-500 text-[10px] font-semibold uppercase mb-1">Séries Únicas</p>
                         <p id="req-series-count" class="text-xl font-medium text-white">0</p>
                     </div>
                 </div>
@@ -1069,7 +976,7 @@
                     <div id="req-results-container" class="space-y-2">
                         <div class="text-center py-12 text-zinc-600 flex flex-col items-center">
                             <p class="text-sm font-medium">Aguardando dados.</p>
-                            <span id="req-loading-status" class="text-xs uppercase tracking-wider mt-2">Pronto para leitura</span>
+                            <span id="req-loading-status" class="text-[10px] uppercase tracking-wider mt-2">Pronto para leitura</span>
                         </div>
                     </div>
                 </div>
@@ -1132,7 +1039,7 @@
                             <div id="storage-pie-chart" class="w-36 h-36 rounded-full border border-zinc-800 shadow-inner" style="background: conic-gradient(#FF6A00 0% 0%, #FFB020 0% 0%, #111827 0% 100%);"></div>
                             <div class="absolute inset-4 bg-zinc-900 rounded-full flex flex-col items-center justify-center border border-zinc-800/50">
                                 <span id="storage-donut-percent" class="text-white font-semibold text-lg">0.00%</span>
-                                <span class="text-xs text-zinc-500 uppercase font-medium">Usado</span>
+                                <span class="text-[9px] text-zinc-500 uppercase font-medium">Usado</span>
                             </div>
                         </div>
 
@@ -1164,7 +1071,7 @@
                                 </div>
                             </div>
 
-                            <div class="flex justify-between text-xs text-zinc-500 font-mono">
+                            <div class="flex justify-between text-[11px] text-zinc-500 font-mono">
                                 <span id="storage-used-text">0.00 MB</span>
                                 <span>1.00 GB (Limite)</span>
                             </div>
@@ -1185,11 +1092,11 @@
                                     <span class="w-2.5 h-2.5 rounded-full bg-primary"></span>
                                     <span class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">Séries / Animes</span>
                                 </div>
-                                <span id="storage-series-count" class="text-xs bg-zinc-900 border border-zinc-850 px-2 py-0.5 rounded text-zinc-400">0 itens</span>
+                                <span id="storage-series-count" class="text-[10px] bg-zinc-900 border border-zinc-850 px-2 py-0.5 rounded text-zinc-400">0 itens</span>
                             </div>
                             <div>
                                 <span id="storage-series-size" class="text-2xl font-semibold text-white">0.00 MB</span>
-                                <span id="storage-series-percent" class="text-xs text-zinc-500 block mt-0.5">0% do espaço usado</span>
+                                <span id="storage-series-percent" class="text-[10px] text-zinc-500 block mt-0.5">0% do espaço usado</span>
                             </div>
                         </div>
 
@@ -1200,11 +1107,11 @@
                                     <span class="w-2.5 h-2.5 rounded-full bg-highlight"></span>
                                     <span class="font-semibold text-zinc-200 text-xs uppercase tracking-wider">Filmes</span>
                                 </div>
-                                <span id="storage-movies-count" class="text-xs bg-zinc-900 border border-zinc-850 px-2 py-0.5 rounded text-zinc-400">0 itens</span>
+                                <span id="storage-movies-count" class="text-[10px] bg-zinc-900 border border-zinc-850 px-2 py-0.5 rounded text-zinc-400">0 itens</span>
                             </div>
                             <div>
                                 <span id="storage-movies-size" class="text-2xl font-semibold text-white">0.00 MB</span>
-                                <span id="storage-movies-percent" class="text-xs text-zinc-500 block mt-0.5">0% do espaço usado</span>
+                                <span id="storage-movies-percent" class="text-[10px] text-zinc-500 block mt-0.5">0% do espaço usado</span>
                             </div>
                         </div>
                     </div>
@@ -1218,11 +1125,11 @@
                         <p class="text-zinc-500 leading-relaxed">Com base no tamanho médio dos seus JSONs salvos, você ainda pode armazenar aproximadamente:</p>
                         <div class="grid grid-cols-2 gap-4 pt-2 font-mono border-t border-zinc-800/60">
                             <div>
-                                <span class="text-zinc-500 block text-xs uppercase tracking-wider">Filmes Restantes</span>
+                                <span class="text-zinc-500 block text-[10px] uppercase tracking-wider">Filmes Restantes</span>
                                 <span id="storage-est-movies" class="text-zinc-100 font-bold text-base">~ 0</span>
                             </div>
                             <div>
-                                <span class="text-zinc-500 block text-xs uppercase tracking-wider">Séries Restantes</span>
+                                <span class="text-zinc-500 block text-[10px] uppercase tracking-wider">Séries Restantes</span>
                                 <span id="storage-est-series" class="text-zinc-100 font-bold text-base">~ 0</span>
                             </div>
                         </div>
@@ -1271,7 +1178,7 @@
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse">
                         <thead>
-                            <tr class="border-b border-zinc-800 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                            <tr class="border-b border-zinc-800 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
                                 <th class="pb-3 pr-4">Conteúdo</th>
                                 <th class="pb-3 px-4">Motivo</th>
                                 <th class="pb-3 px-4">Detalhes</th>
@@ -1315,12 +1222,10 @@
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse min-w-[700px]">
                         <thead>
-                            <tr class="border-b border-zinc-800/60 text-xs text-zinc-400 font-semibold tracking-wider">
-                                <th class="pb-3.5 pr-4 font-semibold w-[38%]">Conteúdo (Filme / Série)</th>
-                                <th class="pb-3.5 px-3 font-semibold w-[22%]">Enviado por</th>
-                                <th class="pb-3.5 px-3 font-semibold text-center w-[15%]">Cargo / Status</th>
-                                <th class="pb-3.5 px-3 font-semibold text-center w-[13%]">Data</th>
-                                <th class="pb-3.5 pl-3 font-semibold text-center w-[12%]">Ações</th>
+                            <tr class="border-b border-zinc-800/60 text-xs text-zinc-500 font-medium">
+                                <th class="pb-4 pr-4 font-normal w-1/3">Arquivo JSON</th>
+                                <th class="pb-4 px-4 font-normal text-center">Data do Envio</th>
+                                <th class="pb-4 px-4 font-normal text-center">Ações</th>
                             </tr>
                         </thead>
                         <tbody id="approvals-table-body" class="text-sm divide-y divide-zinc-800/40">
@@ -1349,13 +1254,13 @@
                     <div id="modalStats" class="mt-2 flex items-center gap-3 text-xs"></div>
                 </div>
                 <div class="flex gap-2 items-center flex-shrink-0">
-                    <button id="btnModalEdit" class="hidden text-xs uppercase font-bold bg-white text-zinc-900 hover:bg-zinc-200 px-3 py-2 rounded-lg transition">Editar JSON</button>
-                    <button onclick="openReportModal()" class="text-xs uppercase font-bold bg-red-600 hover:bg-red-500 text-white px-3 py-2 rounded-lg transition flex items-center gap-1.5"><i class="fa-solid fa-triangle-exclamation"></i> Denunciar</button>
+                    <button id="btnModalEdit" class="hidden text-[10px] uppercase font-bold bg-white text-zinc-900 hover:bg-zinc-200 px-3 py-2 rounded-lg transition">Editar JSON</button>
+                    <button onclick="openReportModal()" class="text-[10px] uppercase font-bold bg-red-600 hover:bg-red-500 text-white px-3 py-2 rounded-lg transition flex items-center gap-1.5"><i class="fa-solid fa-triangle-exclamation"></i> Denunciar</button>
                     <button onclick="cat.closeModal()" aria-label="Fechar Modal" class="text-zinc-500 hover:text-white bg-zinc-950 border border-zinc-800 hover:bg-zinc-800 w-9 h-9 rounded-full transition flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
                 </div>
             </div>
             <div id="modalContent" class="p-6 overflow-y-auto space-y-2 bg-zinc-950 flex-grow custom-scrollbar"></div>
-            <div class="p-4 bg-zinc-900 border-t border-zinc-800 flex justify-between items-center text-xs font-medium text-zinc-500 uppercase tracking-wider">
+            <div class="p-4 bg-zinc-900 border-t border-zinc-800 flex justify-between items-center text-[10px] font-medium text-zinc-500 uppercase tracking-wider">
                 <span>Use o botão Editar para gerir</span>
                 <span id="modalTotalLinks">0 links</span>
             </div>
@@ -1396,21 +1301,21 @@
                         <div class="flex items-center justify-between gap-2">
                             <button type="button" onclick="gen.toggleBulkPanel()" class="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2 hover:text-white transition">
                                 <i class="fa-solid fa-layer-group text-primary"></i> Modificar Todos em Massa
-                                <i id="bulkToggleChevron" class="fa-solid fa-chevron-down text-xs transition-transform duration-200"></i>
+                                <i id="bulkToggleChevron" class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200"></i>
                             </button>
                             <div class="flex flex-wrap gap-1.5 items-center">
-                                <button type="button" onclick="gen.selectAllBulk(true)" class="text-xs bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-lg transition font-medium">Todos</button>
-                                <button type="button" onclick="gen.selectByAudio('Dublado')" class="text-xs bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-amber-300 px-2.5 py-1 rounded-lg transition font-medium">Só Dublados</button>
-                                <button type="button" onclick="gen.selectByAudio('Legendado')" class="text-xs bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-sky-300 px-2.5 py-1 rounded-lg transition font-medium">Só Legendados</button>
-                                <button type="button" onclick="gen.selectAllBulk(false)" class="text-xs bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 px-2.5 py-1 rounded-lg transition font-medium">Desmarcar</button>
-                                <button type="button" onclick="gen.deleteSelectedBulk()" class="text-xs bg-red-950/70 border border-red-800/50 hover:bg-red-900 text-red-300 px-2.5 py-1 rounded-lg transition font-bold flex items-center gap-1" title="Excluir streams selecionadas">
-                                    <i class="fa-solid fa-trash-can text-xs"></i> Excluir
+                                <button type="button" onclick="gen.selectAllBulk(true)" class="text-[10px] bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-lg transition font-medium">Todos</button>
+                                <button type="button" onclick="gen.selectByAudio('Dublado')" class="text-[10px] bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-amber-300 px-2.5 py-1 rounded-lg transition font-medium">Só Dublados</button>
+                                <button type="button" onclick="gen.selectByAudio('Legendado')" class="text-[10px] bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-sky-300 px-2.5 py-1 rounded-lg transition font-medium">Só Legendados</button>
+                                <button type="button" onclick="gen.selectAllBulk(false)" class="text-[10px] bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 px-2.5 py-1 rounded-lg transition font-medium">Desmarcar</button>
+                                <button type="button" onclick="gen.deleteSelectedBulk()" class="text-[10px] bg-red-950/70 border border-red-800/50 hover:bg-red-900 text-red-300 px-2.5 py-1 rounded-lg transition font-bold flex items-center gap-1" title="Excluir streams selecionadas">
+                                    <i class="fa-solid fa-trash-can text-[10px]"></i> Excluir
                                 </button>
                             </div>
                         </div>
                         <div id="bulkEditControls" class="hidden grid grid-cols-1 sm:grid-cols-4 gap-2.5 bg-zinc-900/60 p-3 rounded-xl border border-white/5 transition-all mt-2">
                             <div>
-                                <label class="block text-xs uppercase font-bold text-zinc-500 mb-1">Novo Áudio</label>
+                                <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Novo Áudio</label>
                                 <select id="bulkAudio" class="input-unified w-full p-2 rounded-lg text-xs appearance-none">
                                     <option value="">(Manter original)</option>
                                     <option value="Dublado">Dublado</option>
@@ -1421,13 +1326,13 @@
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs uppercase font-bold text-zinc-500 mb-1">Nova Qualidade</label>
+                                <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Nova Qualidade</label>
                                 <select id="bulkQuality" class="input-unified w-full p-2 rounded-lg text-xs appearance-none">
                                     <!-- Preenchido via JS -->
                                 </select>
                             </div>
                             <div id="bulkSeasonCol">
-                                <label class="block text-xs uppercase font-bold text-zinc-500 mb-1">Mover Temp.</label>
+                                <label class="block text-[10px] uppercase font-bold text-zinc-500 mb-1">Mover Temp.</label>
                                 <input type="number" id="bulkSeason" class="input-unified w-full p-2 rounded-lg text-xs text-white bg-zinc-950 border border-zinc-800" placeholder="Ex: 2" min="1" max="999">
                             </div>
                             <div class="flex items-end">
@@ -1502,21 +1407,6 @@
     <!-- Container de Toasts (Notificações) -->
     <div id="toast-container" class="fixed bottom-6 left-1/2 -translate-x-1/2 md:translate-x-0 md:left-auto md:right-6 z-[200] flex flex-col gap-2 pointer-events-none w-[90%] md:w-auto"></div>
 
-    <!-- Progresso da importação de vários lotes (.json) de uma vez -->
-    <div id="loteImportBox" class="hidden fixed top-20 sm:top-24 left-1/2 -translate-x-1/2 z-[210] w-[92%] max-w-md bg-zinc-950/95 backdrop-blur border border-zinc-800 rounded-2xl shadow-2xl p-4">
-        <div class="flex items-center justify-between gap-3 mb-2">
-            <span class="text-xs font-semibold text-white flex items-center gap-2 truncate">
-                <i class="fa-solid fa-boxes-stacked text-primary"></i>
-                <span id="loteImportTitle" class="truncate">Importando lotes...</span>
-            </span>
-            <span id="loteImportCount" class="text-xs font-mono text-zinc-400 shrink-0">0/0</span>
-        </div>
-        <div class="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden border border-zinc-800/80">
-            <div id="loteImportBar" class="bg-primary h-full w-0 transition-all duration-300"></div>
-        </div>
-        <div id="loteImportErrors" class="hidden mt-2 text-[11px] text-red-400 max-h-28 overflow-y-auto custom-scrollbar space-y-0.5"></div>
-    </div>
-
     <!-- Modal de Login Personalizado -->
     <div id="custom-login-modal" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle" class="fixed inset-0 z-[250] hidden flex items-center justify-center p-4">
         <!-- Backdrop com transição de opacidade -->
@@ -1541,7 +1431,7 @@
             <!-- Formulário -->
             <form id="login-modal-form" onsubmit="event.preventDefault();" class="space-y-5 relative">
                 <div>
-                    <label for="login-modal-password" class="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">Senha do Sistema</label>
+                    <label for="login-modal-password" class="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2">Senha do Sistema</label>
                     <div class="relative">
                         <i class="fa-solid fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs"></i>
                         <input type="password" id="login-modal-password" maxlength="128" placeholder="Digite a senha..." autocomplete="current-password" class="w-full bg-zinc-950 text-white text-sm rounded-xl pl-10 pr-12 py-3 border border-zinc-800 focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all placeholder-zinc-700">
@@ -1557,7 +1447,7 @@
                     </button>
                     <button type="submit" id="login-modal-submit" class="flex-1 bg-primary hover:bg-primary-hover text-on-accent py-3 rounded-xl text-xs font-semibold transition-all shadow-sm flex items-center justify-center gap-2">
                         <span>Confirmar</span>
-                        <i class="fa-solid fa-chevron-right text-xs"></i>
+                        <i class="fa-solid fa-chevron-right text-[10px]"></i>
                     </button>
                 </div>
             </form>
@@ -1597,7 +1487,7 @@
     <script>
         window.TELEGRAM_API_URL = '__TELEGRAM_API_URL_PLACEHOLDER__';
     </script>
-    <script src="/js/app.js?v=21"></script>
+    <script src="/js/app.js?v=20"></script>
 
     <!-- Overlay para arrastar e soltar arquivos -->
     <div id="drag-drop-overlay" class="fixed inset-0 bg-[#05070D]/85 backdrop-blur-md z-[9999] flex flex-col items-center justify-center border-4 border-dashed border-primary/60 m-4 rounded-3xl opacity-0 pointer-events-none transition-opacity duration-300">
