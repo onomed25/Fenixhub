@@ -235,6 +235,9 @@ func (c *Client) FetchCatalog(force bool) ([]map[string]interface{}, error) {
 	items := make([]map[string]interface{}, 0, len(jsonFiles))
 	for res := range resultsChan {
 		if res.item != nil {
+			if _, ok := res.item["criado_em"].(string); !ok || res.item["criado_em"] == "" {
+				res.item["criado_em"] = extractItemTimestamp(res.item)
+			}
 			items = append(items, res.item)
 		}
 	}
@@ -253,6 +256,44 @@ func (c *Client) FetchCatalog(force bool) ([]map[string]interface{}, error) {
 
 	log.Printf("📥 Catálogo carregado do Hugging Face (%s): %d itens", c.repo, len(items))
 	return items, nil
+}
+
+func extractItemTimestamp(item map[string]interface{}) string {
+	if item == nil {
+		return ""
+	}
+	if d, ok := item["criado_em"].(string); ok && strings.TrimSpace(d) != "" {
+		return strings.TrimSpace(d)
+	}
+	// Procura em streams de filmes ([]interface{})
+	if streams, ok := item["streams"].([]interface{}); ok {
+		for _, s := range streams {
+			if sm, ok := s.(map[string]interface{}); ok {
+				if d, ok := sm["criado_em"].(string); ok && strings.TrimSpace(d) != "" {
+					return strings.TrimSpace(d)
+				}
+			}
+		}
+	}
+	// Procura em streams de séries (map[string]interface{})
+	if seasons, ok := item["streams"].(map[string]interface{}); ok {
+		for _, epsVal := range seasons {
+			if epsMap, ok := epsVal.(map[string]interface{}); ok {
+				for _, sVal := range epsMap {
+					if streams, ok := sVal.([]interface{}); ok {
+						for _, s := range streams {
+							if sm, ok := s.(map[string]interface{}); ok {
+								if d, ok := sm["criado_em"].(string); ok && strings.TrimSpace(d) != "" {
+									return strings.TrimSpace(d)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func (c *Client) GetContent(nome string) (map[string]interface{}, error) {

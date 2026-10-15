@@ -163,12 +163,16 @@ func (h *Handler) GetCatalog(c *gin.Context) {
 }
 
 func (h *Handler) GetAll(c *gin.Context) {
-	names, err := h.db.GetAllNames()
-	if err != nil {
-		c.JSON(500, gin.H{"erro": "Falha ao listar nomes dos itens."})
+	if c.Query("names_only") == "true" {
+		names, err := h.db.GetAllNames()
+		if err != nil {
+			c.JSON(500, gin.H{"erro": "Falha ao listar nomes dos itens."})
+			return
+		}
+		c.JSON(200, names)
 		return
 	}
-	c.JSON(200, names)
+	h.GetCatalog(c)
 }
 
 func (h *Handler) GetContent(c *gin.Context) {
