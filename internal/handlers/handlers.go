@@ -863,7 +863,8 @@ func (h *Handler) GetVistos(c *gin.Context) {
 		if id == "" {
 			id = nomeDoJSON
 		}
-		if id == "" {
+		id = strings.TrimSpace(strings.TrimSuffix(id, ".json"))
+		if id == "" || id == "tt_file_upload" || id == "tt9999999" || strings.HasPrefix(id, "test") {
 			continue
 		}
 
@@ -891,6 +892,10 @@ func (h *Handler) GetVistos(c *gin.Context) {
 	// 2. Incorpora contagens rastreadas em memória/disco
 	if h.viewsTracker != nil {
 		for id, count := range h.viewsTracker.GetAll() {
+			id = strings.TrimSpace(strings.TrimSuffix(id, ".json"))
+			if id == "" || id == "tt_file_upload" || id == "tt9999999" || strings.HasPrefix(id, "test") {
+				continue
+			}
 			if cur, exists := rankingMap[id]; !exists || count > cur {
 				rankingMap[id] = count
 			}
@@ -900,6 +905,10 @@ func (h *Handler) GetVistos(c *gin.Context) {
 	// 3. Incorpora contagens do banco de dados relacional
 	if dbViews, err := h.db.GetTopViews(); err == nil {
 		for id, count := range dbViews {
+			id = strings.TrimSpace(strings.TrimSuffix(id, ".json"))
+			if id == "" || id == "tt_file_upload" || id == "tt9999999" || strings.HasPrefix(id, "test") {
+				continue
+			}
 			if cur, exists := rankingMap[id]; !exists || count > cur {
 				rankingMap[id] = count
 			}

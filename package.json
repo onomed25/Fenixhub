@@ -3,7 +3,8 @@
   "version": "2.0.0",
   "description": "Fenix Studio Application - Go Backend",
   "scripts": {
-    "start": "[ -f ./server ] && ./server || go run .",
-    "build": "if command -v go >/dev/null 2>&1; then go build -o server .; else curl -sL https://go.dev/dl/go1.23.2.linux-amd64.tar.gz | tar -C /tmp -xz && /tmp/go/bin/go build -o server .; fi"
+    "postinstall": "npm run build",
+    "build": "if command -v go >/dev/null 2>&1; then go build -o server .; else curl -sL https://go.dev/dl/go1.23.2.linux-amd64.tar.gz | tar -C /tmp -xz && /tmp/go/bin/go build -o server .; fi",
+    "start": "if [ -f ./server ]; then ./server; else npm run build && ./server; fi"
   }
 }

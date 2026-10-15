@@ -581,6 +581,12 @@ function clearDiscordSession() {
                     return;
                 }
 
+                if (!TELEGRAM_API_URL) {
+                    tg.status = { configured: false, connected: false, local: false };
+                    tg.updateUIStatus();
+                    return;
+                }
+
                 try {
                     const res = await fetch(TELEGRAM_API_URL + '/api/telegram/status');
                     if (res.ok) {
@@ -589,7 +595,7 @@ function clearDiscordSession() {
                         tg.updateUIStatus();
                     }
                 } catch (e) {
-                    console.error("Erro ao verificar status do Telegram:", e);
+                    console.warn("Status do Telegram indisponível (modo direto ativo).");
                 }
             },
 
@@ -618,19 +624,19 @@ function clearDiscordSession() {
                     if (feedbackText) feedbackText.innerText = "Conectado usando sua conta do Telegram. Pronto para converter vídeos!";
                 } else {
                     if (badge) {
-                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-900";
-                        badge.innerText = "Login Obrigatório";
+                        badge.className = "text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800";
+                        badge.innerText = "Links Diretos";
                     }
                     if (btnToggle) {
-                        btnToggle.innerText = "Conectar Telegram";
-                        btnToggle.className = "text-[9px] font-semibold text-primary hover:underline ml-1";
+                        btnToggle.innerText = "Telegram (Opcional)";
+                        btnToggle.className = "text-[9px] font-semibold text-zinc-400 hover:underline ml-1";
                     }
-                    if (btnBrowser) btnBrowser.disabled = true;
-                    if (btnLocal) btnLocal.disabled = true;
-                    if (feedbackText) feedbackText.innerText = "Atenção: É obrigatório conectar sua conta do Telegram para poder enviar vídeos.";
+                    if (btnBrowser) btnBrowser.disabled = false;
+                    if (btnLocal) btnLocal.disabled = false;
+                    if (feedbackText) feedbackText.innerText = "Cole seus links de transmissão diretamente na caixa acima.";
                     
                     const panel = document.getElementById('tgLoginPanel');
-                    if (panel) panel.classList.remove('hidden');
+                    if (panel) panel.classList.add('hidden');
                 }
             },
 
@@ -659,6 +665,9 @@ function clearDiscordSession() {
             },
 
             sendPhone: async () => {
+                if (!TELEGRAM_API_URL) {
+                    return showToast("Envio via Telegram desativado. Cole os links de transmissão diretamente no campo acima!", "info");
+                }
                 const phoneInput = document.getElementById('tgPhoneInput');
                 const phone = phoneInput.value.trim();
                 const btn = document.getElementById('btnTgSendPhone');
@@ -822,6 +831,9 @@ function clearDiscordSession() {
                 files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
                 const session = localStorage.getItem('fenixflix_tg_session');
+                if (!session && !TELEGRAM_API_URL) {
+                    return showToast("Envio via Telegram indisponível. Cole seus links de transmissão diretamente na caixa acima!", "info");
+                }
                 if (!session) {
                     const panel = document.getElementById('tgLoginPanel');
                     if (panel) panel.classList.remove('hidden');
