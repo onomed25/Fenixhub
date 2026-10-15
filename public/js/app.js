@@ -395,11 +395,7 @@ function clearDiscordSession() {
             
             const adminLinkSection = document.getElementById('admin-link-section');
             if (adminLinkSection) {
-                if (isAdmin) {
-                    adminLinkSection.classList.remove('hidden');
-                } else {
-                    adminLinkSection.classList.add('hidden');
-                }
+                adminLinkSection.classList.remove('hidden');
             }
             
             // 3. Atualizar botão de Login Admin
@@ -633,7 +629,7 @@ function clearDiscordSession() {
                     }
                     if (btnBrowser) btnBrowser.disabled = false;
                     if (btnLocal) btnLocal.disabled = false;
-                    if (feedbackText) feedbackText.innerText = "Cole seus links de transmissão diretamente na caixa acima.";
+                    if (feedbackText) feedbackText.innerText = "Modo Direto ativo: cole seus links de transmissão diretamente na caixa acima.";
                     
                     const panel = document.getElementById('tgLoginPanel');
                     if (panel) panel.classList.add('hidden');
@@ -647,6 +643,9 @@ function clearDiscordSession() {
                 if (hasLocalSession) {
                     tg.logout();
                 } else {
+                    if (!TELEGRAM_API_URL) {
+                        return showToast("Modo Direto ativo: o serviço do Telegram está desativado. Cole seus links de transmissão na caixa acima!", "info");
+                    }
                     panel.classList.toggle('hidden');
                     // Reseta estado do form de login
                     document.getElementById('tgLoginPhoneStep').classList.remove('hidden');
@@ -832,7 +831,7 @@ function clearDiscordSession() {
 
                 const session = localStorage.getItem('fenixflix_tg_session');
                 if (!session && !TELEGRAM_API_URL) {
-                    return showToast("Envio via Telegram indisponível. Cole seus links de transmissão diretamente na caixa acima!", "info");
+                    return showToast("Modo Direto ativo: o upload via Telegram está desativado. Cole seus links de transmissão na caixa acima!", "info");
                 }
                 if (!session) {
                     const panel = document.getElementById('tgLoginPanel');
@@ -1145,6 +1144,9 @@ function clearDiscordSession() {
                 }
 
                 const session = localStorage.getItem('fenixflix_tg_session');
+                if (!session && !TELEGRAM_API_URL) {
+                    return showToast("Modo Direto ativo: o upload via Telegram está desativado. Cole seus links de transmissão na caixa acima!", "info");
+                }
                 if (!session) {
                     const panel = document.getElementById('tgLoginPanel');
                     if (panel) panel.classList.remove('hidden');
@@ -1212,6 +1214,9 @@ function clearDiscordSession() {
             },
 
             migrateAllLinks: async () => {
+                if (!TELEGRAM_API_URL) {
+                    return showToast("Modo Direto ativo: o serviço do Telegram está desativado. Cole os links diretos na caixa de texto!", "info");
+                }
                 const textarea = document.getElementById('manualLinks');
                 const rawText = textarea.value.trim();
                 if (!rawText) return showToast("Cole os links de vídeo na caixa de texto primeiro!", "warning");
