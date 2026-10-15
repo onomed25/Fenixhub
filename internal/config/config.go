@@ -25,6 +25,8 @@ type Config struct {
 	HFToken                string
 	HFDatabaseRepo         string
 	HFDatabaseType         string
+	HFRepoName             string
+	HFRepoType             string
 	DatabaseSource         string
 	TelegramAPIURL         string
 }
@@ -69,6 +71,14 @@ func LoadConfig() *Config {
 	if hfDatabaseType == "" {
 		hfDatabaseType = "dataset"
 	}
+	hfRepoName := os.Getenv("HF_REPO_NAME")
+	if hfRepoName == "" {
+		hfRepoName = "Fenixflix/videos"
+	}
+	hfRepoType := os.Getenv("HF_REPO_TYPE")
+	if hfRepoType == "" {
+		hfRepoType = "dataset"
+	}
 	dbSource := os.Getenv("DATABASE_SOURCE")
 	if dbSource == "" && hfToken != "" {
 		dbSource = "huggingface"
@@ -93,6 +103,8 @@ func LoadConfig() *Config {
 		HFToken:                hfToken,
 		HFDatabaseRepo:         hfDatabaseRepo,
 		HFDatabaseType:         hfDatabaseType,
+		HFRepoName:             hfRepoName,
+		HFRepoType:             hfRepoType,
 		DatabaseSource:         dbSource,
 		TelegramAPIURL:         os.Getenv("TELEGRAM_API_URL"),
 	}

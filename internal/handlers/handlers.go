@@ -71,10 +71,54 @@ func (h *Handler) Health(c *gin.Context) {
 }
 
 func (h *Handler) GetHfConfig(c *gin.Context) {
+	if h.cfg.HFToken == "" {
+		c.JSON(200, gin.H{
+			"accounts": []interface{}{},
+			"message":  "HF_TOKEN não configurado no servidor.",
+		})
+		return
+	}
+
+	repoName := h.cfg.HFRepoName
+	if repoName == "" {
+		repoName = "Fenixflix/videos"
+	}
+	repoType := h.cfg.HFRepoType
+	if repoType == "" {
+		repoType = "dataset"
+	}
+
+	accounts := []gin.H{
+		{
+			"id":    "default",
+			"name":  repoName,
+			"repo":  repoName,
+			"type":  repoType,
+			"token": h.cfg.HFToken,
+		},
+	}
+
 	c.JSON(200, gin.H{
-		"accounts": []interface{}{},
-		"message":  "Hugging Face desativado. Armazenamento direto no PostgreSQL/Render.",
+		"accounts": accounts,
+		"message":  "Hugging Face ativo.",
 	})
+}
+
+func (h *Handler) StreamVideo(c *gin.Context) {
+	rawPath := c.Param("filepath")
+	cleanPath := strings.TrimPrefix(rawPath, "/")
+	if cleanPath == "" {
+		c.String(400, "Arquivo inválido")
+		return
+	}
+	parts := strings.Split(cleanPath, "/")
+	filename := parts[len(parts)-1]
+	repoName := h.cfg.HFRepoName
+	if repoName == "" {
+		repoName = "Fenixflix/videos"
+	}
+	targetURL := fmt.Sprintf("https://huggingface.co/datasets/%s/resolve/main/%s", repoName, url.PathEscape(filename))
+	c.Redirect(http.StatusFound, targetURL)
 }
 
 // ----------------------------------------------------------------------------

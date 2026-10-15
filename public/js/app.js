@@ -328,34 +328,20 @@ function clearDiscordSession() {
                 }
             }
 
-            // Controle de visibilidade das opções de upload (Bot vs Teste):
-            // - Logado com cargo (Colaborador, Ajudante ou Admin): vê AMBOS (Bot e Teste)
-            // - Usuário público comum (deslogado ou sem cargo): vê APENAS Bot (Teste 100% oculto)
+            // Controle de visibilidade das opções de upload (Hugging Face vs Bot):
             const labelUploadBot = document.getElementById('labelUploadBot') || document.querySelector('input[name="uploadProvider"][value="bot"]')?.closest('label');
             const labelUploadTeste = document.getElementById('labelUploadTeste') || document.querySelector('input[name="uploadProvider"][value="teste"]')?.closest('label');
 
-            if (isColaborador || isAjudante || isAdmin) {
-                // 1. Colaborador / Ajudante / Admin: Ambos visíveis
-                if (labelUploadBot) {
-                    labelUploadBot.classList.remove('hidden');
-                    labelUploadBot.classList.add('flex');
-                }
-                if (labelUploadTeste) {
-                    labelUploadTeste.classList.remove('hidden');
-                    labelUploadTeste.classList.add('flex');
-                }
-            } else {
-                // 2. Usuário Comum / Deslogado: Apenas Bot visível (Teste 100% oculto)
-                if (labelUploadBot) {
-                    labelUploadBot.classList.remove('hidden');
-                    labelUploadBot.classList.add('flex');
-                }
-                if (labelUploadTeste) {
-                    labelUploadTeste.classList.add('hidden');
-                    labelUploadTeste.classList.remove('flex');
-                }
-                toggleUploadProvider('bot');
+            if (labelUploadBot) {
+                labelUploadBot.classList.remove('hidden');
+                labelUploadBot.classList.add('flex');
             }
+            if (labelUploadTeste) {
+                labelUploadTeste.classList.remove('hidden');
+                labelUploadTeste.classList.add('flex');
+            }
+            const currentProvider = document.querySelector('input[name="uploadProvider"]:checked')?.value || 'teste';
+            toggleUploadProvider(currentProvider);
 
             // Ocultar Visualizar JSON (Raw) para Ajudantes e Colaboradores (apenas Admin pode ver as URLs cruas)
             const btnSubPreview = document.getElementById('btn-sub-preview');
@@ -1556,7 +1542,7 @@ function clearDiscordSession() {
                 } catch (e) {}
 
                 if (!allHfAccounts || allHfAccounts.length === 0) {
-                    showToast("Nenhuma conta do servidor teste configurada no servidor.", "error");
+                    showToast("Nenhuma conta do Hugging Face configurada no servidor.", "error");
                     return;
                 }
 
@@ -1603,7 +1589,7 @@ self.onmessage = async (e) => {
                                 statusEl.innerHTML = `<span class="text-amber-400 font-semibold">Processando e Enviando (${targetAcc.name || targetAcc.repo})...</span>`;
                             }
                             if (progressState) {
-                                progressState.innerText = `Enviando ${file.name} para o servidor teste (${targetAcc.repo}) em segundo plano...`;
+                                progressState.innerText = `Enviando ${file.name} para o Hugging Face (${targetAcc.repo}) em segundo plano...`;
                             }
                             progressValues[index] = 0.05;
                             updateGlobalProgress();
@@ -1694,7 +1680,7 @@ self.onmessage = async (e) => {
 
                 if (btn) {
                     btn.disabled = false;
-                    btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Enviar Direto';
+                    btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Fazer Upload';
                 }
                 if (progressState) {
                     progressState.innerText = `Envio concluído! ${successCount} de ${files.length} vídeos enviados com sucesso.`;

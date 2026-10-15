@@ -591,33 +591,33 @@
                             <!-- Seletor Tipo de Upload: Bot vs Teste -->
                             <div id="uploadProviderSwitcher" class="flex items-center justify-between border-b border-zinc-800/60 pb-3 mb-4">
                                 <div class="flex gap-6" id="uploadProviderRadios">
-                                    <label id="labelUploadBot" class="flex items-center gap-2.5 cursor-pointer group">
+                                    <label id="labelUploadTeste" class="flex items-center gap-2.5 cursor-pointer group">
                                         <div class="relative flex items-center justify-center">
-                                            <input type="radio" name="uploadProvider" value="bot" checked onchange="toggleUploadProvider('bot')" class="peer appearance-none w-4 h-4 border-2 border-zinc-600 rounded-full checked:border-sky-400 focus:outline-none transition-colors">
-                                            <div class="absolute w-2 h-2 rounded-full bg-sky-400 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
-                                        </div>
-                                        <span class="font-medium text-xs text-zinc-400 group-hover:text-zinc-200 peer-checked:text-white transition flex items-center gap-1.5">
-                                            <i class="fa-brands fa-telegram text-sky-400 text-sm"></i> Bot
-                                        </span>
-                                    </label>
-                                    <label id="labelUploadTeste" class="hidden items-center gap-2.5 cursor-pointer group">
-                                        <div class="relative flex items-center justify-center">
-                                            <input type="radio" name="uploadProvider" value="teste" onchange="toggleUploadProvider('teste')" class="peer appearance-none w-4 h-4 border-2 border-zinc-600 rounded-full checked:border-amber-400 focus:outline-none transition-colors">
+                                            <input type="radio" name="uploadProvider" value="teste" checked onchange="toggleUploadProvider('teste')" class="peer appearance-none w-4 h-4 border-2 border-zinc-600 rounded-full checked:border-amber-400 focus:outline-none transition-colors">
                                             <div class="absolute w-2 h-2 rounded-full bg-amber-400 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
                                         </div>
                                         <span class="font-medium text-xs text-zinc-400 group-hover:text-zinc-200 peer-checked:text-white transition flex items-center gap-1.5">
-                                            <i class="fa-solid fa-flask text-amber-400 text-sm"></i> Teste
+                                            <i class="fa-solid fa-cloud-arrow-up text-amber-400 text-sm"></i> Upload de Vídeo (Hugging Face)
+                                        </span>
+                                    </label>
+                                    <label id="labelUploadBot" class="flex items-center gap-2.5 cursor-pointer group">
+                                        <div class="relative flex items-center justify-center">
+                                            <input type="radio" name="uploadProvider" value="bot" onchange="toggleUploadProvider('bot')" class="peer appearance-none w-4 h-4 border-2 border-zinc-600 rounded-full checked:border-sky-400 focus:outline-none transition-colors">
+                                            <div class="absolute w-2 h-2 rounded-full bg-sky-400 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
+                                        </div>
+                                        <span class="font-medium text-xs text-zinc-400 group-hover:text-zinc-200 peer-checked:text-white transition flex items-center gap-1.5">
+                                            <i class="fa-brands fa-telegram text-sky-400 text-sm"></i> Telegram (Opcional)
                                         </span>
                                     </label>
                                 </div>
-                                <div id="uploadProviderBadge">
-                                    <span id="tgStatusBadge" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-500">Verificando...</span>
+                                <div id="uploadProviderBadge" class="hidden">
+                                    <span id="tgStatusBadge" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-500">Links Diretos</span>
                                     <button onclick="tg.toggleConnection()" id="btnTgConnectToggle" class="text-[9px] font-semibold text-primary hover:underline ml-1">Conectar</button>
                                 </div>
                             </div>
 
                             <!-- SEÇÃO 1: MODO BOT (TELEGRAM) -->
-                            <div id="uploadSectionBot" class="space-y-3">
+                            <div id="uploadSectionBot" class="hidden space-y-3">
                                 <!-- Painel de Login/Conexão do Telegram -->
                                 <div id="tgLoginPanel" class="hidden mb-4 p-3 bg-zinc-900/60 rounded-lg border border-zinc-800 space-y-3">
                                     <p class="text-[10px] text-zinc-400">Conecte sua conta do Telegram para poder converter vídeos usando sua própria conta:</p>
@@ -758,16 +758,16 @@
                                 </div>
                             </div>
 
-                            <!-- SEÇÃO 2: MODO TESTE (UPLOAD DIRETO) -->
-                            <div id="uploadSectionTeste" class="hidden space-y-3">
+                            <!-- SEÇÃO 2: MODO UPLOAD DIRETO HUGGING FACE -->
+                            <div id="uploadSectionTeste" class="space-y-3">
                                 <div class="flex flex-col sm:flex-row gap-2">
                                     <input type="file" id="hfFile" class="hidden" multiple accept="video/*,.mkv,.mp4,.avi,.webm,.ts,.mov,.flv,.3gp,.mpeg,.m4v" onchange="hfUpload.handleFileChange(this)">
                                     <label for="hfFile" class="input-unified flex-grow p-3 rounded-lg text-xs cursor-pointer flex items-center justify-center sm:justify-start gap-2 hover:bg-zinc-800 transition-colors border-dashed border-zinc-700 hover:border-amber-500 group">
                                         <i class="fa-solid fa-cloud-arrow-up text-zinc-500 group-hover:text-amber-400 transition-colors"></i>
-                                        <span id="hfFileName" class="text-zinc-400 font-medium group-hover:text-zinc-200 transition-colors">Selecionar Vídeo do Celular/PC...</span>
+                                        <span id="hfFileName" class="text-zinc-400 font-medium group-hover:text-zinc-200 transition-colors">Selecionar Vídeos do Celular/PC...</span>
                                     </label>
                                     <button onclick="hfUpload.startUpload()" id="btnHfUpload" class="bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white px-6 py-3 rounded-lg text-xs font-medium transition-all shadow-sm flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
-                                        <i class="fa-solid fa-bolt"></i> Enviar Direto
+                                        <i class="fa-solid fa-cloud-arrow-up"></i> Fazer Upload
                                     </button>
                                 </div>
 
