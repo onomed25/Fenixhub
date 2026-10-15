@@ -26,6 +26,7 @@ type Config struct {
 	HFDatabaseRepo         string
 	HFDatabaseType         string
 	DatabaseSource         string
+	TelegramAPIURL         string
 }
 
 func LoadConfig() *Config {
@@ -93,5 +94,6 @@ func LoadConfig() *Config {
 		HFDatabaseRepo:         hfDatabaseRepo,
 		HFDatabaseType:         hfDatabaseType,
 		DatabaseSource:         dbSource,
+		TelegramAPIURL:         os.Getenv("TELEGRAM_API_URL"),
 	}
 }

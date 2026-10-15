@@ -6799,12 +6799,12 @@ self.onmessage = async (e) => {
                         let avatarImgHtml = `<i class="fa-solid fa-user text-zinc-400 text-sm"></i>`;
                         if (col.discord_id && col.avatar) {
                             const avatarUrl = `https://cdn.discordapp.com/avatars/${col.discord_id}/${col.avatar}.png?size=64`;
-                            avatarImgHtml = `<img src="${avatarUrl}" alt="Avatar de ${safeNick}" loading="lazy" decoding="async" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
+                            avatarImgHtml = `<img src="${avatarUrl}" alt="Avatar de ${safeNome}" loading="lazy" decoding="async" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
                         } else if (col.discord_id) {
                             // Calcula avatar padrão caso não tenha hash de avatar mas tenha ID
                             const defaultIdx = (parseInt(col.discord_id.slice(-4)) || 0) % 5;
                             const defaultAvatarUrl = `https://cdn.discordapp.com/embed/avatars/${defaultIdx}.png`;
-                            avatarImgHtml = `<img src="${defaultAvatarUrl}" alt="Avatar de ${safeNick}" loading="lazy" decoding="async" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
+                            avatarImgHtml = `<img src="${defaultAvatarUrl}" alt="Avatar de ${safeNome}" loading="lazy" decoding="async" class="w-full h-full object-cover rounded-xl" onerror="this.outerHTML='<i class=\\'fa-solid fa-user text-zinc-400 text-sm\\'></i>'">`;
                         }
 
                         tcHtml += `
