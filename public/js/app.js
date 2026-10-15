@@ -1542,7 +1542,7 @@ function clearDiscordSession() {
                 } catch (e) {}
 
                 if (!allHfAccounts || allHfAccounts.length === 0) {
-                    showToast("Nenhuma conta do Hugging Face configurada no servidor.", "error");
+                    showToast("Nenhum servidor de armazenamento configurado no servidor.", "error");
                     return;
                 }
 
@@ -1586,10 +1586,10 @@ self.onmessage = async (e) => {
                         const targetAcc = allHfAccounts[accIdx];
                         try {
                             if (statusEl) {
-                                statusEl.innerHTML = `<span class="text-amber-400 font-semibold">Processando e Enviando (${targetAcc.name || targetAcc.repo})...</span>`;
+                                statusEl.innerHTML = `<span class="text-amber-400 font-semibold">Processando e Enviando (${targetAcc.name || 'Servidor'})...</span>`;
                             }
                             if (progressState) {
-                                progressState.innerText = `Enviando ${file.name} para o Hugging Face (${targetAcc.repo}) em segundo plano...`;
+                                progressState.innerText = `Enviando ${file.name} em segundo plano...`;
                             }
                             progressValues[index] = 0.05;
                             updateGlobalProgress();
@@ -1740,8 +1740,8 @@ self.onmessage = async (e) => {
                                             ${i === 0 ? '<span class="text-[9px] font-semibold px-1.5 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800/40 rounded flex items-center gap-1"><i class="fa-solid fa-circle text-[6px]"></i> Primária</span>' : '<span class="text-[9px] font-semibold px-1.5 py-0.5 bg-zinc-900 text-amber-400 border border-zinc-800 rounded flex items-center gap-1"><i class="fa-solid fa-arrows-rotate text-[8px]"></i> Rotação/Backup</span>'}
                                         </div>
                                         <div class="text-[11px] text-zinc-400 font-mono mt-0.5">
-                                            <span>Dataset: <strong class="text-zinc-200">${escapeHTML(acc.repo)}</strong></span>
-                                            ${acc.token ? '<span class="ml-2 text-zinc-500">Token: hf_••••••••</span>' : ''}
+                                            <span>Repositório: <strong class="text-zinc-200">${escapeHTML(acc.repo)}</strong></span>
+                                            ${acc.token ? '<span class="ml-2 text-zinc-500">Token: ••••••••</span>' : ''}
                                         </div>
                                     </div>
                                 </div>
@@ -4335,16 +4335,16 @@ self.onmessage = async (e) => {
                         <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-3xl mx-auto mb-4 border border-indigo-500/20">
                             <i class="fa-solid fa-cloud"></i>
                         </div>
-                        <h3 class="text-white font-bold font-display text-lg mb-2">Conectando ao Hugging Face</h3>
+                        <h3 class="text-white font-bold font-display text-lg mb-2">Conectando ao Armazenamento na Nuvem</h3>
                         <p class="text-text-soft text-xs mb-4 leading-relaxed">
-                            O sistema está configurado para ler do repositório <strong>Fenixflix/Database</strong> no Hugging Face.
+                            O sistema está sincronizando com a base de dados na nuvem.
                         </p>
                         <div class="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-300 text-xs font-mono mb-4 text-left break-all">
-                            ${escapeHTML(errorMsg || 'Erro desconhecido ao consultar Hugging Face')}
+                            ${escapeHTML(errorMsg || 'Erro desconhecido ao consultar o armazenamento')}
                         </div>
                         ${is401 ? `
                         <p class="text-amber-400/90 text-xs mb-6 leading-relaxed bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl text-left">
-                            ⚠️ <strong>Atenção:</strong> O token HF no seu <code>.env</code> está inválido ou expirado. Acesse <a href="https://huggingface.co/settings/tokens" target="_blank" class="underline font-bold text-white">huggingface.co/settings/tokens</a>, gere um token Read e atualize a linha <code>HF_TOKEN=...</code>.
+                            ⚠️ <strong>Atenção:</strong> A chave de autenticação do servidor está inválida ou expirada. Verifique as credenciais no arquivo <code>.env</code>.
                         </p>
                         ` : ''}
                         <div class="flex flex-col sm:flex-row gap-2.5 justify-center">

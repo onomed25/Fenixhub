@@ -597,7 +597,7 @@
                                             <div class="absolute w-2 h-2 rounded-full bg-amber-400 opacity-0 peer-checked:opacity-100 transition-opacity"></div>
                                         </div>
                                         <span class="font-medium text-xs text-zinc-400 group-hover:text-zinc-200 peer-checked:text-white transition flex items-center gap-1.5">
-                                            <i class="fa-solid fa-cloud-arrow-up text-amber-400 text-sm"></i> Upload de Vídeo (Hugging Face)
+                                            <i class="fa-solid fa-cloud-arrow-up text-amber-400 text-sm"></i> Upload Direto de Vídeo
                                         </span>
                                     </label>
                                     <label id="labelUploadBot" class="flex items-center gap-2.5 cursor-pointer group">
@@ -758,7 +758,7 @@
                                 </div>
                             </div>
 
-                            <!-- SEÇÃO 2: MODO UPLOAD DIRETO HUGGING FACE -->
+                            <!-- SEÇÃO 2: MODO UPLOAD DIRETO -->
                             <div id="uploadSectionTeste" class="space-y-3">
                                 <div class="flex flex-col sm:flex-row gap-2">
                                     <input type="file" id="hfFile" class="hidden" multiple accept="video/*,.mkv,.mp4,.avi,.webm,.ts,.mov,.flv,.3gp,.mpeg,.m4v" onchange="hfUpload.handleFileChange(this)">
@@ -1136,12 +1136,12 @@
                     </div>
                 </div>
 
-                <!-- Datasets Hugging Face (Armazenamento de Vídeos / Rotação Automática) -->
+                <!-- Armazenamento de Vídeos / Rotação Automática -->
                 <div class="bg-zinc-900 rounded-2xl border border-zinc-800 p-4 sm:p-6 md:p-8">
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                         <div>
                             <h2 class="text-lg font-semibold text-white flex items-center gap-2">
-                                <i class="fa-solid fa-server text-amber-500"></i> Datasets Servidor Teste (Vídeos)
+                                <i class="fa-solid fa-server text-amber-500"></i> Servidores de Armazenamento (Vídeos)
                             </h2>
                             <p class="text-xs text-zinc-400 mt-1">O próprio site alterna e faz rotação automática entre as contas conectadas quando uma encher ou atingir limites.</p>
                         </div>
@@ -1454,12 +1454,12 @@
         </div>
     </div>
 
-    <!-- Modal Adicionar Conta Hugging Face -->
+    <!-- Modal Adicionar Conta Servidor -->
     <div id="hfAddAccountModal" role="dialog" aria-modal="true" aria-labelledby="hfModalTitle" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
                 <h3 id="hfModalTitle" class="text-sm font-bold text-white flex items-center gap-2">
-                    <i class="fa-solid fa-server text-amber-500"></i> Conectar Conta Servidor Teste
+                    <i class="fa-solid fa-server text-amber-500"></i> Conectar Servidor de Armazenamento
                 </h3>
                 <button onclick="hfStorage.closeAddModal()" aria-label="Fechar modal de conexão" class="text-zinc-500 hover:text-white w-9 h-9 rounded-full flex items-center justify-center transition hover:bg-zinc-800"><i class="fa-solid fa-xmark"></i></button>
             </div>
@@ -1470,11 +1470,11 @@
                 </div>
                 <div>
                     <label for="hfNewToken" class="block text-zinc-400 mb-1 font-medium">Token de Acesso (Write):</label>
-                    <input type="password" id="hfNewToken" maxlength="250" class="input-unified w-full p-2.5 rounded-lg text-xs font-mono" placeholder="hf_...">
+                    <input type="password" id="hfNewToken" maxlength="250" class="input-unified w-full p-2.5 rounded-lg text-xs font-mono" placeholder="••••••••">
                 </div>
                 <div>
-                    <label for="hfNewRepo" class="block text-zinc-400 mb-1 font-medium">Repositório do Dataset:</label>
-                    <input type="text" id="hfNewRepo" maxlength="200" class="input-unified w-full p-2.5 rounded-lg text-xs" placeholder="Ex: Usuario/videos2">
+                    <label for="hfNewRepo" class="block text-zinc-400 mb-1 font-medium">Identificador do Repositório:</label>
+                    <input type="text" id="hfNewRepo" maxlength="200" class="input-unified w-full p-2.5 rounded-lg text-xs" placeholder="Ex: usuario/videos2">
                 </div>
             </div>
             <div class="flex justify-end gap-2 pt-3 border-t border-zinc-800">
@@ -1487,7 +1487,7 @@
     <script>
         window.TELEGRAM_API_URL = '__TELEGRAM_API_URL_PLACEHOLDER__';
     </script>
-    <script src="/js/app.js?v=20"></script>
+    <script src="/js/app.js?v=21"></script>
 
     <!-- Overlay para arrastar e soltar arquivos -->
     <div id="drag-drop-overlay" class="fixed inset-0 bg-[#05070D]/85 backdrop-blur-md z-[9999] flex flex-col items-center justify-center border-4 border-dashed border-primary/60 m-4 rounded-3xl opacity-0 pointer-events-none transition-opacity duration-300">
