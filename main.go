@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"fenixhub/internal/auth"
@@ -57,16 +58,49 @@ func main() {
 	r.Static("/js", "./public/js")
 	r.Static("/css", "./public/css")
 
-	// Rotas de entrada HTML
-	r.StaticFile("/", "./index.html")
-	r.StaticFile("/front", "./index.html")
-	r.StaticFile("/front.html", "./index.html")
+	// Rotas de entrada HTML com injeção de TELEGRAM_API_URL
+	serveIndex := func(c *gin.Context) {
+		htmlBytes, err := os.ReadFile("./index.html")
+		if err != nil {
+			c.String(500, "Erro ao carregar index.html")
+			return
+		}
+		html := string(htmlBytes)
+		if cfg.TelegramAPIURL != "" {
+			html = strings.ReplaceAll(html, "__TELEGRAM_API_URL_PLACEHOLDER__", cfg.TelegramAPIURL)
+		} else {
+			html = strings.ReplaceAll(html, "__TELEGRAM_API_URL_PLACEHOLDER__", "")
+		}
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.String(200, html)
+	}
+
+	r.GET("/", serveIndex)
+	r.GET("/front", serveIndex)
+	r.GET("/front.html", serveIndex)
+
+	// Rotas de fallback para Telegram (evita erros 404 no console)
+	r.GET("/api/telegram/status", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"configured": false,
+			"connected":  false,
+			"mensagem":   "Envio direto ativo via Render",
+		})
+	})
+	r.POST("/api/telegram/login-phone", func(c *gin.Context) {
+		c.JSON(200, gin.H{"erro": "Envio direto de vídeos via Render ativo."})
+	})
+	r.POST("/api/telegram/login-code", func(c *gin.Context) {
+		c.JSON(200, gin.H{"erro": "Envio direto de vídeos via Render ativo."})
+	})
 
 	// Health check
 	r.GET("/health", h.Health)
 
-	// Hugging Face Compatibilidade (desativado mas seguro)
+	// Hugging Face Configuração e Streaming de Vídeo
 	r.GET("/api/hf/config", h.GetHfConfig)
+	r.GET("/v/*filepath", h.StreamVideo)
+	r.HEAD("/v/*filepath", h.StreamVideo)
 
 	// API Catálogo
 	api := r.Group("/api")
