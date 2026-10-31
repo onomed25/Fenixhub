@@ -1965,7 +1965,9 @@ self.onmessage = async (e) => {
                         }
                         if (!qualities.includes(val)) {
                             qualities.push(val);
-                            localStorage.setItem('fenixflix_qualities', JSON.stringify(qualities));
+                            try {
+                                localStorage.setItem('fenixflix_qualities', JSON.stringify(qualities));
+                            } catch(e) {}
                         }
                         gen.loadQualities();
                         select.value = val;
@@ -3330,7 +3332,13 @@ self.onmessage = async (e) => {
                 const fName = gen.currentData.id || 'data';
                 document.getElementById('fileNamePreview').innerText = `${fName}.json`;
 
-                if(save) localStorage.setItem('fenixflix_draft', jsonStr);
+                if (save) {
+                    try {
+                        localStorage.setItem('fenixflix_draft', jsonStr);
+                    } catch (e) {
+                        console.warn("Falha ao salvar rascunho no localStorage:", e);
+                    }
+                }
                 
                 // No celular, muda automaticamente a visualização para a aba de Visualizar JSON
                 if (window.innerWidth < 1024) {
@@ -3350,7 +3358,11 @@ self.onmessage = async (e) => {
                         stats = `${gen.currentData.streams ? gen.currentData.streams.length : 0} Opções`;
                     }
                     document.getElementById('jsonStats').innerText = stats;
-                    localStorage.setItem('fenixflix_draft', rawValue);
+                    try {
+                        localStorage.setItem('fenixflix_draft', rawValue);
+                    } catch (err) {
+                        console.warn("Falha ao salvar rascunho no localStorage:", err);
+                    }
                 } catch (e) {
                     document.getElementById('jsonStats').innerText = 'JSON Inválido';
                 }
