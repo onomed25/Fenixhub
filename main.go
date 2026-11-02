@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"fenixhub/internal/auth"
 	"fenixhub/internal/config"
@@ -111,6 +112,7 @@ func main() {
 		api.GET("/stats", h.GetStats)
 		api.GET("/colaboradores", h.GetColaboradores)
 		api.GET("/vistos", h.GetVistos)
+		api.POST("/admin/reset-vistos", auth.RequireAdminOrAjudante(cfg), h.ResetVistos)
 
 		// Exclusão e ocultação
 		api.DELETE("/delete", auth.RequireAdminOrAjudante(cfg), h.DeleteFile)
@@ -159,6 +161,25 @@ func main() {
 		}
 		c.JSON(http.StatusNotFound, gin.H{"erro": "Rota não encontrada"})
 	})
+
+	// Agendador de tarefas periódicas: Limpeza semanal dos mais vistos
+	go func() {
+		if ran, err := db.CheckAndRunWeeklyViewsCleanup(); err == nil && ran {
+			if h.GetViewsTracker() != nil {
+				h.GetViewsTracker().Reset()
+			}
+		}
+
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			if ran, err := db.CheckAndRunWeeklyViewsCleanup(); err == nil && ran {
+				if h.GetViewsTracker() != nil {
+					h.GetViewsTracker().Reset()
+				}
+			}
+		}
+	}()
 
 	addr := fmt.Sprintf("0.0.0.0:%s", cfg.Port)
 	log.Printf("🚀 Fenixhub Go Server rodando em http://%s", addr)

@@ -244,23 +244,38 @@ func (h *Handler) GetContent(c *gin.Context) {
 	if id == "" {
 		id = nome
 	}
+	id = strings.TrimSpace(strings.TrimSuffix(id, ".json"))
 
-	currentViews := 0
-	if vRaw, ok := item["views"]; ok {
-		switch v := vRaw.(type) {
-		case float64:
-			currentViews = int(v)
-		case int:
-			currentViews = v
-		}
+	// Persiste visualização no banco de dados relacional
+	if h.db != nil && id != "" {
+		go func(idToRecord string) {
+			_ = h.db.IncrementView(idToRecord)
+		}(id)
 	}
 
 	if h.viewsTracker != nil {
-		newViews := h.viewsTracker.IncrementViews(id, nome, currentViews)
+		newViews := h.viewsTracker.IncrementViews(id, nome)
 		item["views"] = newViews
 	}
 
 	c.JSON(200, item)
+}
+
+func (h *Handler) GetViewsTracker() *views.Tracker {
+	return h.viewsTracker
+}
+
+func (h *Handler) ResetVistos(c *gin.Context) {
+	if h.db != nil {
+		_ = h.db.ResetTopViews()
+	}
+	if h.viewsTracker != nil {
+		h.viewsTracker.Reset()
+	}
+	c.JSON(200, gin.H{
+		"sucesso":  true,
+		"mensagem": "Ranking de mais vistos resetado com sucesso para um novo ciclo semanal.",
+	})
 }
 
 func (h *Handler) GetCount(c *gin.Context) {
@@ -546,7 +561,9 @@ func (h *Handler) GetPending(c *gin.Context) {
 
 func (h *Handler) ApprovePending(c *gin.Context) {
 	var body struct {
-		Nome string `json:"nome"`
+		Nome             string                 `json:"nome"`
+		Conteudo         map[string]interface{} `json:"conteudo"`
+		RestantePendente map[string]interface{} `json:"restantePendente"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.Nome) == "" {
 		c.JSON(400, gin.H{"erro": "Nome do item obrigatório."})
@@ -555,13 +572,33 @@ func (h *Handler) ApprovePending(c *gin.Context) {
 
 	cleanNome := strings.TrimSpace(body.Nome)
 
-	if h.hfClient != nil && h.hfClient.IsConfigured() {
-		if err := h.hfClient.ApprovePending(cleanNome); err != nil {
-			fmt.Printf("⚠️ Erro ao aprovar pendente no Hugging Face: %v\n", err)
+	if body.Conteudo != nil {
+		if h.hfClient != nil && h.hfClient.IsConfigured() {
+			if err := h.hfClient.SaveContent(cleanNome, body.Conteudo, false); err != nil {
+				fmt.Printf("⚠️ Erro ao salvar conteúdo aprovado no HF: %v\n", err)
+			}
+			if body.RestantePendente != nil && len(body.RestantePendente) > 0 {
+				_ = h.hfClient.SaveContent(cleanNome, body.RestantePendente, true)
+			} else {
+				_ = h.hfClient.DeleteFile("pendentes/" + cleanNome)
+			}
 		}
+		if h.db != nil {
+			_ = h.db.SaveContent(cleanNome, body.Conteudo, false)
+			if body.RestantePendente != nil && len(body.RestantePendente) > 0 {
+				_ = h.db.SaveContent(cleanNome, body.RestantePendente, true)
+			} else {
+				_ = h.db.RejectPending(cleanNome)
+			}
+		}
+	} else {
+		if h.hfClient != nil && h.hfClient.IsConfigured() {
+			if err := h.hfClient.ApprovePending(cleanNome); err != nil {
+				fmt.Printf("⚠️ Erro ao aprovar pendente no Hugging Face: %v\n", err)
+			}
+		}
+		_ = h.db.ApprovePending(cleanNome)
 	}
-
-	_ = h.db.ApprovePending(cleanNome)
 
 	h.InvalidateCatalogCache()
 	c.JSON(200, gin.H{"sucesso": true, "mensagem": "Item aprovado com sucesso!"})
@@ -887,13 +924,15 @@ func (h *Handler) GetVistos(c *gin.Context) {
 
 	rankingMap := make(map[string]int)
 	typeMap := make(map[string]string)
+	catalogViewsMap := make(map[string]int)
+	validCatalogIDs := make(map[string]bool)
 
 	// 1. Busca do catálogo do Hugging Face ou banco local
 	var items []map[string]interface{}
 	if h.hfClient != nil && h.hfClient.IsConfigured() {
 		items, _ = h.hfClient.FetchCatalog(false)
 	}
-	if len(items) == 0 {
+	if len(items) == 0 && h.db != nil {
 		items, _ = h.db.GetCatalog(false)
 	}
 
@@ -916,9 +955,17 @@ func (h *Handler) GetVistos(c *gin.Context) {
 			continue
 		}
 
-		if mediaType != "" {
-			typeMap[id] = mediaType
+		if mediaType == "" {
+			if _, hasNuviometa := item["nuviometaVideos"]; hasNuviometa {
+				mediaType = "series"
+			} else if _, hasSeasons := item["seasons"]; hasSeasons {
+				mediaType = "series"
+			} else {
+				mediaType = "movie"
+			}
 		}
+		typeMap[id] = mediaType
+		validCatalogIDs[id] = true
 
 		baseViews := 0
 		if vRaw, ok := item["views"]; ok {
@@ -929,36 +976,54 @@ func (h *Handler) GetVistos(c *gin.Context) {
 				baseViews = v
 			}
 		}
-
-		v := baseViews
-		if h.viewsTracker != nil {
-			v = h.viewsTracker.GetViews(id, nomeDoJSON, baseViews)
-		}
-		rankingMap[id] = v
+		catalogViewsMap[id] = baseViews
 	}
 
-	// 2. Incorpora contagens rastreadas em memória/disco
+	// 2. Incorpora contagens dinâmicas do banco de dados relacional (top_views do ciclo atual)
+	hasDynamicViews := false
+	if h.db != nil {
+		if dbViews, err := h.db.GetTopViews(); err == nil && len(dbViews) > 0 {
+			for id, count := range dbViews {
+				id = strings.TrimSpace(strings.TrimSuffix(id, ".json"))
+				if !validCatalogIDs[id] {
+					continue
+				}
+				if count > 0 {
+					rankingMap[id] = count
+					hasDynamicViews = true
+				}
+			}
+		}
+	}
+
+	// 3. Incorpora contagens rastreadas em memória (viewsTracker do ciclo atual)
 	if h.viewsTracker != nil {
 		for id, count := range h.viewsTracker.GetAll() {
 			id = strings.TrimSpace(strings.TrimSuffix(id, ".json"))
-			if id == "" || id == "tt_file_upload" || id == "tt9999999" || strings.HasPrefix(id, "test") {
+			if !validCatalogIDs[id] {
 				continue
 			}
 			if cur, exists := rankingMap[id]; !exists || count > cur {
-				rankingMap[id] = count
+				if count > 0 {
+					rankingMap[id] = count
+					hasDynamicViews = true
+				}
 			}
 		}
 	}
 
-	// 3. Incorpora contagens do banco de dados relacional
-	if dbViews, err := h.db.GetTopViews(); err == nil {
-		for id, count := range dbViews {
-			id = strings.TrimSpace(strings.TrimSuffix(id, ".json"))
-			if id == "" || id == "tt_file_upload" || id == "tt9999999" || strings.HasPrefix(id, "test") {
-				continue
-			}
-			if cur, exists := rankingMap[id]; !exists || count > cur {
-				rankingMap[id] = count
+	// 4. Se não houver visualizações dinâmicas no ciclo atual,
+	// usa o fallback do catálogo original para não deixar a lista vazia.
+	// Se houver visualizações dinâmicas, garante que itens do catálogo
+	// sem visualização recente entrem com 0 para ordenação completa.
+	if !hasDynamicViews {
+		for id, v := range catalogViewsMap {
+			rankingMap[id] = v
+		}
+	} else {
+		for id := range validCatalogIDs {
+			if _, exists := rankingMap[id]; !exists {
+				rankingMap[id] = 0
 			}
 		}
 	}

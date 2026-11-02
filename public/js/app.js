@@ -3139,30 +3139,65 @@ self.onmessage = async (e) => {
                     let currentSmartSeason = null;
                     let currentSmartEp = null;
 
-                    lines.forEach(line => {
+                    lines.forEach((line, lineIdx) => {
                         const url = gen.cleanUrl(line);
                         
                         let lineSeason = null;
                         let lineEp = null;
                         
-                        // Remove URL to avoid false matches (e.g. hex hashes like 'e842', resolutions like '1080x720')
-                        let parseLine = line;
-                        if (url) {
-                            parseLine = line.replace(/https?:\/\/\S+/gi, '');
+                        // Extração do nome do arquivo original (comentário com # ou pathname da URL)
+                        let fileName = '';
+                        const hashIdx = line.indexOf('#');
+                        if (hashIdx !== -1) {
+                            fileName = line.substring(hashIdx + 1).trim();
+                        } else if (url) {
+                            try {
+                                const cleanUrl = url.split('?')[0].split('#')[0];
+                                const lastSlash = cleanUrl.lastIndexOf('/');
+                                if (lastSlash !== -1) {
+                                    fileName = decodeURIComponent(cleanUrl.substring(lastSlash + 1)).trim();
+                                }
+                            } catch (_) {
+                                const cleanUrl = url.split('?')[0].split('#')[0];
+                                const lastSlash = cleanUrl.lastIndexOf('/');
+                                if (lastSlash !== -1) {
+                                    fileName = cleanUrl.substring(lastSlash + 1).trim();
+                                }
+                            }
                         }
-                        
-                        const sxeMatch = parseLine.match(/S(\d+)\s*E(\d+)|T(\d+)\s*EP?(\d+)|(\d+)x(\d+)/i);
+
+                        // Texto para detecção inteligente: prioriza o nome do arquivo se existir; se não, usa a linha limpa
+                        let parseText = fileName || line;
+                        parseText = parseText.replace(/https?:\/\/[^\/]+\//gi, '');
+
+                        // 1. Padrão Clássico S01E02, T01E02, 1x02
+                        const sxeMatch = parseText.match(/(?:^|[^a-zA-Z0-9])(?:S(\d{1,2})\s*E(\d{1,4})|T(\d{1,2})\s*EP?(\d{1,4})|(\d{1,2})\s*x\s*(\d{1,4}))(?:[^a-zA-Z0-9]|$)/i);
                         if (sxeMatch) {
                             lineSeason = parseInt(sxeMatch[1] || sxeMatch[3] || sxeMatch[5]).toString();
                             lineEp = parseInt(sxeMatch[2] || sxeMatch[4] || sxeMatch[6]).toString();
                         } else {
-                            const epMatch = parseLine.match(/(?:^|[^a-zA-Z])(?:EPIS[ÓÕOÃA]DIO|EPISODE|EP|E)[\s_]*#?[\s_]*(\d+)/i);
-                            if (epMatch) {
-                                lineEp = parseInt(epMatch[1]).toString();
-                            }
-                            const seasonMatch = parseLine.match(/(?:^|[^a-zA-Z])(?:TEMPORADA|TEMP)[\s_]*#?[\s_]*(\d+)/i) || parseLine.match(/(?:^|[^a-zA-Z])[TS][\s_]*#?[\s_]*(\d+)(?:[^a-zA-Z]|$)/i);
+                            // 2. Temporada explícita (Temporada 2, Temp 2, Season 2, T2)
+                            const seasonMatch = parseText.match(/(?:^|[^a-zA-Z0-9])(?:TEMPORADA|TEMP|SEASON)[\s_.-]*#?(\d{1,2})(?:[^a-zA-Z0-9]|$)/i)
+                                || parseText.match(/(?:^|[^a-zA-Z0-9])[TS][\s_.-]*#?(\d{1,2})(?:[^a-zA-Z0-9]|$)/i);
                             if (seasonMatch) {
                                 lineSeason = parseInt(seasonMatch[1]).toString();
+                            }
+
+                            // 3. Episódio explícito (Episódio 5, Episode 5, Ep 5, Cap 5, E5)
+                            const epMatch = parseText.match(/(?:^|[^a-zA-Z0-9])(?:EPIS[ÓÕOÃA]DIO|EPISODE|EP|CAP[ÍI]TULO|CAP)[\s_.-]*#?(\d{1,4})(?:[^a-zA-Z0-9]|$)/i)
+                                || parseText.match(/(?:^|[\s_.-])[eE](\d{1,4})(?:[\s_.-]|$)/);
+                            if (epMatch) {
+                                lineEp = parseInt(epMatch[1]).toString();
+                            } else {
+                                // 4. Padrão Anime / Grupos de Lançamento: "Nome - 05", "Nome_05.mp4", "[05]"
+                                const animeMatch = parseText.match(/[-_–—\s]\s*#?(\d{1,4})(?:\s*v\d+)?(?:\s*\[|\s*\(|\s*\.|\s*_|\s*-\s*|\s*$)/)
+                                    || parseText.match(/(?:\[|\()(\d{1,4})(?:\]|\))/);
+                                if (animeMatch) {
+                                    const numCandidate = parseInt(animeMatch[1]);
+                                    if (numCandidate !== 1080 && numCandidate !== 720 && numCandidate !== 480 && numCandidate !== 2160 && (numCandidate < 1920 || numCandidate > 2099)) {
+                                        lineEp = numCandidate.toString();
+                                    }
+                                }
                             }
                         }
 
@@ -3177,13 +3212,20 @@ self.onmessage = async (e) => {
                         let targetSeason;
                         let targetEp;
 
-                        // Se houver episódio declarado e a linha não possui marcação explícita SxxExx, vincula ao declarado!
-                        if (gen.declaredEpisode && !lineSeason && !lineEp && !currentSmartSeason && !currentSmartEp) {
+                        // Se há apenas 1 link e um episódio foi explicitamente declarado na interface, vincula a ele.
+                        // Se há múltiplos links colados, NÃO prender todos no mesmo ep: distribui sequencialmente!
+                        if (gen.declaredEpisode && lines.length === 1 && !lineSeason && !lineEp && !currentSmartSeason && !currentSmartEp) {
                             targetSeason = gen.declaredEpisode.season.toString();
                             targetEp = gen.declaredEpisode.epNum.toString();
-                        } else {
+                        } else if (lineSeason || lineEp) {
                             targetSeason = lineSeason || currentSmartSeason || manualSeason;
                             targetEp = lineEp || currentSmartEp || manualEp.toString();
+                        } else if (currentSmartSeason || currentSmartEp) {
+                            targetSeason = currentSmartSeason || manualSeason;
+                            targetEp = currentSmartEp || manualEp.toString();
+                        } else {
+                            targetSeason = manualSeason;
+                            targetEp = manualEp.toString();
                         }
 
                         if (!gen.currentData.streams[targetSeason]) gen.currentData.streams[targetSeason] = {};
@@ -3200,6 +3242,7 @@ self.onmessage = async (e) => {
                         const finalName = hasQuality ? `${finalFirstLine}\n${secondLine}` : finalFirstLine;
 
                         const streamObj = { "url": url, "name": finalName };
+                        if (fileName) streamObj.file_name = fileName;
                         if (nickVal) streamObj.colaborador = nickVal;
                         gen.currentData.streams[targetSeason][targetEp].push(streamObj);
                         addedCount++;
@@ -3209,13 +3252,7 @@ self.onmessage = async (e) => {
                         }
                         if (lineEp) {
                             manualEp = parseInt(lineEp) + 1;
-                        }
-
-                        if (gen.declaredEpisode && !lineSeason && !lineEp) {
-                            // Mantém o episódio declarado fixo para múltiplas transmissões (ex: 1080p, 720p, Dublado, Legendado)
-                        } else if (currentSmartSeason) {
-                            currentSmartEp = null;
-                        } else if (!lineSeason && !lineEp) {
+                        } else if (!gen.declaredEpisode || lines.length > 1) {
                             const maxEp = gen.getMaxEpForSeason(manualSeason);
                             if (maxEp && manualEp >= maxEp) {
                                 manualSeason = (parseInt(manualSeason) + 1).toString();
@@ -3234,6 +3271,20 @@ self.onmessage = async (e) => {
                     lines.forEach(line => {
                         const url = gen.cleanUrl(line);
                         if(url) {
+                            let fileName = '';
+                            const hashIdx = line.indexOf('#');
+                            if (hashIdx !== -1) {
+                                fileName = line.substring(hashIdx + 1).trim();
+                            } else if (url) {
+                                try {
+                                    const cleanUrl = url.split('?')[0].split('#')[0];
+                                    const lastSlash = cleanUrl.lastIndexOf('/');
+                                    if (lastSlash !== -1) {
+                                        fileName = decodeURIComponent(cleanUrl.substring(lastSlash + 1)).trim();
+                                    }
+                                } catch (_) {}
+                            }
+
                             const count = gen.currentData.streams.filter(s => {
                                 const parts = s.name.split('\n');
                                 const sAudio = parts[0] ? parts[0].replace(/\s+\d+$/, '') : '';
@@ -3245,6 +3296,7 @@ self.onmessage = async (e) => {
                             const finalName = hasQuality ? `${finalFirstLine}\n${secondLine}` : finalFirstLine;
                             
                             const streamObj = { "url": url, "name": finalName };
+                            if (fileName) streamObj.file_name = fileName;
                             if (nickVal) streamObj.colaborador = nickVal;
                             gen.currentData.streams.push(streamObj);
                             addedCount++;
@@ -6900,11 +6952,38 @@ self.onmessage = async (e) => {
                     let title = p.nome_do_json;
                     if (p.conteudo && p.conteudo.id) title = p.conteudo.title || p.conteudo.id;
 
+                    let epBadges = '';
+                    if (p.conteudo && p.conteudo.type === 'series' && p.conteudo.streams) {
+                        const seasons = Object.keys(p.conteudo.streams);
+                        let totalEps = 0;
+                        const epList = [];
+                        seasons.forEach(s => {
+                            const eps = Object.keys(p.conteudo.streams[s] || {}).sort((a, b) => Number(a) - Number(b));
+                            totalEps += eps.length;
+                            if (eps.length > 0) {
+                                epList.push(`T${s}: Ep ${eps.slice(0, 8).join(', ')}${eps.length > 8 ? '...' : ''}`);
+                            }
+                        });
+                        epBadges = `<div class="mt-1 flex flex-wrap gap-1 items-center">
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                                <i class="fa-solid fa-tv text-[9px]"></i> ${totalEps} ep(s)
+                            </span>
+                            <span class="text-[10px] text-zinc-400 font-mono">${escapeHTML(epList.join(' | '))}</span>
+                        </div>`;
+                    } else if (p.conteudo && p.conteudo.type === 'movie' && Array.isArray(p.conteudo.streams)) {
+                        epBadges = `<div class="mt-1">
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                <i class="fa-solid fa-film text-[9px]"></i> Filme (${p.conteudo.streams.length} stream)
+                            </span>
+                        </div>`;
+                    }
+
                     html += `
                         <tr class="border-b border-zinc-800/40 hover:bg-zinc-900/20 transition-colors">
                             <td class="py-3.5 pr-4 font-semibold text-white">
                                 <span class="text-indigo-400">${escapeHTML(title)}</span>
                                 <span class="block text-[10px] text-zinc-500 font-mono font-normal mt-0.5">${escapeHTML(p.nome_do_json)}</span>
+                                ${epBadges}
                             </td>
                             <td class="py-3.5 px-4 text-center text-[10px] text-zinc-500 font-mono">
                                 ${dataStr}
@@ -7071,6 +7150,7 @@ self.onmessage = async (e) => {
                                 let s = { ...originalStream };
                                 s.url = urlVal;
                                 s.name = `${audioVal}\n${qualityVal}`;
+                                if (originalStream.file_name) s.file_name = originalStream.file_name;
 
                                 if ((!s.colaborador || isPlaceholderNick(s.colaborador)) && pendente.conteudo.colaborador) {
                                     s.colaborador = pendente.conteudo.colaborador;
@@ -7097,6 +7177,7 @@ self.onmessage = async (e) => {
                                 let s = { ...originalStream };
                                 s.url = urlVal;
                                 s.name = `${audioVal}\n${qualityVal}`;
+                                if (originalStream.file_name) s.file_name = originalStream.file_name;
 
                                 if ((!s.colaborador || isPlaceholderNick(s.colaborador)) && pendente.conteudo.colaborador) {
                                     s.colaborador = pendente.conteudo.colaborador;
@@ -7192,6 +7273,22 @@ self.onmessage = async (e) => {
 
                 const displayUrl = s.url || '';
 
+                // Extrai nome original do arquivo ou último segmento da URL
+                let streamFileName = s.file_name || s.title || '';
+                if (!streamFileName && s.url) {
+                    try {
+                        const cleanUrl = s.url.split('?')[0].split('#')[0];
+                        const lastSlash = cleanUrl.lastIndexOf('/');
+                        if (lastSlash !== -1) {
+                            streamFileName = decodeURIComponent(cleanUrl.substring(lastSlash + 1)).trim();
+                        }
+                    } catch (_) {
+                        const cleanUrl = s.url.split('?')[0].split('#')[0];
+                        const lastSlash = cleanUrl.lastIndexOf('/');
+                        if (lastSlash !== -1) streamFileName = cleanUrl.substring(lastSlash + 1).trim();
+                    }
+                }
+
                 return `
                 <div class="stream-card p-4 bg-zinc-900/80 border border-zinc-800 rounded-2xl flex flex-col gap-3 mb-3 relative hover:border-zinc-700 transition shadow-sm">
                     <div class="flex justify-between items-center">
@@ -7205,6 +7302,17 @@ self.onmessage = async (e) => {
                             <input type="checkbox" class="approve-checkbox accent-emerald-500 cursor-pointer" ${dataAttr} checked onchange="window.toggleApproval(this)">
                             <span>Aprovar</span>
                         </label>
+                    </div>
+
+                    <!-- Nome do arquivo original detectado (para conferir número do episódio) -->
+                    <div class="bg-zinc-950/80 border border-zinc-800/80 rounded-xl px-3 py-2 flex items-center gap-2.5">
+                        <i class="fa-solid fa-file-video text-indigo-400 text-xs shrink-0"></i>
+                        <div class="flex-1 min-w-0">
+                            <span class="text-[9px] uppercase font-bold text-zinc-500 tracking-wider block">Arquivo / Link Original:</span>
+                            <span class="text-xs font-mono text-indigo-200 truncate block select-all font-semibold" title="${escapeHTML(streamFileName || displayUrl)}">
+                                ${escapeHTML(streamFileName || displayUrl)}
+                            </span>
+                        </div>
                     </div>
                     
                     <div class="grid grid-cols-2 gap-3">

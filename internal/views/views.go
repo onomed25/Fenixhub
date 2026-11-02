@@ -97,13 +97,10 @@ func (t *Tracker) GetViews(id, name string, fallback int) int {
 	if !exists {
 		return fallback
 	}
-	if cached < fallback {
-		return fallback
-	}
 	return cached
 }
 
-func (t *Tracker) IncrementViews(id, name string, currentBase int) int {
+func (t *Tracker) IncrementViews(id, name string, currentBase ...int) int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -113,9 +110,6 @@ func (t *Tracker) IncrementViews(id, name string, currentBase int) int {
 	}
 
 	cached := t.views[canon]
-	if currentBase > cached {
-		cached = currentBase
-	}
 	next := cached + 1
 	t.views[canon] = next
 
@@ -215,4 +209,13 @@ func (t *Tracker) loadFromDisk() {
 
 func (t *Tracker) Flush() {
 	t.saveToDisk()
+}
+
+func (t *Tracker) Reset() {
+	t.mu.Lock()
+	t.views = make(map[string]int)
+	t.aliases = make(map[string]string)
+	t.mu.Unlock()
+	t.saveToDisk()
+	log.Println("🔄 ViewsTracker resetado (novo ciclo semanal).")
 }
