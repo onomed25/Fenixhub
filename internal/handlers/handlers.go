@@ -421,7 +421,19 @@ func (h *Handler) Upload(c *gin.Context) {
 		return
 	}
 
-	// Atribuição de Colaborador
+	substituirFlag := c.Query("substituir") == "true" || c.PostForm("substituir") == "true" ||
+		c.Query("is_edit") == "true" || c.PostForm("is_edit") == "true"
+	if b, ok := incoming["substituir"].(bool); ok && b {
+		substituirFlag = true
+	}
+	if b, ok := incoming["is_edit"].(bool); ok && b {
+		substituirFlag = true
+	}
+	overrideColab := c.PostForm("override_colaborador") == "true" || c.Query("override_colaborador") == "true"
+	existingColabStr, _ := incoming["colaborador"].(string)
+	hasExplicitColab := strings.TrimSpace(existingColabStr) != ""
+
+	// Atribuição de Colaborador (preserva colaborador explícito quando enviado por Admin/Ajudante)
 	if user != nil {
 		discordName := user.GlobalName
 		if discordName == "" {
@@ -436,19 +448,23 @@ func (h *Handler) Upload(c *gin.Context) {
 			roleStr = "colaborador"
 		}
 
-		if incoming["colaborador"] == nil || incoming["colaborador"] == "" {
+		if !hasExplicitColab || (overrideColab && !privileged) {
 			incoming["colaborador"] = discordName
-		}
-		incoming["colaborador_id"] = user.ID
-		incoming["colaborador_role"] = roleStr
-		if user.Avatar != "" {
-			incoming["colaborador_avatar"] = user.Avatar
+			incoming["colaborador_id"] = user.ID
+			incoming["colaborador_role"] = roleStr
+			if user.Avatar != "" {
+				incoming["colaborador_avatar"] = user.Avatar
+			}
 		}
 	} else if uploaderNick := strings.TrimSpace(c.PostForm("uploader_nick")); uploaderNick != "" {
-		if incoming["colaborador"] == nil || incoming["colaborador"] == "" {
+		if !hasExplicitColab {
 			incoming["colaborador"] = uploaderNick
 		}
 	}
+
+	delete(incoming, "is_edit")
+	delete(incoming, "substituir")
+	delete(incoming, "preserve_original_colaborador")
 
 	var existing map[string]interface{}
 	if h.hfClient != nil && h.hfClient.IsConfigured() {
@@ -458,7 +474,24 @@ func (h *Handler) Upload(c *gin.Context) {
 		existing, _ = h.db.GetContent(nome)
 	}
 
-	merged := merger.MergeMediaContent(existing, incoming)
+	var merged map[string]interface{}
+	if privileged && substituirFlag {
+		if existing != nil {
+			if _, hasCriado := incoming["criado_em"]; !hasCriado {
+				if v, ok := existing["criado_em"]; ok {
+					incoming["criado_em"] = v
+				}
+			}
+			if _, hasViews := incoming["views"]; !hasViews {
+				if v, ok := existing["views"]; ok {
+					incoming["views"] = v
+				}
+			}
+		}
+		merged = merger.InjectDateIntoStreams(incoming)
+	} else {
+		merged = merger.MergeMediaContent(existing, incoming)
+	}
 
 	forcePendente := c.Query("force_pendente") == "true" || c.PostForm("force_pendente") == "true"
 	isColaborador := user != nil && (user.IsColaborador || user.IsAjudante)

@@ -3027,6 +3027,7 @@ self.onmessage = async (e) => {
             },
             clearFields: () => {
                 window.forcePendenteForEdit = false;
+                window.isEditingExisting = false;
                 gen.currentData = null;
                 gen.declaredEpisode = null;
                 gen.tmdbSeries = null;
@@ -3398,10 +3399,32 @@ self.onmessage = async (e) => {
                 }
             },
             syncManualEdit: () => {
+                const actions = document.getElementById('resultActions');
                 try {
                     const rawValue = document.getElementById('jsonOutput').value;
-                    gen.currentData = JSON.parse(rawValue);
-                    
+                    if (!rawValue.trim()) {
+                        gen.currentData = null;
+                        document.getElementById('jsonStats').innerText = 'Vazio';
+                        if (actions) actions.classList.add('hidden');
+                        return;
+                    }
+                    const parsed = JSON.parse(rawValue);
+                    if (!parsed.type && parsed.streams) {
+                        parsed.type = Array.isArray(parsed.streams) ? 'movie' : 'series';
+                    }
+                    gen.currentData = parsed;
+
+                    if (parsed.id) {
+                        const cid = document.getElementById('contentId');
+                        if (cid) cid.value = parsed.id;
+                        const fnPreview = document.getElementById('fileNamePreview');
+                        if (fnPreview) fnPreview.innerText = `${parsed.id}.json`;
+                    }
+                    if (parsed.type) {
+                        const typeRadio = document.querySelector(`input[name="contentType"][value="${parsed.type}"]`);
+                        if (typeRadio) typeRadio.checked = true;
+                    }
+
                     let stats = '';
                     if (gen.currentData.type === 'series') {
                         const seasons = Object.keys(gen.currentData.streams || {}).sort((a,b)=>parseInt(a)-parseInt(b));
@@ -3410,6 +3433,7 @@ self.onmessage = async (e) => {
                         stats = `${gen.currentData.streams ? gen.currentData.streams.length : 0} Opções`;
                     }
                     document.getElementById('jsonStats').innerText = stats;
+                    if (actions) actions.classList.remove('hidden');
                     try {
                         localStorage.setItem('fenixflix_draft', rawValue);
                     } catch (err) {
@@ -3417,6 +3441,169 @@ self.onmessage = async (e) => {
                     }
                 } catch (e) {
                     document.getElementById('jsonStats').innerText = 'JSON Inválido';
+                }
+            },
+
+            openPasteJsonModal: () => {
+                const modal = document.getElementById('pasteJsonModal');
+                const input = document.getElementById('pasteJsonInput');
+                const idEl = document.getElementById('pasteJsonId');
+                const colabEl = document.getElementById('pasteJsonColab');
+                if (!modal) return;
+                if (idEl) {
+                    idEl.value = '';
+                    idEl.dataset.autoFilled = 'true';
+                }
+                if (colabEl) {
+                    colabEl.value = '';
+                    colabEl.dataset.autoFilled = 'true';
+                }
+                if (input && !input.value.trim() && gen.currentData) {
+                    input.value = JSON.stringify(gen.currentData, null, 4);
+                }
+                gen.validatePastedJson();
+                modal.classList.remove('hidden');
+                if (input) input.focus();
+            },
+
+            closePasteJsonModal: () => {
+                const modal = document.getElementById('pasteJsonModal');
+                if (modal) modal.classList.add('hidden');
+            },
+
+            validatePastedJson: () => {
+                const input = document.getElementById('pasteJsonInput');
+                const statusEl = document.getElementById('pasteJsonStatus');
+                const idEl = document.getElementById('pasteJsonId');
+                const colabEl = document.getElementById('pasteJsonColab');
+                if (!input || !statusEl) return null;
+
+                const raw = input.value.trim();
+                if (!raw) {
+                    statusEl.className = 'text-[11px] font-mono text-zinc-500';
+                    statusEl.innerText = 'Aguardando JSON...';
+                    return null;
+                }
+
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                        throw new Error('O JSON raiz deve ser um objeto { ... }.');
+                    }
+                    if (!parsed.streams) {
+                        throw new Error('Propriedade "streams" não encontrada.');
+                    }
+                    if (!parsed.type) {
+                        parsed.type = Array.isArray(parsed.streams) ? 'movie' : 'series';
+                    }
+
+                    if (idEl && (!idEl.value.trim() || idEl.dataset.autoFilled === 'true')) {
+                        idEl.value = parsed.id || '';
+                        idEl.dataset.autoFilled = 'true';
+                    }
+                    if (colabEl && (!colabEl.value.trim() || colabEl.dataset.autoFilled === 'true')) {
+                        colabEl.value = parsed.colaborador || '';
+                        colabEl.dataset.autoFilled = 'true';
+                    }
+
+                    let summary = '';
+                    if (parsed.type === 'series' && typeof parsed.streams === 'object' && !Array.isArray(parsed.streams)) {
+                        const seasons = Object.keys(parsed.streams);
+                        let eps = 0;
+                        seasons.forEach(s => {
+                            if (parsed.streams[s] && typeof parsed.streams[s] === 'object') {
+                                eps += Object.keys(parsed.streams[s]).length;
+                            }
+                        });
+                        summary = `Série • ${parsed.id || 'sem ID'} • ${seasons.length} temp. • ${eps} ep.`;
+                    } else if (Array.isArray(parsed.streams)) {
+                        summary = `Filme • ${parsed.id || 'sem ID'} • ${parsed.streams.length} link(s)`;
+                    } else {
+                        throw new Error('Formato de "streams" incompatível com "type".');
+                    }
+
+                    statusEl.className = 'text-[11px] font-mono text-emerald-400';
+                    statusEl.innerText = `OK: ${summary}`;
+                    return parsed;
+                } catch (err) {
+                    statusEl.className = 'text-[11px] font-mono text-red-400';
+                    statusEl.innerText = `Erro: ${err.message}`;
+                    return null;
+                }
+            },
+
+            applyPastedJson: async (uploadNow = false) => {
+                const parsed = gen.validatePastedJson();
+                if (!parsed) {
+                    return showToast('Cole um JSON válido antes de continuar.', 'error');
+                }
+
+                const newId = (document.getElementById('pasteJsonId')?.value || '').trim();
+                const newColab = (document.getElementById('pasteJsonColab')?.value || '').trim();
+                const newAudio = (document.getElementById('pasteJsonAudio')?.value || '').trim();
+                const newQuality = (document.getElementById('pasteJsonQuality')?.value || '').trim();
+                const shouldReplace = Boolean(document.getElementById('pasteJsonReplace')?.checked);
+
+                if (newId) parsed.id = newId;
+                if (!parsed.id) {
+                    return showToast('Informe o ID (IMDb) antes de enviar.', 'warning');
+                }
+
+                if (newColab) {
+                    parsed.colaborador = newColab;
+                }
+
+                const updateStream = (s) => {
+                    if (!s || typeof s !== 'object') return;
+                    // Preserva s.url exatamente como está no JSON (não apaga início da URL)
+                    if (newColab) s.colaborador = newColab;
+                    if (newAudio || newQuality) {
+                        const parts = (s.name || '').split('\n');
+                        const audio = newAudio || (parts[0] ? parts[0].trim() : 'Dublado');
+                        const qual = newQuality || (parts[1] ? parts[1].trim() : '');
+                        s.name = qual ? `${audio}\n${qual}` : audio;
+                    }
+                };
+
+                if (parsed.type === 'movie' && Array.isArray(parsed.streams)) {
+                    parsed.streams.forEach(updateStream);
+                } else if (parsed.type === 'series' && parsed.streams && typeof parsed.streams === 'object') {
+                    Object.keys(parsed.streams).forEach(sKey => {
+                        const seasonObj = parsed.streams[sKey] || {};
+                        Object.keys(seasonObj).forEach(eKey => {
+                            const epList = seasonObj[eKey];
+                            if (Array.isArray(epList)) epList.forEach(updateStream);
+                        });
+                    });
+                }
+
+                window.isEditingExisting = shouldReplace;
+                window.forcePendenteForEdit = false;
+                if (shouldReplace) {
+                    parsed.is_edit = true;
+                    parsed.substituir = true;
+                } else {
+                    delete parsed.is_edit;
+                    delete parsed.substituir;
+                }
+
+                gen.currentData = parsed;
+                const cid = document.getElementById('contentId');
+                if (cid) cid.value = parsed.id;
+                const typeRadio = document.querySelector(`input[name="contentType"][value="${parsed.type}"]`);
+                if (typeRadio) typeRadio.checked = true;
+                if (typeof gen.toggleInputs === 'function') gen.toggleInputs();
+                gen.updateDisplay(true);
+
+                if (uploadNow) {
+                    await gen.uploadParaBanco(false);
+                    gen.closePasteJsonModal();
+                    if (typeof cat !== 'undefined' && typeof cat.init === 'function') {
+                        cat.init();
+                    }
+                } else {
+                    gen.closePasteJsonModal();
+                    showToast('JSON carregado no gerador! URLs mantidas intactas.', 'success');
                 }
             },
             copy: () => {
@@ -5265,11 +5452,18 @@ self.onmessage = async (e) => {
                             sucesso++;
                         } else {
                             if (response.status === 401) discordExpired = true;
+                            let errMsg = `HTTP ${response.status}`;
+                            try {
+                                const errData = await response.json();
+                                if (errData && errData.erro) errMsg = errData.erro;
+                            } catch (_) {}
+                            showToast(`Erro em ${file.name}: ${errMsg}`, "error");
                             erro++;
                         }
                     } catch (error) {
                         erro++;
                         console.error(`Erro no ficheiro ${file.name}:`, error);
+                        showToast(`Erro em ${file.name}: ${error.message || 'JSON inválido'}`, "error");
                     }
                 }
 
