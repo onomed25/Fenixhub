@@ -10,6 +10,9 @@ import (
 	"time"
 )
 
+// ViewsTTL define o período de expiração do ranking semanal (7 dias).
+const ViewsTTL = 7 * 24 * time.Hour
+
 type RankingItem struct {
 	ID    string `json:"id"`
 	V     int    `json:"v"`
@@ -17,12 +20,14 @@ type RankingItem struct {
 }
 
 type Tracker struct {
-	mu        sync.RWMutex
-	views     map[string]int
-	aliases   map[string]string
-	cacheFile string
-	saveMu    sync.Mutex
-	timer     *time.Timer
+	mu         sync.RWMutex
+	views      map[string]int
+	aliases    map[string]string
+	updatedAt  time.Time
+	cacheFile  string
+	saveMu     sync.Mutex
+	timer      *time.Timer
+	stopTicker chan struct{}
 }
 
 type cachePayload struct {
@@ -37,12 +42,15 @@ func NewTracker(cacheFile string) *Tracker {
 	}
 
 	t := &Tracker{
-		views:     make(map[string]int),
-		aliases:   make(map[string]string),
-		cacheFile: cacheFile,
+		views:      make(map[string]int),
+		aliases:    make(map[string]string),
+		cacheFile:  cacheFile,
+		updatedAt:  time.Now().UTC(),
+		stopTicker: make(chan struct{}),
 	}
 
 	t.loadFromDisk()
+	t.startPeriodicCleaner()
 	return t
 }
 
@@ -84,16 +92,36 @@ func (t *Tracker) getCanonicalKey(id, name string) string {
 	return canon
 }
 
-func (t *Tracker) GetViews(id, name string, fallback int) int {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+// checkExpirationLocked verifica se o ciclo de 7 dias expirou e zera as contagens se necessário.
+func (t *Tracker) checkExpirationLocked() bool {
+	now := time.Now().UTC()
+	if t.updatedAt.IsZero() {
+		t.updatedAt = now
+		return false
+	}
 
+	if now.Sub(t.updatedAt) >= ViewsTTL {
+		log.Printf("⏳ ViewsTracker: Ciclo semanal de 7 dias expirou (iniciado em %s). Resetando ranking de populares para a nova semana.", t.updatedAt.Format(time.RFC3339))
+		t.views = make(map[string]int)
+		t.updatedAt = now
+		t.scheduleSave()
+		return true
+	}
+	return false
+}
+
+func (t *Tracker) GetViews(id, name string, fallback int) int {
+	t.mu.Lock()
+	t.checkExpirationLocked()
 	canon := t.getCanonicalKey(id, name)
 	if canon == "" {
+		t.mu.Unlock()
 		return fallback
 	}
 
 	cached, exists := t.views[canon]
+	t.mu.Unlock()
+
 	if !exists {
 		return fallback
 	}
@@ -103,6 +131,8 @@ func (t *Tracker) GetViews(id, name string, fallback int) int {
 func (t *Tracker) IncrementViews(id, name string, currentBase ...int) int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
+	t.checkExpirationLocked()
 
 	canon := t.getCanonicalKey(id, name)
 	if canon == "" {
@@ -121,6 +151,8 @@ func (t *Tracker) RecordViews(id, name string, count int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	t.checkExpirationLocked()
+
 	canon := t.getCanonicalKey(id, name)
 	if canon == "" {
 		return
@@ -134,14 +166,67 @@ func (t *Tracker) RecordViews(id, name string, count int) {
 }
 
 func (t *Tracker) GetAll() map[string]int {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.checkExpirationLocked()
 
 	result := make(map[string]int, len(t.views))
 	for k, v := range t.views {
 		result[k] = v
 	}
 	return result
+}
+
+// ResetWeekly força a limpeza de todas as visualizações acumuladas e inicia um novo ciclo de 7 dias.
+func (t *Tracker) ResetWeekly() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	log.Printf("🧹 ViewsTracker: Reset semanal executado. Zerando visualizações para novo ciclo.")
+	t.views = make(map[string]int)
+	t.updatedAt = time.Now().UTC()
+	t.scheduleSave()
+}
+
+// Reset mantém compatibilidade com chamadas existentes
+func (t *Tracker) Reset() {
+	t.ResetWeekly()
+}
+
+// GetUpdatedAt retorna o momento do início do ciclo semanal atual.
+func (t *Tracker) GetUpdatedAt() time.Time {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.updatedAt
+}
+
+func (t *Tracker) startPeriodicCleaner() {
+	go func() {
+		ticker := time.NewTicker(30 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				t.mu.Lock()
+				t.checkExpirationLocked()
+				t.mu.Unlock()
+			case <-t.stopTicker:
+				return
+			}
+		}
+	}()
+}
+
+func (t *Tracker) Close() {
+	if t.stopTicker != nil {
+		select {
+		case <-t.stopTicker:
+		default:
+			close(t.stopTicker)
+		}
+	}
+	t.Flush()
 }
 
 func (t *Tracker) scheduleSave() {
@@ -158,10 +243,14 @@ func (t *Tracker) scheduleSave() {
 
 func (t *Tracker) saveToDisk() {
 	t.mu.RLock()
+	updatedAtStr := t.updatedAt.Format(time.RFC3339)
+	if t.updatedAt.IsZero() {
+		updatedAtStr = time.Now().UTC().Format(time.RFC3339)
+	}
 	payload := cachePayload{
 		Views:     make(map[string]int, len(t.views)),
 		Aliases:   make(map[string]string, len(t.aliases)),
-		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+		UpdatedAt: updatedAtStr,
 	}
 	for k, v := range t.views {
 		payload.Views[k] = v
@@ -187,35 +276,53 @@ func (t *Tracker) saveToDisk() {
 func (t *Tracker) loadFromDisk() {
 	data, err := os.ReadFile(t.cacheFile)
 	if err != nil {
+		t.mu.Lock()
+		t.updatedAt = time.Now().UTC()
+		t.mu.Unlock()
 		return
 	}
 
 	var payload cachePayload
 	if err := json.Unmarshal(data, &payload); err != nil {
+		t.mu.Lock()
+		t.updatedAt = time.Now().UTC()
+		t.mu.Unlock()
 		return
 	}
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	for k, v := range payload.Views {
-		t.views[k] = v
-	}
 	for k, v := range payload.Aliases {
 		t.aliases[k] = v
 	}
-	log.Printf("📊 ViewsTracker carregado: %d registros de visualizações", len(t.views))
+
+	var lastUpdated time.Time
+	if payload.UpdatedAt != "" {
+		if parsed, err := time.Parse(time.RFC3339Nano, payload.UpdatedAt); err == nil {
+			lastUpdated = parsed
+		} else if parsed, err := time.Parse(time.RFC3339, payload.UpdatedAt); err == nil {
+			lastUpdated = parsed
+		}
+	}
+
+	now := time.Now().UTC()
+	// Se o arquivo tiver mais de 7 dias ou data ausente/inválida, reseta as visualizações
+	if lastUpdated.IsZero() || now.Sub(lastUpdated) >= ViewsTTL {
+		log.Printf("⏳ ViewsTracker: cache expirado (> 7 dias desde %s). Resetando ranking semanal de populares.", lastUpdated.Format(time.RFC3339))
+		t.views = make(map[string]int)
+		t.updatedAt = now
+		t.scheduleSave()
+		return
+	}
+
+	t.updatedAt = lastUpdated
+	for k, v := range payload.Views {
+		t.views[k] = v
+	}
+	log.Printf("📊 ViewsTracker carregado: %d registros de visualizações (ciclo semanal iniciado em %s)", len(t.views), t.updatedAt.Format(time.RFC3339))
 }
 
 func (t *Tracker) Flush() {
 	t.saveToDisk()
-}
-
-func (t *Tracker) Reset() {
-	t.mu.Lock()
-	t.views = make(map[string]int)
-	t.aliases = make(map[string]string)
-	t.mu.Unlock()
-	t.saveToDisk()
-	log.Println("🔄 ViewsTracker resetado (novo ciclo semanal).")
 }

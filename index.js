@@ -2664,6 +2664,9 @@ const verificarELimparMaisVistos = async () => {
 
 const executarLimpezaMaisVistosNode = async () => {
     try {
+        if (viewsTracker && typeof viewsTracker.resetWeekly === 'function') {
+            viewsTracker.resetWeekly();
+        }
         const resetQuery = `
             UPDATE arquivos_json 
             SET conteudo = jsonb_set(conteudo, '{views}', '0'::jsonb)
