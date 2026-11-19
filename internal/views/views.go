@@ -2,7 +2,9 @@ package views
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,10 +127,13 @@ func (t *Tracker) GetViews(id, name string, fallback int) int {
 	if !exists {
 		return fallback
 	}
+	if cached < fallback {
+		return fallback
+	}
 	return cached
 }
 
-func (t *Tracker) IncrementViews(id, name string, currentBase ...int) int {
+func (t *Tracker) IncrementViews(id, name string, currentBase int) int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -140,6 +145,9 @@ func (t *Tracker) IncrementViews(id, name string, currentBase ...int) int {
 	}
 
 	cached := t.views[canon]
+	if currentBase > cached {
+		cached = currentBase
+	}
 	next := cached + 1
 	t.views[canon] = next
 
@@ -183,15 +191,10 @@ func (t *Tracker) ResetWeekly() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	log.Printf("🧹 ViewsTracker: Reset semanal executado. Zerando visualizações para novo ciclo.")
+	log.Printf("🧹 ViewsTracker: Reset manual semanal solicitado. Zerando visualizações.")
 	t.views = make(map[string]int)
 	t.updatedAt = time.Now().UTC()
 	t.scheduleSave()
-}
-
-// Reset mantém compatibilidade com chamadas existentes
-func (t *Tracker) Reset() {
-	t.ResetWeekly()
 }
 
 // GetUpdatedAt retorna o momento do início do ciclo semanal atual.
@@ -199,6 +202,47 @@ func (t *Tracker) GetUpdatedAt() time.Time {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return t.updatedAt
+}
+
+type StatusInfo struct {
+	CicloIniciadoEm string  `json:"ciclo_iniciado_em"`
+	ProximoResetEm  string  `json:"proximo_reset_em"`
+	DiasRestantes   float64 `json:"dias_restantes"`
+	HorasRestantes  float64 `json:"horas_restantes"`
+	TempoRestante   string  `json:"tempo_restante"`
+	TotalItens      int     `json:"total_itens"`
+}
+
+// GetStatus retorna informações do ciclo semanal e tempo restante até a próxima limpeza.
+func (t *Tracker) GetStatus() StatusInfo {
+	t.mu.Lock()
+	t.checkExpirationLocked()
+	updatedAt := t.updatedAt
+	total := len(t.views)
+	t.mu.Unlock()
+
+	expiresAt := updatedAt.Add(ViewsTTL)
+	remaining := time.Until(expiresAt)
+	if remaining < 0 {
+		remaining = 0
+	}
+
+	days := remaining.Hours() / 24.0
+	hours := remaining.Hours()
+
+	d := int(remaining.Hours()) / 24
+	h := int(remaining.Hours()) % 24
+	m := int(remaining.Minutes()) % 60
+	s := int(remaining.Seconds()) % 60
+
+	return StatusInfo{
+		CicloIniciadoEm: updatedAt.Format(time.RFC3339),
+		ProximoResetEm:  expiresAt.Format(time.RFC3339),
+		DiasRestantes:   math.Round(days*100) / 100,
+		HorasRestantes:  math.Round(hours*10) / 10,
+		TempoRestante:   fmt.Sprintf("%dd %02dh %02dm %02ds", d, h, m, s),
+		TotalItens:      total,
+	}
 }
 
 func (t *Tracker) startPeriodicCleaner() {
@@ -293,6 +337,7 @@ func (t *Tracker) loadFromDisk() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	// Preserva os aliases conhecidos
 	for k, v := range payload.Aliases {
 		t.aliases[k] = v
 	}

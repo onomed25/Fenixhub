@@ -1,0 +1,22 @@
+{
+  "0": "app.js",
+  "1": "telegram-service.js",
+  "2": "index.js",
+  "3": "package.json",
+  "4": "telegram-service-refactored.js",
+  "5": "viewsTracker.js",
+  "6": "dependencies",
+  "7": "security.js",
+  "8": "hfDatabase.js",
+  "9": "ProcessTracker",
+  "10": "isAdmin",
+  "11": "exportar_jsons.js",
+  "12": "media-merger.js",
+  "13": "showCustomLoginModal",
+  "14": "startServer",
+  "15": "sanitizeNuviometaParams",
+  "16": "loadCachedHtmlFile",
+  "17": "config.js",
+  "18": "rules/graphify.md",
+  "19": "workflows/graphify.md"
+}

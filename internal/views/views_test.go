@@ -120,3 +120,24 @@ func TestViewsTrackerManualReset(t *testing.T) {
 		t.Fatalf("esperava 0 itens após ResetWeekly()")
 	}
 }
+
+func TestViewsTrackerStatus(t *testing.T) {
+	tmpDir := t.TempDir()
+	cachePath := filepath.Join(tmpDir, "views_cache.json")
+
+	tracker := NewTracker(cachePath)
+	defer tracker.Close()
+
+	tracker.IncrementViews("tt001", "Filme 1", 0)
+
+	status := tracker.GetStatus()
+	if status.TotalItens != 1 {
+		t.Errorf("esperava 1 item, obteve %d", status.TotalItens)
+	}
+	if status.DiasRestantes <= 6.0 || status.DiasRestantes > 7.0 {
+		t.Errorf("esperava dias restantes entre 6 e 7, obteve %f", status.DiasRestantes)
+	}
+	if status.TempoRestante == "" {
+		t.Errorf("tempo_restante não deve ser vazio")
+	}
+}

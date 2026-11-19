@@ -1,103 +1,168 @@
 package handlers
 
 import (
-	"bytes"
+	"database/sql"
 	"encoding/json"
-	"net/http"
 	"net/http/httptest"
-	"os"
+	"path/filepath"
 	"testing"
 
 	"fenixhub/internal/config"
 	"fenixhub/internal/database"
+	"fenixhub/internal/views"
 	"github.com/gin-gonic/gin"
+	_ "modernc.org/sqlite"
 )
 
-func TestUploadSubstituirReplacesAndPreservesURLAndColab(t *testing.T) {
+func TestGetVistosFiltersDeletedAndRespectsWeeklyViews(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	dbFile := "fenixhub.db"
-	_ = os.Remove(dbFile)
-	defer os.Remove(dbFile)
 
-	db, err := database.InitDB("")
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	rawDB, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		t.Fatalf("InitDB failed: %v", err)
+		t.Fatalf("falha ao abrir conexão: %v", err)
 	}
-	defer db.Close()
+	defer rawDB.Close()
+
+	schema := `
+		CREATE TABLE arquivos_json (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			nome_do_json TEXT UNIQUE NOT NULL,
+			conteudo TEXT NOT NULL,
+			is_oculto BOOLEAN DEFAULT 0,
+			is_pendente BOOLEAN DEFAULT 0,
+			criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE envios_pendentes (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			nome_do_json TEXT UNIQUE NOT NULL,
+			conteudo TEXT NOT NULL,
+			criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE top_views (
+			nome_do_json TEXT PRIMARY KEY,
+			count INTEGER DEFAULT 1,
+			atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+	`
+	if _, err := rawDB.Exec(schema); err != nil {
+		t.Fatalf("falha ao criar schema: %v", err)
+	}
+
+	_, _ = rawDB.Exec(`INSERT INTO arquivos_json (nome_do_json, conteudo, is_oculto, is_pendente) VALUES (?, ?, 0, 0)`, "tt001.json", `{"id":"tt001","type":"movie","title":"Filme A"}`)
+	_, _ = rawDB.Exec(`INSERT INTO arquivos_json (nome_do_json, conteudo, is_oculto, is_pendente) VALUES (?, ?, 0, 0)`, "tt002.json", `{"id":"tt002","type":"movie","title":"Filme B"}`)
+
+	db := &database.DB{DB: rawDB, Driver: "sqlite"}
 
 	cfg := &config.Config{
-		AdminPassword: "secret",
-		JWTSecret:     "jwt-secret",
+		AdminPassword: "admin",
 	}
-	h := NewHandler(cfg, db)
+
+	cacheFile := filepath.Join(tmpDir, "views_cache.json")
+	vTracker := views.NewTracker(cacheFile)
+	defer vTracker.Close()
+
+	// Simula que tt001 teve 5 views, tt002 teve 2 views, e um item fantasma tt9999 teve 100 views
+	vTracker.RecordViews("tt001", "", 5)
+	vTracker.RecordViews("tt002", "", 2)
+	vTracker.RecordViews("tt9999", "", 100) // não está no catálogo
+
+	h := &Handler{
+		cfg:          cfg,
+		db:           db,
+		viewsTracker: vTracker,
+	}
+
 	r := gin.New()
-	r.POST("/upload", h.Upload)
+	r.GET("/api/vistos", h.GetVistos)
+	r.GET("/api/vistos/status", h.GetVistosStatus)
+	r.POST("/api/vistos/reset", h.ResetVistos)
 
-	// 1. Seed existing broken item with 2 streams in S1E1
-	initial := map[string]interface{}{
-		"id":          "tt1710310",
-		"type":        "series",
-		"colaborador": "Magusaum",
-		"streams": map[string]interface{}{
-			"1": map[string]interface{}{
-				"1": []interface{}{
-					map[string]interface{}{"name": "Dublado\n1080p", "url": "https://fenixflixhub.duckdns.org/v/01_sgdos.mp4"},
-					map[string]interface{}{"name": "Dublado 2\n1080p", "url": "https://fenixflixhub.duckdns.org/v/02_6imva.mp4"},
-				},
-			},
-		},
-	}
-	if err := db.SaveContent("tt1710310.json", initial, false); err != nil {
-		t.Fatalf("SaveContent seed failed: %v", err)
+	req := httptest.NewRequest("GET", "/api/vistos", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("esperava status 200, obteve %d: %s", w.Code, w.Body.String())
 	}
 
-	// 2. Upload corrected JSON with substituir=true
-	payload := map[string]interface{}{
-		"id":          "tt1710310",
-		"type":        "series",
-		"colaborador": "Magusaum",
-		"substituir":  true,
-		"streams": map[string]interface{}{
-			"1": map[string]interface{}{
-				"1": []interface{}{
-					map[string]interface{}{"name": "Dublado\n720p", "url": "https://fenixflixhub.duckdns.org/v/01_072mx.mp4"},
-				},
-				"2": []interface{}{
-					map[string]interface{}{"name": "Dublado\n720p", "url": "https://fenixflixhub.duckdns.org/v/02_f8b5k.mp4"},
-				},
-			},
-		},
-	}
-	body, _ := json.Marshal(payload)
-	req := httptest.NewRequest(http.MethodPost, "/upload", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Admin-Password", "secret")
-
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	var result []map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("erro ao deserializar json: %v", err)
 	}
 
-	got, err := db.GetContent("tt1710310.json")
-	if err != nil {
-		t.Fatalf("GetContent failed: %v", err)
-	}
-	if got["colaborador"] != "Magusaum" {
-		t.Fatalf("expected colaborador Magusaum, got %v", got["colaborador"])
-	}
-	if _, hasFlag := got["substituir"]; hasFlag {
-		t.Fatalf("expected internal substituir flag to be stripped")
+	// O item tt9999 (fantasma) não deve aparecer
+	for _, item := range result {
+		if item["id"] == "tt9999" {
+			t.Fatalf("item fantasma tt9999 não deveria estar nos populares!")
+		}
 	}
 
-	streams := got["streams"].(map[string]interface{})
-	s1 := streams["1"].(map[string]interface{})
-	ep1 := s1["1"].([]interface{})
-	if len(ep1) != 1 {
-		t.Fatalf("expected S1E1 to be replaced with 1 stream, got %d: %#v", len(ep1), ep1)
+	// tt001 deve ser o primeiro da lista
+	if len(result) < 2 {
+		t.Fatalf("esperava pelo menos 2 itens, obteve %d", len(result))
 	}
-	ep1Stream := ep1[0].(map[string]interface{})
-	if ep1Stream["url"] != "https://fenixflixhub.duckdns.org/v/01_072mx.mp4" {
-		t.Fatalf("expected full URL preserved, got %v", ep1Stream["url"])
+
+	if result[0]["id"] != "tt001" || int(result[0]["v"].(float64)) != 5 {
+		t.Fatalf("primeiro item deveria ser tt001 com 5 views, obteve: %v", result[0])
+	}
+	if result[1]["id"] != "tt002" || int(result[1]["v"].(float64)) != 2 {
+		t.Fatalf("segundo item deveria ser tt002 com 2 views, obteve: %v", result[1])
+	}
+
+	// Testa reset
+	reqReset := httptest.NewRequest("POST", "/api/vistos/reset", nil)
+	wReset := httptest.NewRecorder()
+	r.ServeHTTP(wReset, reqReset)
+
+	if wReset.Code != 200 {
+		t.Fatalf("esperava 200 no reset, obteve %d", wReset.Code)
+	}
+
+	// Após reset, as views devem ser 0
+	reqAfter := httptest.NewRequest("GET", "/api/vistos", nil)
+	wAfter := httptest.NewRecorder()
+	r.ServeHTTP(wAfter, reqAfter)
+
+	var resultAfter []map[string]interface{}
+	if err := json.Unmarshal(wAfter.Body.Bytes(), &resultAfter); err != nil {
+		t.Fatalf("erro json após reset: %v", err)
+	}
+
+	for _, it := range resultAfter {
+		if int(it["v"].(float64)) != 0 {
+			t.Fatalf("esperava 0 views após reset, obteve: %v", it)
+		}
+	}
+
+	// Testa endpoint de status
+	reqStatus := httptest.NewRequest("GET", "/api/vistos/status", nil)
+	wStatus := httptest.NewRecorder()
+	r.ServeHTTP(wStatus, reqStatus)
+
+	if wStatus.Code != 200 {
+		t.Fatalf("esperava 200 no status, obteve %d", wStatus.Code)
+	}
+
+	var statusMap map[string]interface{}
+	if err := json.Unmarshal(wStatus.Body.Bytes(), &statusMap); err != nil {
+		t.Fatalf("erro ao deserializar status: %v", err)
+	}
+
+	if _, ok := statusMap["dias_restantes"]; !ok {
+		t.Errorf("campo dias_restantes esperado no status: %v", statusMap)
+	}
+	if _, ok := statusMap["tempo_restante"]; !ok {
+		t.Errorf("campo tempo_restante esperado no status: %v", statusMap)
+	}
+
+	// Testa também query param ?status=true
+	reqQueryStatus := httptest.NewRequest("GET", "/api/vistos?status=true", nil)
+	wQueryStatus := httptest.NewRecorder()
+	r.ServeHTTP(wQueryStatus, reqQueryStatus)
+
+	if wQueryStatus.Code != 200 {
+		t.Fatalf("esperava 200 em ?status=true, obteve %d", wQueryStatus.Code)
 	}
 }

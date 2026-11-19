@@ -136,10 +136,6 @@ func (db *DB) migrate() error {
 				count INTEGER DEFAULT 1,
 				atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 			);`,
-			`CREATE TABLE IF NOT EXISTS agenda_tarefas (
-				chave VARCHAR(50) PRIMARY KEY,
-				ultimo_executado TIMESTAMP WITH TIME ZONE NOT NULL
-			);`,
 		}
 	} else {
 		ddl = []string{
@@ -186,10 +182,6 @@ func (db *DB) migrate() error {
 				nome_do_json TEXT PRIMARY KEY,
 				count INTEGER DEFAULT 1,
 				atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
-			);`,
-			`CREATE TABLE IF NOT EXISTS agenda_tarefas (
-				chave TEXT PRIMARY KEY,
-				ultimo_executado DATETIME NOT NULL
 			);`,
 		}
 	}
@@ -607,11 +599,11 @@ func (db *DB) UpsertDiscordUser(id, username, globalName, avatar string, isAjuda
 }
 
 // ----------------------------------------------------------------------------
-// Visualizações (Top Vistos e Limpeza Semanal)
+// Visualizações (Top Vistos)
 // ----------------------------------------------------------------------------
 
 func (db *DB) IncrementView(nomeDoJson string) error {
-	clean := strings.TrimSpace(strings.TrimSuffix(nomeDoJson, ".json"))
+	clean := strings.TrimSpace(nomeDoJson)
 	if clean == "" {
 		return nil
 	}
@@ -648,84 +640,8 @@ func (db *DB) GetTopViews() (map[string]int, error) {
 		var name string
 		var count int
 		if err := rows.Scan(&name, &count); err == nil {
-			cleanName := strings.TrimSpace(strings.TrimSuffix(name, ".json"))
-			if cleanName != "" {
-				result[cleanName] = count
-			}
+			result[name] = count
 		}
 	}
 	return result, nil
-}
-
-// CheckAndRunWeeklyViewsCleanup verifica e executa a limpeza periódica semanal das visualizações
-func (db *DB) CheckAndRunWeeklyViewsCleanup() (bool, error) {
-	const taskKey = "limpeza_mais_vistos"
-	now := time.Now().UTC()
-
-	var lastRun time.Time
-	var querySelect string
-	if db.Driver == "postgres" {
-		querySelect = "SELECT ultimo_executado FROM agenda_tarefas WHERE chave = $1"
-	} else {
-		querySelect = "SELECT ultimo_executado FROM agenda_tarefas WHERE chave = ?"
-	}
-
-	err := db.QueryRow(querySelect, taskKey).Scan(&lastRun)
-	if err == sql.ErrNoRows {
-		// Primeira execução: insere registro e reseta para iniciar ciclo limpo
-		var queryInsert string
-		if db.Driver == "postgres" {
-			queryInsert = "INSERT INTO agenda_tarefas (chave, ultimo_executado) VALUES ($1, $2) ON CONFLICT (chave) DO NOTHING"
-		} else {
-			queryInsert = "INSERT OR IGNORE INTO agenda_tarefas (chave, ultimo_executado) VALUES (?, ?)"
-		}
-		_, _ = db.Exec(queryInsert, taskKey, now)
-		_ = db.ResetTopViews()
-		return true, nil
-	} else if err != nil {
-		return false, err
-	}
-
-	// Executa se já passaram 7 dias desde a última limpeza
-	if now.Sub(lastRun) >= 7*24*time.Hour {
-		log.Printf("🧹 Executando limpeza semanal dos arquivos mais vistos (última execução: %s)...", lastRun.Format(time.RFC3339))
-		if err := db.ResetTopViews(); err != nil {
-			log.Printf("⚠️ Erro ao resetar top_views: %v", err)
-		}
-		var queryUpdate string
-		if db.Driver == "postgres" {
-			queryUpdate = "UPDATE agenda_tarefas SET ultimo_executado = $1 WHERE chave = $2"
-		} else {
-			queryUpdate = "UPDATE agenda_tarefas SET ultimo_executado = ? WHERE chave = ?"
-		}
-		_, err := db.Exec(queryUpdate, now, taskKey)
-		return true, err
-	}
-
-	return false, nil
-}
-
-// ResetTopViews limpa as contagens para dar lugar a um novo ciclo de populares
-func (db *DB) ResetTopViews() error {
-	query := db.Rebind("DELETE FROM top_views")
-	_, err := db.Exec(query)
-
-	if db.Driver == "postgres" {
-		_, _ = db.Exec(`
-			UPDATE arquivos_json 
-			SET conteudo = jsonb_set(conteudo, '{views}', '0'::jsonb)
-			WHERE id IN (
-				SELECT id 
-				FROM arquivos_json 
-				WHERE COALESCE((conteudo->>'views')::int, 0) > 0 
-				ORDER BY COALESCE((conteudo->>'views')::int, 0) DESC 
-				LIMIT 50
-			);
-		`)
-	}
-
-	if err == nil {
-		log.Println("✅ Tabela top_views resetada para novo ciclo semanal.")
-	}
-	return err
 }

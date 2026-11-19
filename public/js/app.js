@@ -1965,9 +1965,7 @@ self.onmessage = async (e) => {
                         }
                         if (!qualities.includes(val)) {
                             qualities.push(val);
-                            try {
-                                localStorage.setItem('fenixflix_qualities', JSON.stringify(qualities));
-                            } catch(e) {}
+                            localStorage.setItem('fenixflix_qualities', JSON.stringify(qualities));
                         }
                         gen.loadQualities();
                         select.value = val;
@@ -3027,7 +3025,6 @@ self.onmessage = async (e) => {
             },
             clearFields: () => {
                 window.forcePendenteForEdit = false;
-                window.isEditingExisting = false;
                 gen.currentData = null;
                 gen.declaredEpisode = null;
                 gen.tmdbSeries = null;
@@ -3140,65 +3137,30 @@ self.onmessage = async (e) => {
                     let currentSmartSeason = null;
                     let currentSmartEp = null;
 
-                    lines.forEach((line, lineIdx) => {
+                    lines.forEach(line => {
                         const url = gen.cleanUrl(line);
                         
                         let lineSeason = null;
                         let lineEp = null;
                         
-                        // Extração do nome do arquivo original (comentário com # ou pathname da URL)
-                        let fileName = '';
-                        const hashIdx = line.indexOf('#');
-                        if (hashIdx !== -1) {
-                            fileName = line.substring(hashIdx + 1).trim();
-                        } else if (url) {
-                            try {
-                                const cleanUrl = url.split('?')[0].split('#')[0];
-                                const lastSlash = cleanUrl.lastIndexOf('/');
-                                if (lastSlash !== -1) {
-                                    fileName = decodeURIComponent(cleanUrl.substring(lastSlash + 1)).trim();
-                                }
-                            } catch (_) {
-                                const cleanUrl = url.split('?')[0].split('#')[0];
-                                const lastSlash = cleanUrl.lastIndexOf('/');
-                                if (lastSlash !== -1) {
-                                    fileName = cleanUrl.substring(lastSlash + 1).trim();
-                                }
-                            }
+                        // Remove URL to avoid false matches (e.g. hex hashes like 'e842', resolutions like '1080x720')
+                        let parseLine = line;
+                        if (url) {
+                            parseLine = line.replace(/https?:\/\/\S+/gi, '');
                         }
-
-                        // Texto para detecção inteligente: prioriza o nome do arquivo se existir; se não, usa a linha limpa
-                        let parseText = fileName || line;
-                        parseText = parseText.replace(/https?:\/\/[^\/]+\//gi, '');
-
-                        // 1. Padrão Clássico S01E02, T01E02, 1x02
-                        const sxeMatch = parseText.match(/(?:^|[^a-zA-Z0-9])(?:S(\d{1,2})\s*E(\d{1,4})|T(\d{1,2})\s*EP?(\d{1,4})|(\d{1,2})\s*x\s*(\d{1,4}))(?:[^a-zA-Z0-9]|$)/i);
+                        
+                        const sxeMatch = parseLine.match(/S(\d+)\s*E(\d+)|T(\d+)\s*EP?(\d+)|(\d+)x(\d+)/i);
                         if (sxeMatch) {
                             lineSeason = parseInt(sxeMatch[1] || sxeMatch[3] || sxeMatch[5]).toString();
                             lineEp = parseInt(sxeMatch[2] || sxeMatch[4] || sxeMatch[6]).toString();
                         } else {
-                            // 2. Temporada explícita (Temporada 2, Temp 2, Season 2, T2)
-                            const seasonMatch = parseText.match(/(?:^|[^a-zA-Z0-9])(?:TEMPORADA|TEMP|SEASON)[\s_.-]*#?(\d{1,2})(?:[^a-zA-Z0-9]|$)/i)
-                                || parseText.match(/(?:^|[^a-zA-Z0-9])[TS][\s_.-]*#?(\d{1,2})(?:[^a-zA-Z0-9]|$)/i);
-                            if (seasonMatch) {
-                                lineSeason = parseInt(seasonMatch[1]).toString();
-                            }
-
-                            // 3. Episódio explícito (Episódio 5, Episode 5, Ep 5, Cap 5, E5)
-                            const epMatch = parseText.match(/(?:^|[^a-zA-Z0-9])(?:EPIS[ÓÕOÃA]DIO|EPISODE|EP|CAP[ÍI]TULO|CAP)[\s_.-]*#?(\d{1,4})(?:[^a-zA-Z0-9]|$)/i)
-                                || parseText.match(/(?:^|[\s_.-])[eE](\d{1,4})(?:[\s_.-]|$)/);
+                            const epMatch = parseLine.match(/(?:^|[^a-zA-Z])(?:EPIS[ÓÕOÃA]DIO|EPISODE|EP|E)[\s_]*#?[\s_]*(\d+)/i);
                             if (epMatch) {
                                 lineEp = parseInt(epMatch[1]).toString();
-                            } else {
-                                // 4. Padrão Anime / Grupos de Lançamento: "Nome - 05", "Nome_05.mp4", "[05]"
-                                const animeMatch = parseText.match(/[-_–—\s]\s*#?(\d{1,4})(?:\s*v\d+)?(?:\s*\[|\s*\(|\s*\.|\s*_|\s*-\s*|\s*$)/)
-                                    || parseText.match(/(?:\[|\()(\d{1,4})(?:\]|\))/);
-                                if (animeMatch) {
-                                    const numCandidate = parseInt(animeMatch[1]);
-                                    if (numCandidate !== 1080 && numCandidate !== 720 && numCandidate !== 480 && numCandidate !== 2160 && (numCandidate < 1920 || numCandidate > 2099)) {
-                                        lineEp = numCandidate.toString();
-                                    }
-                                }
+                            }
+                            const seasonMatch = parseLine.match(/(?:^|[^a-zA-Z])(?:TEMPORADA|TEMP)[\s_]*#?[\s_]*(\d+)/i) || parseLine.match(/(?:^|[^a-zA-Z])[TS][\s_]*#?[\s_]*(\d+)(?:[^a-zA-Z]|$)/i);
+                            if (seasonMatch) {
+                                lineSeason = parseInt(seasonMatch[1]).toString();
                             }
                         }
 
@@ -3213,20 +3175,13 @@ self.onmessage = async (e) => {
                         let targetSeason;
                         let targetEp;
 
-                        // Se há apenas 1 link e um episódio foi explicitamente declarado na interface, vincula a ele.
-                        // Se há múltiplos links colados, NÃO prender todos no mesmo ep: distribui sequencialmente!
-                        if (gen.declaredEpisode && lines.length === 1 && !lineSeason && !lineEp && !currentSmartSeason && !currentSmartEp) {
+                        // Se houver episódio declarado e a linha não possui marcação explícita SxxExx, vincula ao declarado!
+                        if (gen.declaredEpisode && !lineSeason && !lineEp && !currentSmartSeason && !currentSmartEp) {
                             targetSeason = gen.declaredEpisode.season.toString();
                             targetEp = gen.declaredEpisode.epNum.toString();
-                        } else if (lineSeason || lineEp) {
+                        } else {
                             targetSeason = lineSeason || currentSmartSeason || manualSeason;
                             targetEp = lineEp || currentSmartEp || manualEp.toString();
-                        } else if (currentSmartSeason || currentSmartEp) {
-                            targetSeason = currentSmartSeason || manualSeason;
-                            targetEp = currentSmartEp || manualEp.toString();
-                        } else {
-                            targetSeason = manualSeason;
-                            targetEp = manualEp.toString();
                         }
 
                         if (!gen.currentData.streams[targetSeason]) gen.currentData.streams[targetSeason] = {};
@@ -3243,7 +3198,6 @@ self.onmessage = async (e) => {
                         const finalName = hasQuality ? `${finalFirstLine}\n${secondLine}` : finalFirstLine;
 
                         const streamObj = { "url": url, "name": finalName };
-                        if (fileName) streamObj.file_name = fileName;
                         if (nickVal) streamObj.colaborador = nickVal;
                         gen.currentData.streams[targetSeason][targetEp].push(streamObj);
                         addedCount++;
@@ -3253,7 +3207,13 @@ self.onmessage = async (e) => {
                         }
                         if (lineEp) {
                             manualEp = parseInt(lineEp) + 1;
-                        } else if (!gen.declaredEpisode || lines.length > 1) {
+                        }
+
+                        if (gen.declaredEpisode && !lineSeason && !lineEp) {
+                            // Mantém o episódio declarado fixo para múltiplas transmissões (ex: 1080p, 720p, Dublado, Legendado)
+                        } else if (currentSmartSeason) {
+                            currentSmartEp = null;
+                        } else if (!lineSeason && !lineEp) {
                             const maxEp = gen.getMaxEpForSeason(manualSeason);
                             if (maxEp && manualEp >= maxEp) {
                                 manualSeason = (parseInt(manualSeason) + 1).toString();
@@ -3272,20 +3232,6 @@ self.onmessage = async (e) => {
                     lines.forEach(line => {
                         const url = gen.cleanUrl(line);
                         if(url) {
-                            let fileName = '';
-                            const hashIdx = line.indexOf('#');
-                            if (hashIdx !== -1) {
-                                fileName = line.substring(hashIdx + 1).trim();
-                            } else if (url) {
-                                try {
-                                    const cleanUrl = url.split('?')[0].split('#')[0];
-                                    const lastSlash = cleanUrl.lastIndexOf('/');
-                                    if (lastSlash !== -1) {
-                                        fileName = decodeURIComponent(cleanUrl.substring(lastSlash + 1)).trim();
-                                    }
-                                } catch (_) {}
-                            }
-
                             const count = gen.currentData.streams.filter(s => {
                                 const parts = s.name.split('\n');
                                 const sAudio = parts[0] ? parts[0].replace(/\s+\d+$/, '') : '';
@@ -3297,7 +3243,6 @@ self.onmessage = async (e) => {
                             const finalName = hasQuality ? `${finalFirstLine}\n${secondLine}` : finalFirstLine;
                             
                             const streamObj = { "url": url, "name": finalName };
-                            if (fileName) streamObj.file_name = fileName;
                             if (nickVal) streamObj.colaborador = nickVal;
                             gen.currentData.streams.push(streamObj);
                             addedCount++;
@@ -3385,13 +3330,7 @@ self.onmessage = async (e) => {
                 const fName = gen.currentData.id || 'data';
                 document.getElementById('fileNamePreview').innerText = `${fName}.json`;
 
-                if (save) {
-                    try {
-                        localStorage.setItem('fenixflix_draft', jsonStr);
-                    } catch (e) {
-                        console.warn("Falha ao salvar rascunho no localStorage:", e);
-                    }
-                }
+                if(save) localStorage.setItem('fenixflix_draft', jsonStr);
                 
                 // No celular, muda automaticamente a visualização para a aba de Visualizar JSON
                 if (window.innerWidth < 1024) {
@@ -3399,32 +3338,10 @@ self.onmessage = async (e) => {
                 }
             },
             syncManualEdit: () => {
-                const actions = document.getElementById('resultActions');
                 try {
                     const rawValue = document.getElementById('jsonOutput').value;
-                    if (!rawValue.trim()) {
-                        gen.currentData = null;
-                        document.getElementById('jsonStats').innerText = 'Vazio';
-                        if (actions) actions.classList.add('hidden');
-                        return;
-                    }
-                    const parsed = JSON.parse(rawValue);
-                    if (!parsed.type && parsed.streams) {
-                        parsed.type = Array.isArray(parsed.streams) ? 'movie' : 'series';
-                    }
-                    gen.currentData = parsed;
-
-                    if (parsed.id) {
-                        const cid = document.getElementById('contentId');
-                        if (cid) cid.value = parsed.id;
-                        const fnPreview = document.getElementById('fileNamePreview');
-                        if (fnPreview) fnPreview.innerText = `${parsed.id}.json`;
-                    }
-                    if (parsed.type) {
-                        const typeRadio = document.querySelector(`input[name="contentType"][value="${parsed.type}"]`);
-                        if (typeRadio) typeRadio.checked = true;
-                    }
-
+                    gen.currentData = JSON.parse(rawValue);
+                    
                     let stats = '';
                     if (gen.currentData.type === 'series') {
                         const seasons = Object.keys(gen.currentData.streams || {}).sort((a,b)=>parseInt(a)-parseInt(b));
@@ -3433,177 +3350,9 @@ self.onmessage = async (e) => {
                         stats = `${gen.currentData.streams ? gen.currentData.streams.length : 0} Opções`;
                     }
                     document.getElementById('jsonStats').innerText = stats;
-                    if (actions) actions.classList.remove('hidden');
-                    try {
-                        localStorage.setItem('fenixflix_draft', rawValue);
-                    } catch (err) {
-                        console.warn("Falha ao salvar rascunho no localStorage:", err);
-                    }
+                    localStorage.setItem('fenixflix_draft', rawValue);
                 } catch (e) {
                     document.getElementById('jsonStats').innerText = 'JSON Inválido';
-                }
-            },
-
-            openPasteJsonModal: () => {
-                const modal = document.getElementById('pasteJsonModal');
-                const input = document.getElementById('pasteJsonInput');
-                const idEl = document.getElementById('pasteJsonId');
-                const colabEl = document.getElementById('pasteJsonColab');
-                if (!modal) return;
-                if (idEl) {
-                    idEl.value = '';
-                    idEl.dataset.autoFilled = 'true';
-                }
-                if (colabEl) {
-                    colabEl.value = '';
-                    colabEl.dataset.autoFilled = 'true';
-                }
-                if (input && !input.value.trim() && gen.currentData) {
-                    input.value = JSON.stringify(gen.currentData, null, 4);
-                }
-                gen.validatePastedJson();
-                modal.classList.remove('hidden');
-                if (input) input.focus();
-            },
-
-            closePasteJsonModal: () => {
-                const modal = document.getElementById('pasteJsonModal');
-                if (modal) modal.classList.add('hidden');
-            },
-
-            validatePastedJson: () => {
-                const input = document.getElementById('pasteJsonInput');
-                const statusEl = document.getElementById('pasteJsonStatus');
-                const idEl = document.getElementById('pasteJsonId');
-                const colabEl = document.getElementById('pasteJsonColab');
-                if (!input || !statusEl) return null;
-
-                const raw = input.value.trim();
-                if (!raw) {
-                    statusEl.className = 'text-[11px] font-mono text-zinc-500';
-                    statusEl.innerText = 'Aguardando JSON...';
-                    return null;
-                }
-
-                try {
-                    const parsed = JSON.parse(raw);
-                    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-                        throw new Error('O JSON raiz deve ser um objeto { ... }.');
-                    }
-                    if (!parsed.streams) {
-                        throw new Error('Propriedade "streams" não encontrada.');
-                    }
-                    if (!parsed.type) {
-                        parsed.type = Array.isArray(parsed.streams) ? 'movie' : 'series';
-                    }
-
-                    if (idEl && (!idEl.value.trim() || idEl.dataset.autoFilled === 'true')) {
-                        idEl.value = parsed.id || '';
-                        idEl.dataset.autoFilled = 'true';
-                    }
-                    if (colabEl && (!colabEl.value.trim() || colabEl.dataset.autoFilled === 'true')) {
-                        colabEl.value = parsed.colaborador || '';
-                        colabEl.dataset.autoFilled = 'true';
-                    }
-
-                    let summary = '';
-                    if (parsed.type === 'series' && typeof parsed.streams === 'object' && !Array.isArray(parsed.streams)) {
-                        const seasons = Object.keys(parsed.streams);
-                        let eps = 0;
-                        seasons.forEach(s => {
-                            if (parsed.streams[s] && typeof parsed.streams[s] === 'object') {
-                                eps += Object.keys(parsed.streams[s]).length;
-                            }
-                        });
-                        summary = `Série • ${parsed.id || 'sem ID'} • ${seasons.length} temp. • ${eps} ep.`;
-                    } else if (Array.isArray(parsed.streams)) {
-                        summary = `Filme • ${parsed.id || 'sem ID'} • ${parsed.streams.length} link(s)`;
-                    } else {
-                        throw new Error('Formato de "streams" incompatível com "type".');
-                    }
-
-                    statusEl.className = 'text-[11px] font-mono text-emerald-400';
-                    statusEl.innerText = `OK: ${summary}`;
-                    return parsed;
-                } catch (err) {
-                    statusEl.className = 'text-[11px] font-mono text-red-400';
-                    statusEl.innerText = `Erro: ${err.message}`;
-                    return null;
-                }
-            },
-
-            applyPastedJson: async (uploadNow = false) => {
-                const parsed = gen.validatePastedJson();
-                if (!parsed) {
-                    return showToast('Cole um JSON válido antes de continuar.', 'error');
-                }
-
-                const newId = (document.getElementById('pasteJsonId')?.value || '').trim();
-                const newColab = (document.getElementById('pasteJsonColab')?.value || '').trim();
-                const newAudio = (document.getElementById('pasteJsonAudio')?.value || '').trim();
-                const newQuality = (document.getElementById('pasteJsonQuality')?.value || '').trim();
-                const shouldReplace = Boolean(document.getElementById('pasteJsonReplace')?.checked);
-
-                if (newId) parsed.id = newId;
-                if (!parsed.id) {
-                    return showToast('Informe o ID (IMDb) antes de enviar.', 'warning');
-                }
-
-                if (newColab) {
-                    parsed.colaborador = newColab;
-                }
-
-                const updateStream = (s) => {
-                    if (!s || typeof s !== 'object') return;
-                    // Preserva s.url exatamente como está no JSON (não apaga início da URL)
-                    if (newColab) s.colaborador = newColab;
-                    if (newAudio || newQuality) {
-                        const parts = (s.name || '').split('\n');
-                        const audio = newAudio || (parts[0] ? parts[0].trim() : 'Dublado');
-                        const qual = newQuality || (parts[1] ? parts[1].trim() : '');
-                        s.name = qual ? `${audio}\n${qual}` : audio;
-                    }
-                };
-
-                if (parsed.type === 'movie' && Array.isArray(parsed.streams)) {
-                    parsed.streams.forEach(updateStream);
-                } else if (parsed.type === 'series' && parsed.streams && typeof parsed.streams === 'object') {
-                    Object.keys(parsed.streams).forEach(sKey => {
-                        const seasonObj = parsed.streams[sKey] || {};
-                        Object.keys(seasonObj).forEach(eKey => {
-                            const epList = seasonObj[eKey];
-                            if (Array.isArray(epList)) epList.forEach(updateStream);
-                        });
-                    });
-                }
-
-                window.isEditingExisting = shouldReplace;
-                window.forcePendenteForEdit = false;
-                if (shouldReplace) {
-                    parsed.is_edit = true;
-                    parsed.substituir = true;
-                } else {
-                    delete parsed.is_edit;
-                    delete parsed.substituir;
-                }
-
-                gen.currentData = parsed;
-                const cid = document.getElementById('contentId');
-                if (cid) cid.value = parsed.id;
-                const typeRadio = document.querySelector(`input[name="contentType"][value="${parsed.type}"]`);
-                if (typeRadio) typeRadio.checked = true;
-                if (typeof gen.toggleInputs === 'function') gen.toggleInputs();
-                gen.updateDisplay(true);
-
-                if (uploadNow) {
-                    await gen.uploadParaBanco(false);
-                    gen.closePasteJsonModal();
-                    if (typeof cat !== 'undefined' && typeof cat.init === 'function') {
-                        cat.init();
-                    }
-                } else {
-                    gen.closePasteJsonModal();
-                    showToast('JSON carregado no gerador! URLs mantidas intactas.', 'success');
                 }
             },
             copy: () => {
@@ -5452,18 +5201,11 @@ self.onmessage = async (e) => {
                             sucesso++;
                         } else {
                             if (response.status === 401) discordExpired = true;
-                            let errMsg = `HTTP ${response.status}`;
-                            try {
-                                const errData = await response.json();
-                                if (errData && errData.erro) errMsg = errData.erro;
-                            } catch (_) {}
-                            showToast(`Erro em ${file.name}: ${errMsg}`, "error");
                             erro++;
                         }
                     } catch (error) {
                         erro++;
                         console.error(`Erro no ficheiro ${file.name}:`, error);
-                        showToast(`Erro em ${file.name}: ${error.message || 'JSON inválido'}`, "error");
                     }
                 }
 
@@ -7146,38 +6888,11 @@ self.onmessage = async (e) => {
                     let title = p.nome_do_json;
                     if (p.conteudo && p.conteudo.id) title = p.conteudo.title || p.conteudo.id;
 
-                    let epBadges = '';
-                    if (p.conteudo && p.conteudo.type === 'series' && p.conteudo.streams) {
-                        const seasons = Object.keys(p.conteudo.streams);
-                        let totalEps = 0;
-                        const epList = [];
-                        seasons.forEach(s => {
-                            const eps = Object.keys(p.conteudo.streams[s] || {}).sort((a, b) => Number(a) - Number(b));
-                            totalEps += eps.length;
-                            if (eps.length > 0) {
-                                epList.push(`T${s}: Ep ${eps.slice(0, 8).join(', ')}${eps.length > 8 ? '...' : ''}`);
-                            }
-                        });
-                        epBadges = `<div class="mt-1 flex flex-wrap gap-1 items-center">
-                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                                <i class="fa-solid fa-tv text-[9px]"></i> ${totalEps} ep(s)
-                            </span>
-                            <span class="text-[10px] text-zinc-400 font-mono">${escapeHTML(epList.join(' | '))}</span>
-                        </div>`;
-                    } else if (p.conteudo && p.conteudo.type === 'movie' && Array.isArray(p.conteudo.streams)) {
-                        epBadges = `<div class="mt-1">
-                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                <i class="fa-solid fa-film text-[9px]"></i> Filme (${p.conteudo.streams.length} stream)
-                            </span>
-                        </div>`;
-                    }
-
                     html += `
                         <tr class="border-b border-zinc-800/40 hover:bg-zinc-900/20 transition-colors">
                             <td class="py-3.5 pr-4 font-semibold text-white">
                                 <span class="text-indigo-400">${escapeHTML(title)}</span>
                                 <span class="block text-[10px] text-zinc-500 font-mono font-normal mt-0.5">${escapeHTML(p.nome_do_json)}</span>
-                                ${epBadges}
                             </td>
                             <td class="py-3.5 px-4 text-center text-[10px] text-zinc-500 font-mono">
                                 ${dataStr}
@@ -7344,7 +7059,6 @@ self.onmessage = async (e) => {
                                 let s = { ...originalStream };
                                 s.url = urlVal;
                                 s.name = `${audioVal}\n${qualityVal}`;
-                                if (originalStream.file_name) s.file_name = originalStream.file_name;
 
                                 if ((!s.colaborador || isPlaceholderNick(s.colaborador)) && pendente.conteudo.colaborador) {
                                     s.colaborador = pendente.conteudo.colaborador;
@@ -7371,7 +7085,6 @@ self.onmessage = async (e) => {
                                 let s = { ...originalStream };
                                 s.url = urlVal;
                                 s.name = `${audioVal}\n${qualityVal}`;
-                                if (originalStream.file_name) s.file_name = originalStream.file_name;
 
                                 if ((!s.colaborador || isPlaceholderNick(s.colaborador)) && pendente.conteudo.colaborador) {
                                     s.colaborador = pendente.conteudo.colaborador;
@@ -7467,22 +7180,6 @@ self.onmessage = async (e) => {
 
                 const displayUrl = s.url || '';
 
-                // Extrai nome original do arquivo ou último segmento da URL
-                let streamFileName = s.file_name || s.title || '';
-                if (!streamFileName && s.url) {
-                    try {
-                        const cleanUrl = s.url.split('?')[0].split('#')[0];
-                        const lastSlash = cleanUrl.lastIndexOf('/');
-                        if (lastSlash !== -1) {
-                            streamFileName = decodeURIComponent(cleanUrl.substring(lastSlash + 1)).trim();
-                        }
-                    } catch (_) {
-                        const cleanUrl = s.url.split('?')[0].split('#')[0];
-                        const lastSlash = cleanUrl.lastIndexOf('/');
-                        if (lastSlash !== -1) streamFileName = cleanUrl.substring(lastSlash + 1).trim();
-                    }
-                }
-
                 return `
                 <div class="stream-card p-4 bg-zinc-900/80 border border-zinc-800 rounded-2xl flex flex-col gap-3 mb-3 relative hover:border-zinc-700 transition shadow-sm">
                     <div class="flex justify-between items-center">
@@ -7496,17 +7193,6 @@ self.onmessage = async (e) => {
                             <input type="checkbox" class="approve-checkbox accent-emerald-500 cursor-pointer" ${dataAttr} checked onchange="window.toggleApproval(this)">
                             <span>Aprovar</span>
                         </label>
-                    </div>
-
-                    <!-- Nome do arquivo original detectado (para conferir número do episódio) -->
-                    <div class="bg-zinc-950/80 border border-zinc-800/80 rounded-xl px-3 py-2 flex items-center gap-2.5">
-                        <i class="fa-solid fa-file-video text-indigo-400 text-xs shrink-0"></i>
-                        <div class="flex-1 min-w-0">
-                            <span class="text-[9px] uppercase font-bold text-zinc-500 tracking-wider block">Arquivo / Link Original:</span>
-                            <span class="text-xs font-mono text-indigo-200 truncate block select-all font-semibold" title="${escapeHTML(streamFileName || displayUrl)}">
-                                ${escapeHTML(streamFileName || displayUrl)}
-                            </span>
-                        </div>
                     </div>
                     
                     <div class="grid grid-cols-2 gap-3">

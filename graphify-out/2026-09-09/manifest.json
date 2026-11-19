@@ -1,0 +1,110 @@
+{
+  "index.js": {
+    "mtime": 1788975117.9716296,
+    "seen": 1788975228.7417424,
+    "ast_hash": "c3f98dad89552eaf1aa3133582f74554",
+    "semantic_hash": ""
+  },
+  "package.json": {
+    "mtime": 1788888920.6399508,
+    "seen": 1788888962.9737315,
+    "ast_hash": "a091173c0ccd19a50ab3fd1363d07e17",
+    "semantic_hash": "a091173c0ccd19a50ab3fd1363d07e17"
+  },
+  "public/js/app.js": {
+    "mtime": 1788975185.7128887,
+    "seen": 1788975228.7417638,
+    "ast_hash": "de72fd3a7461208ca5b1051b49a2ad72",
+    "semantic_hash": ""
+  },
+  "public/js/config.js": {
+    "mtime": 1788888920.644796,
+    "seen": 1788888962.9737577,
+    "ast_hash": "f75f109c503394722cf1e0e28c9f9c63",
+    "semantic_hash": "f75f109c503394722cf1e0e28c9f9c63"
+  },
+  "scripts/exportar_jsons.js": {
+    "mtime": 1788888920.644796,
+    "seen": 1788888962.9737608,
+    "ast_hash": "c05de8368f1bdebd3c7ae80faed62c09",
+    "semantic_hash": "c05de8368f1bdebd3c7ae80faed62c09"
+  },
+  "scripts/upload_hf_database.js": {
+    "mtime": 1788888920.6458242,
+    "seen": 1788888962.9737644,
+    "ast_hash": "f8acb1fb587ca1551a5b8f9f6915f9f2",
+    "semantic_hash": "f8acb1fb587ca1551a5b8f9f6915f9f2"
+  },
+  "src/hfDatabase.js": {
+    "mtime": 1788971779.9442086,
+    "seen": 1788971858.3962173,
+    "ast_hash": "55d49f48e765b970e04dc86cef7c270f",
+    "semantic_hash": ""
+  },
+  "src/media-merger.js": {
+    "mtime": 1788973952.5064507,
+    "seen": 1788974106.1799111,
+    "ast_hash": "3af00c87696c870dbf65f45d2941257a",
+    "semantic_hash": ""
+  },
+  "src/security.js": {
+    "mtime": 1788888920.646084,
+    "seen": 1788888962.9737742,
+    "ast_hash": "7a23ca226584aebafea48a11e229be6d",
+    "semantic_hash": "7a23ca226584aebafea48a11e229be6d"
+  },
+  "src/viewsTracker.js": {
+    "mtime": 1788888920.646084,
+    "seen": 1788888962.9737766,
+    "ast_hash": "ad8fce2b6d102bbd0e7827785bb692c0",
+    "semantic_hash": "ad8fce2b6d102bbd0e7827785bb692c0"
+  },
+  "telegram-service-refactored.js": {
+    "mtime": 1788888920.646084,
+    "seen": 1788888962.97378,
+    "ast_hash": "4c90985207400c31b27fd090a20d8f32",
+    "semantic_hash": "4c90985207400c31b27fd090a20d8f32"
+  },
+  "telegram-service-refactored.test.js": {
+    "mtime": 1788888920.646084,
+    "seen": 1788888962.9737833,
+    "ast_hash": "aa42ed55c41587807cc19f006371d655",
+    "semantic_hash": "aa42ed55c41587807cc19f006371d655"
+  },
+  "telegram-service.js": {
+    "mtime": 1788888920.646084,
+    "seen": 1788888962.9737864,
+    "ast_hash": "19089632361e418ff877d5cdfcbbbd55",
+    "semantic_hash": "19089632361e418ff877d5cdfcbbbd55"
+  },
+  ".agents/rules/graphify.md": {
+    "mtime": 1788888988.3715315,
+    "seen": 1788890518.0562217,
+    "ast_hash": "f1e53ecc9194573d3c28fc116c743a2e",
+    "semantic_hash": ""
+  },
+  ".agents/workflows/graphify.md": {
+    "mtime": 1788888988.37174,
+    "seen": 1788890518.0562236,
+    "ast_hash": "6d73634a678cf1e1c71930adf80bd1f0",
+    "semantic_hash": ""
+  },
+  "index.html": {
+    "mtime": 1788975211.7279878,
+    "seen": 1788975228.741824,
+    "ast_hash": "75dc12c9f9b4c46292e5a283dce94094",
+    "semantic_hash": ""
+  },
+  "public/test.html": {
+    "mtime": 1788888920.644796,
+    "seen": 1788890518.0562274,
+    "ast_hash": "e7eb23c9936fb512669c6d003223076c",
+    "semantic_hash": ""
+  },
+  "cdn/logo_new.png": {
+    "mtime": 1788888919.843792,
+    "seen": 1788890518.0562289,
+    "ast_hash": "3e67909b805bed39ef93c26ed47767fe",
+    "semantic_hash": ""
+  }
+}

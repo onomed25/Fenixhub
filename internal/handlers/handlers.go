@@ -244,38 +244,13 @@ func (h *Handler) GetContent(c *gin.Context) {
 	if id == "" {
 		id = nome
 	}
-	id = strings.TrimSpace(strings.TrimSuffix(id, ".json"))
-
-	// Persiste visualização no banco de dados relacional
-	if h.db != nil && id != "" {
-		go func(idToRecord string) {
-			_ = h.db.IncrementView(idToRecord)
-		}(id)
-	}
 
 	if h.viewsTracker != nil {
-		newViews := h.viewsTracker.IncrementViews(id, nome)
+		newViews := h.viewsTracker.IncrementViews(id, nome, 0)
 		item["views"] = newViews
 	}
 
 	c.JSON(200, item)
-}
-
-func (h *Handler) GetViewsTracker() *views.Tracker {
-	return h.viewsTracker
-}
-
-func (h *Handler) ResetVistos(c *gin.Context) {
-	if h.db != nil {
-		_ = h.db.ResetTopViews()
-	}
-	if h.viewsTracker != nil {
-		h.viewsTracker.Reset()
-	}
-	c.JSON(200, gin.H{
-		"sucesso":  true,
-		"mensagem": "Ranking de mais vistos resetado com sucesso para um novo ciclo semanal.",
-	})
 }
 
 func (h *Handler) GetCount(c *gin.Context) {
@@ -421,19 +396,7 @@ func (h *Handler) Upload(c *gin.Context) {
 		return
 	}
 
-	substituirFlag := c.Query("substituir") == "true" || c.PostForm("substituir") == "true" ||
-		c.Query("is_edit") == "true" || c.PostForm("is_edit") == "true"
-	if b, ok := incoming["substituir"].(bool); ok && b {
-		substituirFlag = true
-	}
-	if b, ok := incoming["is_edit"].(bool); ok && b {
-		substituirFlag = true
-	}
-	overrideColab := c.PostForm("override_colaborador") == "true" || c.Query("override_colaborador") == "true"
-	existingColabStr, _ := incoming["colaborador"].(string)
-	hasExplicitColab := strings.TrimSpace(existingColabStr) != ""
-
-	// Atribuição de Colaborador (preserva colaborador explícito quando enviado por Admin/Ajudante)
+	// Atribuição de Colaborador
 	if user != nil {
 		discordName := user.GlobalName
 		if discordName == "" {
@@ -448,23 +411,19 @@ func (h *Handler) Upload(c *gin.Context) {
 			roleStr = "colaborador"
 		}
 
-		if !hasExplicitColab || (overrideColab && !privileged) {
+		if incoming["colaborador"] == nil || incoming["colaborador"] == "" {
 			incoming["colaborador"] = discordName
-			incoming["colaborador_id"] = user.ID
-			incoming["colaborador_role"] = roleStr
-			if user.Avatar != "" {
-				incoming["colaborador_avatar"] = user.Avatar
-			}
+		}
+		incoming["colaborador_id"] = user.ID
+		incoming["colaborador_role"] = roleStr
+		if user.Avatar != "" {
+			incoming["colaborador_avatar"] = user.Avatar
 		}
 	} else if uploaderNick := strings.TrimSpace(c.PostForm("uploader_nick")); uploaderNick != "" {
-		if !hasExplicitColab {
+		if incoming["colaborador"] == nil || incoming["colaborador"] == "" {
 			incoming["colaborador"] = uploaderNick
 		}
 	}
-
-	delete(incoming, "is_edit")
-	delete(incoming, "substituir")
-	delete(incoming, "preserve_original_colaborador")
 
 	var existing map[string]interface{}
 	if h.hfClient != nil && h.hfClient.IsConfigured() {
@@ -474,24 +433,7 @@ func (h *Handler) Upload(c *gin.Context) {
 		existing, _ = h.db.GetContent(nome)
 	}
 
-	var merged map[string]interface{}
-	if privileged && substituirFlag {
-		if existing != nil {
-			if _, hasCriado := incoming["criado_em"]; !hasCriado {
-				if v, ok := existing["criado_em"]; ok {
-					incoming["criado_em"] = v
-				}
-			}
-			if _, hasViews := incoming["views"]; !hasViews {
-				if v, ok := existing["views"]; ok {
-					incoming["views"] = v
-				}
-			}
-		}
-		merged = merger.InjectDateIntoStreams(incoming)
-	} else {
-		merged = merger.MergeMediaContent(existing, incoming)
-	}
+	merged := merger.MergeMediaContent(existing, incoming)
 
 	forcePendente := c.Query("force_pendente") == "true" || c.PostForm("force_pendente") == "true"
 	isColaborador := user != nil && (user.IsColaborador || user.IsAjudante)
@@ -594,9 +536,7 @@ func (h *Handler) GetPending(c *gin.Context) {
 
 func (h *Handler) ApprovePending(c *gin.Context) {
 	var body struct {
-		Nome             string                 `json:"nome"`
-		Conteudo         map[string]interface{} `json:"conteudo"`
-		RestantePendente map[string]interface{} `json:"restantePendente"`
+		Nome string `json:"nome"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.Nome) == "" {
 		c.JSON(400, gin.H{"erro": "Nome do item obrigatório."})
@@ -605,33 +545,13 @@ func (h *Handler) ApprovePending(c *gin.Context) {
 
 	cleanNome := strings.TrimSpace(body.Nome)
 
-	if body.Conteudo != nil {
-		if h.hfClient != nil && h.hfClient.IsConfigured() {
-			if err := h.hfClient.SaveContent(cleanNome, body.Conteudo, false); err != nil {
-				fmt.Printf("⚠️ Erro ao salvar conteúdo aprovado no HF: %v\n", err)
-			}
-			if body.RestantePendente != nil && len(body.RestantePendente) > 0 {
-				_ = h.hfClient.SaveContent(cleanNome, body.RestantePendente, true)
-			} else {
-				_ = h.hfClient.DeleteFile("pendentes/" + cleanNome)
-			}
+	if h.hfClient != nil && h.hfClient.IsConfigured() {
+		if err := h.hfClient.ApprovePending(cleanNome); err != nil {
+			fmt.Printf("⚠️ Erro ao aprovar pendente no Hugging Face: %v\n", err)
 		}
-		if h.db != nil {
-			_ = h.db.SaveContent(cleanNome, body.Conteudo, false)
-			if body.RestantePendente != nil && len(body.RestantePendente) > 0 {
-				_ = h.db.SaveContent(cleanNome, body.RestantePendente, true)
-			} else {
-				_ = h.db.RejectPending(cleanNome)
-			}
-		}
-	} else {
-		if h.hfClient != nil && h.hfClient.IsConfigured() {
-			if err := h.hfClient.ApprovePending(cleanNome); err != nil {
-				fmt.Printf("⚠️ Erro ao aprovar pendente no Hugging Face: %v\n", err)
-			}
-		}
-		_ = h.db.ApprovePending(cleanNome)
 	}
+
+	_ = h.db.ApprovePending(cleanNome)
 
 	h.InvalidateCatalogCache()
 	c.JSON(200, gin.H{"sucesso": true, "mensagem": "Item aprovado com sucesso!"})
@@ -945,6 +865,11 @@ func (h *Handler) GetColaboradores(c *gin.Context) {
 }
 
 func (h *Handler) GetVistos(c *gin.Context) {
+	if c.Query("status") == "true" {
+		h.GetVistosStatus(c)
+		return
+	}
+
 	type VistoItem struct {
 		ID    string `json:"id"`
 		Type  string `json:"type,omitempty"`
@@ -957,15 +882,13 @@ func (h *Handler) GetVistos(c *gin.Context) {
 
 	rankingMap := make(map[string]int)
 	typeMap := make(map[string]string)
-	catalogViewsMap := make(map[string]int)
-	validCatalogIDs := make(map[string]bool)
 
 	// 1. Busca do catálogo do Hugging Face ou banco local
 	var items []map[string]interface{}
 	if h.hfClient != nil && h.hfClient.IsConfigured() {
 		items, _ = h.hfClient.FetchCatalog(false)
 	}
-	if len(items) == 0 && h.db != nil {
+	if len(items) == 0 {
 		items, _ = h.db.GetCatalog(false)
 	}
 
@@ -988,17 +911,9 @@ func (h *Handler) GetVistos(c *gin.Context) {
 			continue
 		}
 
-		if mediaType == "" {
-			if _, hasNuviometa := item["nuviometaVideos"]; hasNuviometa {
-				mediaType = "series"
-			} else if _, hasSeasons := item["seasons"]; hasSeasons {
-				mediaType = "series"
-			} else {
-				mediaType = "movie"
-			}
+		if mediaType != "" {
+			typeMap[id] = mediaType
 		}
-		typeMap[id] = mediaType
-		validCatalogIDs[id] = true
 
 		baseViews := 0
 		if vRaw, ok := item["views"]; ok {
@@ -1009,54 +924,50 @@ func (h *Handler) GetVistos(c *gin.Context) {
 				baseViews = v
 			}
 		}
-		catalogViewsMap[id] = baseViews
-	}
 
-	// 2. Incorpora contagens dinâmicas do banco de dados relacional (top_views do ciclo atual)
-	hasDynamicViews := false
-	if h.db != nil {
-		if dbViews, err := h.db.GetTopViews(); err == nil && len(dbViews) > 0 {
-			for id, count := range dbViews {
-				id = strings.TrimSpace(strings.TrimSuffix(id, ".json"))
-				if !validCatalogIDs[id] {
-					continue
-				}
-				if count > 0 {
-					rankingMap[id] = count
-					hasDynamicViews = true
-				}
-			}
+		v := 0
+		if h.viewsTracker != nil {
+			v = h.viewsTracker.GetViews(id, nomeDoJSON, 0)
+		} else {
+			v = baseViews
 		}
+		rankingMap[id] = v
 	}
 
-	// 3. Incorpora contagens rastreadas em memória (viewsTracker do ciclo atual)
+	// 2. Incorpora contagens rastreadas em memória/disco
 	if h.viewsTracker != nil {
 		for id, count := range h.viewsTracker.GetAll() {
 			id = strings.TrimSpace(strings.TrimSuffix(id, ".json"))
-			if !validCatalogIDs[id] {
+			if id == "" || id == "tt_file_upload" || id == "tt9999999" || strings.HasPrefix(id, "test") {
 				continue
 			}
-			if cur, exists := rankingMap[id]; !exists || count > cur {
-				if count > 0 {
-					rankingMap[id] = count
-					hasDynamicViews = true
+			// Ignora IDs que não existem no catálogo atual
+			if len(typeMap) > 0 {
+				if _, ok := typeMap[id]; !ok {
+					continue
 				}
+			}
+			if cur, exists := rankingMap[id]; !exists || count > cur {
+				rankingMap[id] = count
 			}
 		}
 	}
 
-	// 4. Se não houver visualizações dinâmicas no ciclo atual,
-	// usa o fallback do catálogo original para não deixar a lista vazia.
-	// Se houver visualizações dinâmicas, garante que itens do catálogo
-	// sem visualização recente entrem com 0 para ordenação completa.
-	if !hasDynamicViews {
-		for id, v := range catalogViewsMap {
-			rankingMap[id] = v
-		}
-	} else {
-		for id := range validCatalogIDs {
-			if _, exists := rankingMap[id]; !exists {
-				rankingMap[id] = 0
+	// 3. Incorpora contagens do banco de dados relacional
+	if dbViews, err := h.db.GetTopViews(); err == nil {
+		for id, count := range dbViews {
+			id = strings.TrimSpace(strings.TrimSuffix(id, ".json"))
+			if id == "" || id == "tt_file_upload" || id == "tt9999999" || strings.HasPrefix(id, "test") {
+				continue
+			}
+			// Ignora IDs que não existem no catálogo atual
+			if len(typeMap) > 0 {
+				if _, ok := typeMap[id]; !ok {
+					continue
+				}
+			}
+			if cur, exists := rankingMap[id]; !exists || count > cur {
+				rankingMap[id] = count
 			}
 		}
 	}
@@ -1082,7 +993,10 @@ func (h *Handler) GetVistos(c *gin.Context) {
 
 	// Ordena do mais visualizado para o menos visualizado
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].V > result[j].V
+		if result[i].V != result[j].V {
+			return result[i].V > result[j].V
+		}
+		return result[i].ID < result[j].ID
 	})
 
 	if split {
@@ -1103,6 +1017,26 @@ func (h *Handler) GetVistos(c *gin.Context) {
 	}
 
 	c.JSON(200, result)
+}
+
+func (h *Handler) ResetVistos(c *gin.Context) {
+	if h.viewsTracker != nil {
+		h.viewsTracker.ResetWeekly()
+	}
+	c.JSON(200, gin.H{
+		"sucesso":  true,
+		"mensagem": "Ranking semanal de populares reiniciado com sucesso.",
+	})
+}
+
+func (h *Handler) GetVistosStatus(c *gin.Context) {
+	if h.viewsTracker == nil {
+		c.JSON(200, gin.H{
+			"status": "inativo",
+		})
+		return
+	}
+	c.JSON(200, h.viewsTracker.GetStatus())
 }
 
 // ----------------------------------------------------------------------------

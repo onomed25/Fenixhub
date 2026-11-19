@@ -1,0 +1,69 @@
+2026/10/15 14:24:01 🔌 Conectando ao PostgreSQL via DATABASE_URL...
+2026/10/15 14:24:04 ✅ Banco de dados (postgres) conectado e migrado com sucesso!
+2026/10/15 14:24:04 📊 ViewsTracker carregado: 1 registros de visualizações
+[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /public/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (5 handlers)
+[GIN-debug] HEAD   /public/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (5 handlers)
+[GIN-debug] GET    /cdn/*filepath            --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (5 handlers)
+[GIN-debug] HEAD   /cdn/*filepath            --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (5 handlers)
+[GIN-debug] GET    /js/*filepath             --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (5 handlers)
+[GIN-debug] HEAD   /js/*filepath             --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (5 handlers)
+[GIN-debug] GET    /css/*filepath            --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (5 handlers)
+[GIN-debug] HEAD   /css/*filepath            --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (5 handlers)
+[GIN-debug] GET    /                         --> main.main.func2 (5 handlers)
+[GIN-debug] GET    /front                    --> main.main.func2 (5 handlers)
+[GIN-debug] GET    /front.html               --> main.main.func2 (5 handlers)
+[GIN-debug] GET    /api/telegram/status      --> main.main.func3 (5 handlers)
+[GIN-debug] POST   /api/telegram/login-phone --> main.main.func4 (5 handlers)
+[GIN-debug] POST   /api/telegram/login-code  --> main.main.func5 (5 handlers)
+[GIN-debug] GET    /health                   --> fenixhub/internal/handlers.(*Handler).Health-fm (5 handlers)
+[GIN-debug] GET    /api/hf/config            --> fenixhub/internal/handlers.(*Handler).GetHfConfig-fm (5 handlers)
+[GIN-debug] GET    /v/*filepath              --> fenixhub/internal/handlers.(*Handler).StreamVideo-fm (5 handlers)
+[GIN-debug] HEAD   /v/*filepath              --> fenixhub/internal/handlers.(*Handler).StreamVideo-fm (5 handlers)
+[GIN-debug] GET    /api/catalog              --> fenixhub/internal/handlers.(*Handler).GetCatalog-fm (5 handlers)
+[GIN-debug] GET    /api/all                  --> fenixhub/internal/handlers.(*Handler).GetAll-fm (5 handlers)
+[GIN-debug] GET    /api/content/:nome        --> fenixhub/internal/handlers.(*Handler).GetContent-fm (5 handlers)
+[GIN-debug] GET    /api/stats                --> fenixhub/internal/handlers.(*Handler).GetStats-fm (5 handlers)
+[GIN-debug] GET    /api/colaboradores        --> fenixhub/internal/handlers.(*Handler).GetColaboradores-fm (5 handlers)
+[GIN-debug] GET    /api/vistos               --> fenixhub/internal/handlers.(*Handler).GetVistos-fm (5 handlers)
+[GIN-debug] DELETE /api/delete               --> fenixhub/internal/handlers.(*Handler).DeleteFile-fm (6 handlers)
+[GIN-debug] POST   /api/delete               --> fenixhub/internal/handlers.(*Handler).DeleteFile-fm (6 handlers)
+[GIN-debug] POST   /api/arquivos/ocultar     --> fenixhub/internal/handlers.(*Handler).ToggleHide-fm (6 handlers)
+[GIN-debug] GET    /api/arquivos/pendentes   --> fenixhub/internal/handlers.(*Handler).GetPending-fm (6 handlers)
+[GIN-debug] POST   /api/api/arquivos/aprovar --> fenixhub/internal/handlers.(*Handler).ApprovePending-fm (6 handlers)
+[GIN-debug] POST   /api/api/arquivos/rejeitar --> fenixhub/internal/handlers.(*Handler).RejectPending-fm (6 handlers)
+[GIN-debug] POST   /api/arquivos/aprovar     --> fenixhub/internal/handlers.(*Handler).ApprovePending-fm (6 handlers)
+[GIN-debug] POST   /api/arquivos/rejeitar    --> fenixhub/internal/handlers.(*Handler).RejectPending-fm (6 handlers)
+[GIN-debug] GET    /api/meus-pendentes       --> fenixhub/internal/handlers.(*Handler).GetMyPending-fm (5 handlers)
+[GIN-debug] GET    /api/pedidos              --> fenixhub/internal/handlers.(*Handler).GetPedidos-fm (5 handlers)
+[GIN-debug] POST   /api/pedidos              --> fenixhub/internal/handlers.(*Handler).CreatePedido-fm (5 handlers)
+[GIN-debug] POST   /api/pedidos/delete       --> fenixhub/internal/handlers.(*Handler).DeletePedido-fm (6 handlers)
+[GIN-debug] GET    /api/denuncias            --> fenixhub/internal/handlers.(*Handler).GetDenuncias-fm (6 handlers)
+[GIN-debug] POST   /api/denunciar            --> fenixhub/internal/handlers.(*Handler).CreateDenuncia-fm (5 handlers)
+[GIN-debug] DELETE /api/denuncias/delete     --> fenixhub/internal/handlers.(*Handler).DeleteDenuncia-fm (6 handlers)
+[GIN-debug] POST   /api/denuncias/delete     --> fenixhub/internal/handlers.(*Handler).DeleteDenuncia-fm (6 handlers)
+[GIN-debug] GET    /api/tmdb/*path           --> fenixhub/internal/handlers.(*Handler).TMDBProxy-fm (5 handlers)
+[GIN-debug] GET    /api/auth/discord         --> fenixhub/internal/handlers.(*Handler).DiscordLogin-fm (5 handlers)
+[GIN-debug] GET    /api/auth/discord/callback --> fenixhub/internal/handlers.(*Handler).DiscordCallback-fm (5 handlers)
+[GIN-debug] GET    /api/auth/me              --> fenixhub/internal/handlers.(*Handler).AuthMe-fm (5 handlers)
+[GIN-debug] POST   /api/auth/logout          --> fenixhub/internal/handlers.(*Handler).Logout-fm (5 handlers)
+[GIN-debug] POST   /api/verify               --> fenixhub/internal/handlers.(*Handler).VerifyPassword-fm (5 handlers)
+[GIN-debug] POST   /upload                   --> fenixhub/internal/handlers.(*Handler).Upload-fm (5 handlers)
+[GIN-debug] GET    /count                    --> fenixhub/internal/handlers.(*Handler).GetCount-fm (5 handlers)
+2026/10/15 14:24:04 🚀 Fenixhub Go Server rodando em http://0.0.0.0:3000
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on 0.0.0.0:3000
+[GIN] 2026/10/15 - 14:24:04 | 200 |  72.99µs |             ::1 | GET      "/health"
+[GIN] 2026/10/15 - 14:24:15 | 200 | 42.224µs |             ::1 | GET      "/health"
+[GIN] 2026/10/15 - 14:28:16 | 200 | 480.52ms |             ::1 | GET      "/api/tmdb/find/tt0318155?external_source=imdb_id"
+[GIN] 2026/10/15 - 14:28:24 | 200 | 169.95ms |             ::1 | GET      "/api/content/tt0318155"
+[GIN] 2026/10/15 - 14:32:15 | 302 | 203.732µs |             ::1 | GET      "/v/Looney_Tunes_Cartoons_Happy_Birthday_Bugs_Bunny__1080p_24_116ta.mp4"
+[GIN] 2026/10/15 - 14:32:32 | 302 | 41.587µs |             ::1 | HEAD     "/v/Looney_Tunes_Cartoons_Happy_Birthday_Bugs_Bunny__1080p_24_116ta.mp4"
+[GIN] 2026/10/15 - 14:35:18 | 200 | 197.756µs |             ::1 | GET      "/api/hf/config"
+[GIN] 2026/10/15 - 14:37:07 | 302 | 38.349µs |             ::1 | HEAD     "/v/Looney_Tunes_Cartoons_Happy_Birthday_Bugs_Bunny__1080p_24_116ta.mp4"
