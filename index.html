@@ -17,6 +17,7 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
     
     
     <script>
@@ -369,6 +370,9 @@
         </button>
         <button onclick="switchView('approvals'); loadApprovalsList();" id="btn-approvals" aria-label="Aba Fila de aprovação de conteúdos" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
             <i class="fa-solid fa-clipboard-check text-sm"></i> <span class="hidden sm:inline">Aprovar</span>
+        </button>
+        <button onclick="switchView('analytics')" id="btn-analytics" aria-label="Aba Análise exclusiva Admin" class="nav-btn hidden px-5 py-2.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 shrink-0">
+            <i class="fa-solid fa-chart-line text-sm text-primary"></i> <span class="hidden sm:inline">Análise</span>
         </button>
     </nav>
 
@@ -1243,6 +1247,456 @@
             </div>
         </div>
 
+        <!-- =======================
+             VIEW: ANÁLISE & CENTRAL ADMIN (EXCLUSIVO ADMIN)
+             ======================= -->
+        <div id="view-analytics" class="tab-content">
+            <div class="space-y-6">
+                <!-- Header Principal -->
+                <div class="glass-panel rounded-3xl border border-white/10 p-5 sm:p-7 shadow-2xl relative overflow-hidden">
+                    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div>
+                            <div class="flex items-center gap-2.5 flex-wrap">
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-primary/15 text-primary border border-primary/30 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-shield-halved"></i> Exclusivo Admin
+                                </span>
+                                <span id="an-db-badge" class="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                    Banco: PostgreSQL
+                                </span>
+                                <span id="an-updated-at" class="text-[11px] text-zinc-500"></span>
+                            </div>
+                            <h2 class="font-display text-2xl sm:text-3xl font-bold text-white mt-2 tracking-tight">Central de Análise &amp; Backups</h2>
+                            <p class="text-xs sm:text-sm text-zinc-400 mt-1">Populares, recentes, pedidos por addon (FenixPlus vs FenixFlix), comparador TMDB e backups em ZIP/Telegram.</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2.5">
+                            <button onclick="adminAnalytics.downloadBackupZip()" id="btn-an-zip" class="bg-primary hover:bg-primary-hover text-on-accent px-4 py-2.5 rounded-full text-xs font-bold transition flex items-center gap-2 shadow-sm">
+                                <i class="fa-solid fa-file-zipper"></i> Baixar JSONs (.zip)
+                            </button>
+                            <button onclick="adminAnalytics.triggerTelegramBackup()" id="btn-an-tg-backup" class="bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-white/10 px-4 py-2.5 rounded-full text-xs font-semibold transition flex items-center gap-2">
+                                <i class="fa-brands fa-telegram text-sky-400"></i> Enviar p/ Telegram
+                            </button>
+                            <button onclick="adminAnalytics.load(true)" class="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-white/10 px-4 py-2.5 rounded-full text-xs font-medium transition flex items-center gap-2">
+                                <i class="fa-solid fa-rotate"></i> Atualizar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- KPIs Principais -->
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6">
+                        <div class="bg-[#05070D]/80 border border-white/10 rounded-2xl p-4">
+                            <p class="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">Catálogo Ativo</p>
+                            <p id="an-kpi-total" class="text-2xl sm:text-3xl font-bold text-white mt-1 tabular-nums">--</p>
+                            <p id="an-kpi-split" class="text-[11px] text-zinc-500 mt-1 tabular-nums">-- filmes · -- séries · -- streams</p>
+                        </div>
+                        <div class="bg-[#05070D]/80 border border-white/10 rounded-2xl p-4">
+                            <p class="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">Views Registradas</p>
+                            <p id="an-kpi-views" class="text-2xl sm:text-3xl font-bold text-highlight mt-1 tabular-nums">--</p>
+                            <p id="an-kpi-top1" class="text-[11px] text-zinc-500 mt-1 truncate">Top 1: --</p>
+                        </div>
+                        <div class="bg-[#05070D]/80 border border-white/10 rounded-2xl p-4">
+                            <p class="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">Pedidos (Plus vs Flix)</p>
+                            <p id="an-kpi-pedidos" class="text-2xl sm:text-3xl font-bold text-primary mt-1 tabular-nums">--</p>
+                            <p id="an-kpi-addon-split" class="text-[11px] text-zinc-400 mt-1 tabular-nums">Plus: 0 · Flix: 0</p>
+                        </div>
+                        <div class="bg-[#05070D]/80 border border-white/10 rounded-2xl p-4">
+                            <p class="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">Cobertura TMDB</p>
+                            <p id="an-kpi-tmdb" class="text-2xl sm:text-3xl font-bold text-emerald-400 mt-1 tabular-nums">--%</p>
+                            <p id="an-kpi-tmdb-sub" class="text-[11px] text-zinc-500 mt-1 tabular-nums">Clique na aba TMDB para comparar</p>
+                        </div>
+                    </div>
+
+                    <!-- Sub-abas do Painel Admin -->
+                    <div class="flex flex-wrap gap-2 mt-6 pt-5 border-t border-white/10">
+                        <button onclick="adminAnalytics.switchSubTab('addons')" id="an-subbtn-addons" class="an-subbtn px-4 py-2 rounded-full text-xs font-semibold bg-primary text-on-accent transition flex items-center gap-2">
+                            <i class="fa-solid fa-chart-pie"></i> Pedidos &amp; Addons
+                        </button>
+                        <button onclick="adminAnalytics.switchSubTab('tmdb')" id="an-subbtn-tmdb" class="an-subbtn px-4 py-2 rounded-full text-xs font-semibold bg-zinc-900 text-zinc-300 border border-white/10 hover:bg-zinc-800 transition flex items-center gap-2">
+                            <i class="fa-solid fa-scale-balanced"></i> Site vs TMDB
+                        </button>
+                        <button onclick="adminAnalytics.switchSubTab('media')" id="an-subbtn-media" class="an-subbtn px-4 py-2 rounded-full text-xs font-semibold bg-zinc-900 text-zinc-300 border border-white/10 hover:bg-zinc-800 transition flex items-center gap-2">
+                            <i class="fa-solid fa-fire"></i> Populares &amp; Recentes
+                        </button>
+                        <button onclick="adminAnalytics.switchSubTab('backup')" id="an-subbtn-backup" class="an-subbtn px-4 py-2 rounded-full text-xs font-semibold bg-zinc-900 text-zinc-300 border border-white/10 hover:bg-zinc-800 transition flex items-center gap-2">
+                            <i class="fa-solid fa-box-archive"></i> Backups (ZIP &amp; Telegram)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- SUB-ABA 1: PEDIDOS & ADDONS (FENIXPLUS VS FENIXFLIX) -->
+                <div id="an-sub-addons" class="an-subtab space-y-6">
+                    <!-- Gráficos: Doughnut + Timeline 14 dias -->
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        <div class="lg:col-span-5 glass-panel rounded-2xl border border-white/10 p-5 sm:p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 class="text-base font-semibold text-white">Qual Addon Pede Mais?</h3>
+                                    <p class="text-xs text-zinc-400">Comparação direta: FenixPlus vs FenixFlix</p>
+                                </div>
+                                <span id="an-addon-winner" class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-primary/15 text-primary border border-primary/30">--</span>
+                            </div>
+                            <div class="relative h-60 flex items-center justify-center">
+                                <canvas id="chartAddonShare"></canvas>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-white/10 text-center tabular-nums">
+                                <div class="bg-[#05070D]/70 rounded-xl p-2.5 border border-primary/20">
+                                    <span class="block text-[10px] uppercase text-primary font-bold">FenixPlus</span>
+                                    <span id="an-cnt-plus" class="text-lg font-bold text-white">0</span>
+                                </div>
+                                <div class="bg-[#05070D]/70 rounded-xl p-2.5 border border-highlight/20">
+                                    <span class="block text-[10px] uppercase text-highlight font-bold">FenixFlix</span>
+                                    <span id="an-cnt-flix" class="text-lg font-bold text-white">0</span>
+                                </div>
+                                <div class="bg-[#05070D]/70 rounded-xl p-2.5 border border-white/10">
+                                    <span class="block text-[10px] uppercase text-zinc-400 font-bold">Web / Outros</span>
+                                    <span id="an-cnt-outros" class="text-lg font-bold text-white">0</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="lg:col-span-7 glass-panel rounded-2xl border border-white/10 p-5 sm:p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 class="text-base font-semibold text-white">Pedidos por Dia (Últimos 14 dias)</h3>
+                                    <p class="text-xs text-zinc-400">Volume diário separado por FenixPlus e FenixFlix</p>
+                                </div>
+                            </div>
+                            <div class="relative h-72">
+                                <canvas id="chartAddonTimeline"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Novo Formulário de Pedido pela API + Snippet para Addons -->
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        <div class="lg:col-span-7 glass-panel rounded-2xl border border-white/10 p-5 sm:p-6">
+                            <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-paper-plane text-primary"></i> Novo Pedido (API com Origem do Addon)
+                            </h3>
+                            <p class="text-xs text-zinc-400 mt-1 mb-4">Envie um pedido indicando de qual addon veio (FenixPlus ou FenixFlix).</p>
+
+                            <!-- Busca rápida no TMDB -->
+                            <div class="mb-4">
+                                <label class="block text-[11px] uppercase tracking-wider text-zinc-400 font-semibold mb-1.5">Buscar no TMDB (opcional — preenche IMDb ID automaticamente)</label>
+                                <div class="flex gap-2">
+                                    <input type="text" id="an-req-tmdb-search" placeholder="Ex: Interestelar, Breaking Bad..." class="input-unified flex-1 rounded-xl px-3.5 py-2.5 text-sm">
+                                    <button type="button" onclick="adminAnalytics.searchTMDBForPedido()" class="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2.5 rounded-xl text-xs font-semibold transition">
+                                        <i class="fa-solid fa-magnifying-glass"></i> Buscar
+                                    </button>
+                                </div>
+                                <div id="an-req-tmdb-results" class="hidden mt-2 space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar bg-[#05070D] border border-white/10 rounded-xl p-2"></div>
+                            </div>
+
+                            <form id="an-new-pedido-form" onsubmit="adminAnalytics.submitPedido(event)" class="space-y-4">
+                                <div>
+                                    <label class="block text-[11px] uppercase tracking-wider text-zinc-400 font-semibold mb-1.5">Origem do Pedido (Addon)</label>
+                                    <div class="grid grid-cols-3 gap-2">
+                                        <label class="cursor-pointer">
+                                            <input type="radio" name="anPedidoAddon" value="fenixplus" checked class="peer sr-only">
+                                            <div class="peer-checked:border-primary peer-checked:bg-primary/15 peer-checked:text-white border border-white/10 bg-[#05070D] text-zinc-400 rounded-xl py-2.5 px-3 text-center text-xs font-bold transition">
+                                                FenixPlus
+                                            </div>
+                                        </label>
+                                        <label class="cursor-pointer">
+                                            <input type="radio" name="anPedidoAddon" value="fenixflix" class="peer sr-only">
+                                            <div class="peer-checked:border-highlight peer-checked:bg-highlight/15 peer-checked:text-white border border-white/10 bg-[#05070D] text-zinc-400 rounded-xl py-2.5 px-3 text-center text-xs font-bold transition">
+                                                FenixFlix
+                                            </div>
+                                        </label>
+                                        <label class="cursor-pointer">
+                                            <input type="radio" name="anPedidoAddon" value="web" class="peer sr-only">
+                                            <div class="peer-checked:border-white/40 peer-checked:bg-white/10 peer-checked:text-white border border-white/10 bg-[#05070D] text-zinc-400 rounded-xl py-2.5 px-3 text-center text-xs font-bold transition">
+                                                Web / Hub
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div>
+                                        <label for="an-req-imdb" class="block text-[11px] uppercase tracking-wider text-zinc-400 font-semibold mb-1">IMDb ID *</label>
+                                        <input type="text" id="an-req-imdb" required placeholder="tt0816692" class="input-unified w-full rounded-xl px-3.5 py-2.5 text-sm">
+                                    </div>
+                                    <div>
+                                        <label for="an-req-type" class="block text-[11px] uppercase tracking-wider text-zinc-400 font-semibold mb-1">Tipo</label>
+                                        <select id="an-req-type" class="input-unified w-full rounded-xl px-3.5 py-2.5 text-sm">
+                                            <option value="movie">Filme</option>
+                                            <option value="series">Série</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label for="an-req-episode" class="block text-[11px] uppercase tracking-wider text-zinc-400 font-semibold mb-1">Episódio (opcional)</label>
+                                        <input type="text" id="an-req-episode" placeholder="S01E01" class="input-unified w-full rounded-xl px-3.5 py-2.5 text-sm">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label for="an-req-title" class="block text-[11px] uppercase tracking-wider text-zinc-400 font-semibold mb-1">Título (opcional)</label>
+                                    <input type="text" id="an-req-title" placeholder="Nome do filme ou série" class="input-unified w-full rounded-xl px-3.5 py-2.5 text-sm">
+                                </div>
+
+                                <div class="flex justify-end">
+                                    <button type="submit" class="bg-primary hover:bg-primary-hover text-on-accent px-6 py-2.5 rounded-full text-xs font-bold transition flex items-center gap-2">
+                                        <i class="fa-solid fa-plus"></i> Registrar Pedido
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Integração API nos Addons -->
+                        <div class="lg:col-span-5 glass-panel rounded-2xl border border-white/10 p-5 sm:p-6 flex flex-col justify-between">
+                            <div>
+                                <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                                    <i class="fa-solid fa-code text-highlight"></i> Integrar nos Addons (API)
+                                </h3>
+                                <p class="text-xs text-zinc-400 mt-1">No <strong>FenixPlus</strong> e no <strong>FenixFlix</strong>, basta enviar o campo <code class="text-primary">addon</code> no <code class="text-zinc-200">POST /api/pedidos</code> (ou <code class="text-zinc-200">/api/pedidos/novo</code>):</p>
+
+                                <pre id="an-api-snippet" class="mt-3 bg-[#05070D] border border-white/10 rounded-xl p-3.5 text-[11px] text-zinc-300 overflow-x-auto leading-relaxed">POST /api/pedidos/novo
+Content-Type: application/json
+
+{
+  "id": "tt0816692",
+  "type": "movie",
+  "episode": "",
+  "title": "Interestelar",
+  "addon": "fenixplus"
+}</pre>
+                                <p class="text-[11px] text-zinc-500 mt-2">Valores aceitos em <code class="text-zinc-300">addon</code>: <code class="text-primary">fenixplus</code>, <code class="text-highlight">fenixflix</code> ou <code class="text-zinc-300">web</code> (também aceita header <code class="text-zinc-300">X-Fenix-Addon</code>).</p>
+                            </div>
+                            <button type="button" onclick="adminAnalytics.copyApiSnippet()" class="mt-4 w-full bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-white/10 py-2.5 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2">
+                                <i class="fa-regular fa-copy"></i> Copiar exemplo da API
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Ranking dos Mais Pedidos -->
+                    <div class="glass-panel rounded-2xl border border-white/10 p-5 sm:p-6">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                            <div>
+                                <h3 class="text-base font-semibold text-white">Top Pedidos Registrados</h3>
+                                <p class="text-xs text-zinc-400">Agrupados por IMDb ID com quebra entre FenixPlus e FenixFlix</p>
+                            </div>
+                            <span id="an-pedidos-badge" class="text-xs text-zinc-400 tabular-nums">0 itens</span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse min-w-[640px]">
+                                <thead>
+                                    <tr class="border-b border-white/10 text-[11px] uppercase tracking-wider text-zinc-500">
+                                        <th class="pb-3 pr-3">IMDb / Título</th>
+                                        <th class="pb-3 px-3">Tipo</th>
+                                        <th class="pb-3 px-3 text-center">Total</th>
+                                        <th class="pb-3 px-3 text-center">FenixPlus</th>
+                                        <th class="pb-3 px-3 text-center">FenixFlix</th>
+                                        <th class="pb-3 px-3">Episódios</th>
+                                        <th class="pb-3 pl-3 text-right">Último Pedido</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="an-top-pedidos-body" class="divide-y divide-white/5 text-sm text-zinc-300 tabular-nums">
+                                    <tr><td colspan="7" class="py-8 text-center text-zinc-500 text-xs">Carregando pedidos...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-ABA 2: COMPARADOR SITE VS TMDB -->
+                <div id="an-sub-tmdb" class="an-subtab hidden space-y-6">
+                    <div class="glass-panel rounded-2xl border border-white/10 p-5 sm:p-6">
+                        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-white/10">
+                            <div>
+                                <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                                    <i class="fa-solid fa-scale-balanced text-primary"></i> Comparador: Populares do Site vs TMDB
+                                </h3>
+                                <p class="text-xs text-zinc-400 mt-1">Cruza o Top 20 do TMDB com seu catálogo e ranking de views para mostrar o que já bomba e o que falta adicionar.</p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <!-- Alternador Lado a Lado vs Tabela -->
+                                <div class="inline-flex bg-[#05070D] border border-white/10 rounded-xl p-0.5">
+                                    <button type="button" id="an-tmdb-mode-side" onclick="adminAnalytics.setTMDBViewMode('side')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-on-accent transition flex items-center gap-1.5">
+                                        <i class="fa-solid fa-table-columns"></i> Lado a Lado
+                                    </button>
+                                    <button type="button" id="an-tmdb-mode-table" onclick="adminAnalytics.setTMDBViewMode('table')" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-400 hover:text-white transition flex items-center gap-1.5">
+                                        <i class="fa-solid fa-table-list"></i> Tabela
+                                    </button>
+                                </div>
+                                <select id="an-tmdb-type" onchange="adminAnalytics.loadTMDBCompare(false)" class="input-unified rounded-xl px-3 py-2 text-xs font-semibold">
+                                    <option value="movie">Filmes</option>
+                                    <option value="series">Séries</option>
+                                </select>
+                                <select id="an-tmdb-source" onchange="adminAnalytics.loadTMDBCompare(false)" class="input-unified rounded-xl px-3 py-2 text-xs font-semibold">
+                                    <option value="popular">Populares TMDB</option>
+                                    <option value="trending">Em Alta (Semana)</option>
+                                </select>
+                                <select id="an-tmdb-filter" onchange="adminAnalytics.renderTMDBViews()" class="input-unified rounded-xl px-3 py-2 text-xs font-semibold">
+                                    <option value="all">Todos (20)</option>
+                                    <option value="missing">Faltando no Site</option>
+                                    <option value="present">Já no Catálogo</option>
+                                </select>
+                                <button onclick="adminAnalytics.loadTMDBCompare(true)" class="bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-white/10 px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5">
+                                    <i class="fa-solid fa-rotate"></i> Recarregar
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Cobertura KPIs -->
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5 tabular-nums">
+                            <div class="bg-[#05070D]/80 border border-emerald-500/20 rounded-2xl p-4">
+                                <span class="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold">No Seu Catálogo</span>
+                                <p id="an-tmdb-in-cat" class="text-2xl font-bold text-white mt-1">-- / 20</p>
+                            </div>
+                            <div class="bg-[#05070D]/80 border border-danger/25 rounded-2xl p-4">
+                                <span class="text-[11px] uppercase tracking-wider text-danger font-semibold">Faltando Adicionar</span>
+                                <p id="an-tmdb-missing" class="text-2xl font-bold text-white mt-1">--</p>
+                            </div>
+                            <div class="bg-[#05070D]/80 border border-highlight/20 rounded-2xl p-4">
+                                <span class="text-[11px] uppercase tracking-wider text-highlight font-semibold">No Top 20 de Ambos</span>
+                                <p id="an-tmdb-overlap" class="text-2xl font-bold text-white mt-1">--</p>
+                            </div>
+                        </div>
+
+                        <!-- MODO 1: LADO A LADO (TMDB | MEU SITE) -->
+                        <div id="an-tmdb-side-wrapper" class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-6">
+                            <!-- Coluna Esquerda: Populares do TMDB -->
+                            <div class="bg-[#05070D]/70 border border-white/10 rounded-2xl p-4">
+                                <div class="flex items-center justify-between pb-3 mb-3 border-b border-white/10">
+                                    <div>
+                                        <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                                            <span class="w-2 h-2 rounded-full bg-sky-400"></span> Populares do TMDB
+                                        </h4>
+                                        <p class="text-[11px] text-zinc-500 mt-0.5">Top 20 global no TMDB</p>
+                                    </div>
+                                    <span id="an-side-tmdb-count" class="text-[11px] text-zinc-400 tabular-nums">20 títulos</span>
+                                </div>
+                                <div id="an-side-tmdb-list" class="space-y-2 max-h-[640px] overflow-y-auto custom-scrollbar pr-1 tabular-nums">
+                                    <div class="py-10 text-center text-zinc-500 text-xs">Carregando TMDB...</div>
+                                </div>
+                            </div>
+
+                            <!-- Coluna Direita: Populares do Meu Site -->
+                            <div class="bg-[#05070D]/70 border border-white/10 rounded-2xl p-4">
+                                <div class="flex items-center justify-between pb-3 mb-3 border-b border-white/10">
+                                    <div>
+                                        <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                                            <span class="w-2 h-2 rounded-full bg-primary"></span> Populares do Meu Site
+                                        </h4>
+                                        <p class="text-[11px] text-zinc-500 mt-0.5">Top 20 mais vistos no Fenixhub</p>
+                                    </div>
+                                    <span id="an-side-site-count" class="text-[11px] text-zinc-400 tabular-nums">20 títulos</span>
+                                </div>
+                                <div id="an-side-site-list" class="space-y-2 max-h-[640px] overflow-y-auto custom-scrollbar pr-1 tabular-nums">
+                                    <div class="py-10 text-center text-zinc-500 text-xs">Carregando populares do site...</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- MODO 2: GRÁFICO + TABELA DETALHADA -->
+                        <div id="an-tmdb-table-wrapper" class="hidden">
+                            <div class="mt-6">
+                                <h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-3">Popularidade TMDB vs Views no Fenixhub (Top 12 TMDB)</h4>
+                                <div class="relative h-72 bg-[#05070D]/60 border border-white/5 rounded-2xl p-3">
+                                    <canvas id="chartTMDBCompare"></canvas>
+                                </div>
+                            </div>
+
+                            <div class="overflow-x-auto mt-6">
+                                <table class="w-full text-left border-collapse min-w-[740px]">
+                                    <thead>
+                                        <tr class="border-b border-white/10 text-[11px] uppercase tracking-wider text-zinc-500">
+                                            <th class="pb-3 pr-2">#TMDB</th>
+                                            <th class="pb-3 px-2">Título</th>
+                                            <th class="pb-3 px-2 text-center">Nota</th>
+                                            <th class="pb-3 px-2 text-center">Status no Site</th>
+                                            <th class="pb-3 px-2 text-center">Rank / Views Site</th>
+                                            <th class="pb-3 px-2 text-center">Pedidos</th>
+                                            <th class="pb-3 pl-2 text-right">Ação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="an-tmdb-table-body" class="divide-y divide-white/5 text-sm text-zinc-300 tabular-nums">
+                                        <tr><td colspan="7" class="py-10 text-center text-zinc-500 text-xs">Carregando comparação com TMDB...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-ABA 3: POPULARES & RECENTES DO SITE -->
+                <div id="an-sub-media" class="an-subtab hidden grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Populares do Site -->
+                    <div class="glass-panel rounded-2xl border border-white/10 p-5 sm:p-6">
+                        <div class="flex items-center justify-between gap-2 mb-4">
+                            <div>
+                                <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                                    <i class="fa-solid fa-fire text-primary"></i> Populares do Site
+                                </h3>
+                                <p class="text-xs text-zinc-400">Ranking real por visualizações</p>
+                            </div>
+                            <select id="an-pop-filter" onchange="adminAnalytics.renderPopularesList()" class="input-unified rounded-xl px-3 py-1.5 text-xs">
+                                <option value="all">Geral</option>
+                                <option value="movie">Filmes</option>
+                                <option value="series">Séries</option>
+                            </select>
+                        </div>
+                        <div id="an-populares-list" class="space-y-2 max-h-[540px] overflow-y-auto custom-scrollbar pr-1 tabular-nums"></div>
+                    </div>
+
+                    <!-- Recentes no Catálogo -->
+                    <div class="glass-panel rounded-2xl border border-white/10 p-5 sm:p-6">
+                        <div class="flex items-center justify-between gap-2 mb-4">
+                            <div>
+                                <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                                    <i class="fa-solid fa-clock-rotate-left text-highlight"></i> Recentes no Catálogo
+                                </h3>
+                                <p class="text-xs text-zinc-400">Últimos 25 conteúdos adicionados ou atualizados</p>
+                            </div>
+                        </div>
+                        <div id="an-recentes-list" class="space-y-2 max-h-[540px] overflow-y-auto custom-scrollbar pr-1 tabular-nums"></div>
+                    </div>
+                </div>
+
+                <!-- SUB-ABA 4: BACKUPS (ZIP & TELEGRAM) -->
+                <div id="an-sub-backup" class="an-subtab hidden grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="glass-panel rounded-2xl border border-white/10 p-5 sm:p-6 flex flex-col justify-between">
+                        <div>
+                            <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-file-zipper text-primary"></i> Download Completo de JSONs (.zip)
+                            </h3>
+                            <p class="text-xs text-zinc-400 mt-1 leading-relaxed">Empacota todos os JSONs ativos do banco de dados em um único arquivo <code class="text-zinc-200">.zip</code> pronto para baixar e guardar onde quiser.</p>
+                        </div>
+                        <button onclick="adminAnalytics.downloadBackupZip()" class="mt-6 bg-primary hover:bg-primary-hover text-on-accent px-5 py-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-download"></i> Baixar Todos os JSONs em ZIP Agora
+                        </button>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl border border-white/10 p-5 sm:p-6">
+                        <div class="flex items-center justify-between gap-2">
+                            <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                                <i class="fa-brands fa-telegram text-sky-400"></i> Backup Automático no Telegram
+                            </h3>
+                            <span id="an-backup-tg-pill" class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-zinc-800 text-zinc-400">--</span>
+                        </div>
+                        <p class="text-xs text-zinc-400 mt-1">Envia o <code class="text-zinc-200">.zip</code> de todos os JSONs para um canal privado separado do <code class="text-zinc-200">LOG_CHANNEL</code> de vídeos.</p>
+
+                        <div id="an-backup-status-box" class="mt-4 bg-[#05070D]/80 border border-white/10 rounded-xl p-3.5 text-xs space-y-1.5 text-zinc-300 tabular-nums">
+                            Carregando status...
+                        </div>
+
+                        <div class="mt-4 flex gap-2">
+                            <button onclick="adminAnalytics.triggerTelegramBackup()" class="flex-1 bg-sky-500 hover:bg-sky-400 text-zinc-950 font-bold py-2.5 px-4 rounded-xl text-xs transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-paper-plane"></i> Enviar Backup Agora
+                            </button>
+                        </div>
+
+                        <div class="mt-4 pt-4 border-t border-white/10 text-[11px] text-zinc-500 space-y-1">
+                            <p class="font-semibold text-zinc-400">Variáveis no <code class="text-zinc-300">.env</code> (Render / VPS):</p>
+                            <p><code>TELEGRAM_BACKUP_BOT_TOKEN</code> — token do bot (ex: BotFather)</p>
+                            <p><code>TELEGRAM_BACKUP_CHAT_ID</code> — ID do canal privado de backup (ex: <code>-100...</code>)</p>
+                            <p><code>TELEGRAM_BACKUP_INTERVAL_HOURS</code> — intervalo em horas (padrão: <code>24</code>)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <!-- Modal do Catálogo (Ver Links) -->
@@ -1487,7 +1941,8 @@
     <script>
         window.TELEGRAM_API_URL = '__TELEGRAM_API_URL_PLACEHOLDER__';
     </script>
-    <script src="/js/app.js?v=21"></script>
+    <script src="/js/app.js?v=22"></script>
+    <script src="/js/admin_analytics.js?v=2"></script>
 
     <!-- Overlay para arrastar e soltar arquivos -->
     <div id="drag-drop-overlay" class="fixed inset-0 bg-[#05070D]/85 backdrop-blur-md z-[9999] flex flex-col items-center justify-center border-4 border-dashed border-primary/60 m-4 rounded-3xl opacity-0 pointer-events-none transition-opacity duration-300">

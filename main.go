@@ -127,10 +127,26 @@ func main() {
 		api.POST("/arquivos/rejeitar", auth.RequireAdminOrAjudante(cfg), h.RejectPending)
 		api.GET("/meus-pendentes", h.GetMyPending)
 
-		// Pedidos
+		// Pedidos (suporta origem/addon: fenixplus, fenixflix, web)
 		api.GET("/pedidos", h.GetPedidos)
 		api.POST("/pedidos", h.CreatePedido)
+		api.POST("/pedidos/novo", h.CreatePedido)
 		api.POST("/pedidos/delete", auth.RequireAdmin(cfg), h.DeletePedido)
+
+		// Backup ZIP & Telegram (exclusivo Admin)
+		api.GET("/backup/zip", auth.RequireAdmin(cfg), h.DownloadBackupZip)
+		api.POST("/backup/telegram", auth.RequireAdmin(cfg), h.TriggerTelegramBackup)
+		api.GET("/backup/status", auth.RequireAdmin(cfg), h.GetBackupStatus)
+
+		// Painel de Análise & Comparador TMDB (exclusivo Admin)
+		admin := api.Group("/admin", auth.RequireAdmin(cfg))
+		{
+			admin.GET("/analytics", h.GetAdminAnalytics)
+			admin.GET("/tmdb-compare", h.GetAdminTMDBCompare)
+			admin.GET("/backup/zip", h.DownloadBackupZip)
+			admin.POST("/backup/telegram", h.TriggerTelegramBackup)
+			admin.GET("/backup/status", h.GetBackupStatus)
+		}
 
 		// Denúncias
 		api.GET("/denuncias", auth.RequireAdminOrAjudante(cfg), h.GetDenuncias)

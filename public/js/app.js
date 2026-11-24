@@ -295,6 +295,7 @@ function clearDiscordSession() {
             const btnRequests = document.getElementById('btn-requests');
             const btnReports = document.getElementById('btn-reports');
             const btnApprovals = document.getElementById('btn-approvals');
+            const btnAnalytics = document.getElementById('btn-analytics');
             
             if (btnGenerator) {
                 btnGenerator.classList.remove('hidden');
@@ -304,6 +305,13 @@ function clearDiscordSession() {
                     btnStorage.classList.remove('hidden');
                 } else {
                     btnStorage.classList.add('hidden');
+                }
+            }
+            if (btnAnalytics) {
+                if (isLogged) {
+                    btnAnalytics.classList.remove('hidden');
+                } else {
+                    btnAnalytics.classList.add('hidden');
                 }
             }
             if (btnRequests) {
@@ -364,7 +372,8 @@ function clearDiscordSession() {
             
             // Se não tiver acesso e estiver em aba administrativa, volta para catálogo
             const activeTab = document.querySelector('.tab-content.active');
-            if (!hasAccess && activeTab && (activeTab.id === 'view-requests' || activeTab.id === 'view-storage' || activeTab.id === 'view-reports' || activeTab.id === 'view-approvals')) {
+            if ((!hasAccess && activeTab && (activeTab.id === 'view-requests' || activeTab.id === 'view-storage' || activeTab.id === 'view-reports' || activeTab.id === 'view-approvals')) ||
+                (!isLogged && activeTab && activeTab.id === 'view-analytics')) {
                 switchView('catalog');
                 setTimeout(() => cat.filter('all'), 50);
             }
@@ -451,6 +460,11 @@ function clearDiscordSession() {
         }
 
         function switchView(viewName) {
+            if (viewName === 'analytics' && !sessionStorage.getItem('fenixflix_senha')) {
+                showToast("Acesso exclusivo do Admin.", "error");
+                return;
+            }
+
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             
             document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -469,6 +483,9 @@ function clearDiscordSession() {
 
             if(viewName === 'catalog' && cat.allItems.length === 0) {
                 cat.init();
+            }
+            if(viewName === 'analytics' && window.adminAnalytics) {
+                window.adminAnalytics.load(false);
             }
         }
 
@@ -6186,13 +6203,27 @@ self.onmessage = async (e) => {
                     let totalLines = 0;
                     
                     data.forEach(item => {
-                        reqProcessor.parsedItems.set(item.id, {
-                            id: item.id,
-                            type: item.type,
-                            title: "Buscando...",
-                            missingEps: new Set(item.episodes || []),
-                            count: item.count || 1
-                        });
+                        const key = item.imdb_id || item.id;
+                        const mediaType = item.tipo || item.type || 'movie';
+                        const existing = reqProcessor.parsedItems.get(key);
+                        const eps = existing ? existing.missingEps : new Set(item.episodes || []);
+                        if (item.episodio) eps.add(item.episodio);
+
+                        if (existing) {
+                            existing.count += (item.count || 1);
+                            if (!existing.title || existing.title === 'Buscando...') {
+                                existing.title = item.titulo || existing.title;
+                            }
+                        } else {
+                            reqProcessor.parsedItems.set(key, {
+                                id: key,
+                                type: mediaType,
+                                title: item.titulo || "Buscando...",
+                                missingEps: eps,
+                                count: item.count || 1,
+                                addon: item.addon || 'web'
+                            });
+                        }
                         totalLines += (item.count || 1);
                     });
                     

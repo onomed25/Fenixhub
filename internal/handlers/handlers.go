@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"fenixhub/internal/auth"
+	"fenixhub/internal/backup"
 	"fenixhub/internal/config"
 	"fenixhub/internal/database"
 	"fenixhub/internal/hf"
@@ -24,6 +26,7 @@ type Handler struct {
 	cfg          *config.Config
 	db           *database.DB
 	hfClient     *hf.Client
+	backupMgr    *backup.Manager
 	httpClient   *http.Client
 	viewsTracker *views.Tracker
 
@@ -32,15 +35,24 @@ type Handler struct {
 	cachedCatalog     []map[string]interface{}
 	lastCatalogUpdate time.Time
 	cacheTTL          time.Duration
+
+	// Cache de comparação TMDB vs Populares
+	tmdbCompareMu    sync.RWMutex
+	tmdbCompareCache map[string]tmdbCompareCacheEntry
+	tmdbExtIDMu      sync.RWMutex
+	tmdbExtIDCache   map[string]string
+	tmdbMetaMu       sync.RWMutex
+	tmdbMetaCache    map[string]tmdbBriefMeta
+	tmdbAPIBaseURL   string
 }
 
 func NewHandler(cfg *config.Config, db *database.DB) *Handler {
 	var hfClient *hf.Client
-	if cfg.HFToken != "" && cfg.HFDatabaseRepo != "" {
+	if strings.EqualFold(cfg.DatabaseSource, "huggingface") && cfg.HFToken != "" && cfg.HFDatabaseRepo != "" {
 		hfClient = hf.NewClient(cfg.HFToken, cfg.HFDatabaseRepo, cfg.HFDatabaseType)
 	}
 
-	return &Handler{
+	h := &Handler{
 		cfg:          cfg,
 		db:           db,
 		hfClient:     hfClient,
@@ -48,8 +60,24 @@ func NewHandler(cfg *config.Config, db *database.DB) *Handler {
 		httpClient: &http.Client{
 			Timeout: 15 * time.Second,
 		},
-		cacheTTL: 30 * time.Second,
+		cacheTTL:         30 * time.Second,
+		tmdbCompareCache: make(map[string]tmdbCompareCacheEntry),
+		tmdbExtIDCache:   make(map[string]string),
+		tmdbMetaCache:    make(map[string]tmdbBriefMeta),
+		tmdbAPIBaseURL:   "https://api.themoviedb.org/3",
 	}
+
+	h.backupMgr = backup.NewManager(
+		cfg.TelegramBackupBotToken,
+		cfg.TelegramBackupChatID,
+		cfg.TelegramBackupIntervalHours,
+		func() ([]map[string]interface{}, error) {
+			return h.loadCatalogItems(false)
+		},
+	)
+	h.backupMgr.StartScheduler(context.Background())
+
+	return h
 }
 
 func (h *Handler) InvalidateCatalogCache() {
@@ -71,10 +99,11 @@ func (h *Handler) Health(c *gin.Context) {
 }
 
 func (h *Handler) GetHfConfig(c *gin.Context) {
-	if h.cfg.HFToken == "" {
+	if h.hfClient == nil || !h.hfClient.IsConfigured() {
 		c.JSON(200, gin.H{
 			"accounts": []interface{}{},
-			"message":  "HF_TOKEN não configurado no servidor.",
+			"disabled": true,
+			"message":  "Hugging Face desativado. Armazenamento principal ativo via banco de dados.",
 		})
 		return
 	}
@@ -88,18 +117,19 @@ func (h *Handler) GetHfConfig(c *gin.Context) {
 		repoType = "dataset"
 	}
 
-	accounts := []gin.H{
-		{
-			"id":    "default",
-			"name":  repoName,
-			"repo":  repoName,
-			"type":  repoType,
-			"token": h.cfg.HFToken,
-		},
+	// Nunca expor HF_TOKEN publicamente para visitantes sem permissão de admin
+	account := gin.H{
+		"id":   "default",
+		"name": repoName,
+		"repo": repoName,
+		"type": repoType,
+	}
+	if auth.IsAdmin(c, h.cfg.AdminPassword) {
+		account["configured"] = true
 	}
 
 	c.JSON(200, gin.H{
-		"accounts": accounts,
+		"accounts": []gin.H{account},
 		"message":  "Hugging Face ativo.",
 	})
 }
@@ -635,25 +665,108 @@ func (h *Handler) GetPedidos(c *gin.Context) {
 
 func (h *Handler) CreatePedido(c *gin.Context) {
 	var body struct {
-		ID      string `json:"id"`
-		Type    string `json:"type"`
-		Episode string `json:"episode"`
+		ID       string `json:"id"`
+		ImdbID   string `json:"imdb_id"`
+		Type     string `json:"type"`
+		Tipo     string `json:"tipo"`
+		Episode  string `json:"episode"`
+		Episodio string `json:"episodio"`
+		Addon    string `json:"addon"`
+		Source   string `json:"source"`
+		Origem   string `json:"origem"`
+		Title    string `json:"title"`
+		Titulo   string `json:"titulo"`
 	}
-	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.ID) == "" {
+	_ = c.ShouldBindJSON(&body)
+
+	imdbID := strings.TrimSpace(body.ID)
+	if imdbID == "" {
+		imdbID = strings.TrimSpace(body.ImdbID)
+	}
+	if imdbID == "" {
+		imdbID = strings.TrimSpace(c.PostForm("id"))
+	}
+	if imdbID == "" {
+		imdbID = strings.TrimSpace(c.PostForm("imdb_id"))
+	}
+	if imdbID == "" {
+		imdbID = strings.TrimSpace(c.Query("id"))
+	}
+	if imdbID == "" {
 		c.JSON(400, gin.H{"erro": "ID do pedido é obrigatório."})
 		return
 	}
 
-	cleanType := strings.ToLower(strings.TrimSpace(body.Type))
-	if cleanType != "movie" && cleanType != "series" {
+	rawType := strings.TrimSpace(body.Type)
+	if rawType == "" {
+		rawType = strings.TrimSpace(body.Tipo)
+	}
+	if rawType == "" {
+		rawType = strings.TrimSpace(c.PostForm("type"))
+	}
+	if rawType == "" {
+		rawType = strings.TrimSpace(c.Query("type"))
+	}
+	cleanType := strings.ToLower(rawType)
+	switch cleanType {
+	case "series", "serie", "tv", "show":
+		cleanType = "series"
+	default:
 		cleanType = "movie"
 	}
 
-	if err := h.db.CreatePedido(strings.TrimSpace(body.ID), cleanType, strings.TrimSpace(body.Episode)); err != nil {
+	episode := strings.TrimSpace(body.Episode)
+	if episode == "" {
+		episode = strings.TrimSpace(body.Episodio)
+	}
+	if episode == "" {
+		episode = strings.TrimSpace(c.PostForm("episode"))
+	}
+	if episode == "" {
+		episode = strings.TrimSpace(c.Query("episode"))
+	}
+
+	rawAddon := strings.TrimSpace(body.Addon)
+	if rawAddon == "" {
+		rawAddon = strings.TrimSpace(body.Source)
+	}
+	if rawAddon == "" {
+		rawAddon = strings.TrimSpace(body.Origem)
+	}
+	if rawAddon == "" {
+		rawAddon = strings.TrimSpace(c.PostForm("addon"))
+	}
+	if rawAddon == "" {
+		rawAddon = strings.TrimSpace(c.Query("addon"))
+	}
+	if rawAddon == "" {
+		rawAddon = strings.TrimSpace(c.GetHeader("X-Fenix-Addon"))
+	}
+	normAddon := database.NormalizeAddon(rawAddon)
+
+	title := strings.TrimSpace(body.Title)
+	if title == "" {
+		title = strings.TrimSpace(body.Titulo)
+	}
+	if title == "" {
+		title = strings.TrimSpace(c.PostForm("title"))
+	}
+
+	if err := h.db.CreatePedido(imdbID, cleanType, episode, normAddon, title); err != nil {
 		c.JSON(500, gin.H{"erro": "Erro ao salvar pedido."})
 		return
 	}
-	c.JSON(201, gin.H{"sucesso": true, "mensagem": "Pedido registrado com sucesso!"})
+	c.JSON(201, gin.H{
+		"sucesso":  true,
+		"mensagem": "Pedido registrado com sucesso!",
+		"pedido": gin.H{
+			"imdb_id":  imdbID,
+			"tipo":     cleanType,
+			"episodio": episode,
+			"addon":    normAddon,
+			"titulo":   title,
+		},
+	})
 }
 
 func (h *Handler) DeletePedido(c *gin.Context) {

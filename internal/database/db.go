@@ -111,6 +111,8 @@ func (db *DB) migrate() error {
 				imdb_id VARCHAR(50) NOT NULL,
 				tipo VARCHAR(20) NOT NULL,
 				episodio VARCHAR(50),
+				addon VARCHAR(50) DEFAULT 'web',
+				titulo VARCHAR(255) DEFAULT '',
 				criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 			);`,
 			`CREATE TABLE IF NOT EXISTS denuncias_conteudo (
@@ -158,6 +160,8 @@ func (db *DB) migrate() error {
 				imdb_id TEXT NOT NULL,
 				tipo TEXT NOT NULL,
 				episodio TEXT,
+				addon TEXT DEFAULT 'web',
+				titulo TEXT DEFAULT '',
 				criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
 			);`,
 			`CREATE TABLE IF NOT EXISTS denuncias_conteudo (
@@ -189,6 +193,32 @@ func (db *DB) migrate() error {
 	for _, stmt := range ddl {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("erro executando ddl: %w", err)
+		}
+	}
+
+	// Migrações incrementais seguras para tabelas existentes
+	if db.Driver == "postgres" {
+		_, _ = db.Exec(`ALTER TABLE pedidos_sugeridos ADD COLUMN IF NOT EXISTS addon VARCHAR(50) DEFAULT 'web'`)
+		_, _ = db.Exec(`ALTER TABLE pedidos_sugeridos ADD COLUMN IF NOT EXISTS titulo VARCHAR(255) DEFAULT ''`)
+	} else {
+		cols := map[string]bool{}
+		if rows, err := db.Query(`PRAGMA table_info(pedidos_sugeridos)`); err == nil {
+			for rows.Next() {
+				var cid int
+				var name, ctype string
+				var notnull, pk int
+				var dflt sql.NullString
+				if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err == nil {
+					cols[strings.ToLower(name)] = true
+				}
+			}
+			_ = rows.Close()
+		}
+		if !cols["addon"] {
+			_, _ = db.Exec(`ALTER TABLE pedidos_sugeridos ADD COLUMN addon TEXT DEFAULT 'web'`)
+		}
+		if !cols["titulo"] {
+			_, _ = db.Exec(`ALTER TABLE pedidos_sugeridos ADD COLUMN titulo TEXT DEFAULT ''`)
 		}
 	}
 
@@ -475,8 +505,30 @@ func (db *DB) RejectPending(nome string) error {
 // Pedidos
 // ----------------------------------------------------------------------------
 
+// NormalizeAddon padroniza o nome do addon de origem do pedido.
+func NormalizeAddon(raw string) string {
+	clean := strings.ToLower(strings.TrimSpace(raw))
+	clean = strings.ReplaceAll(clean, "-", "")
+	clean = strings.ReplaceAll(clean, "_", "")
+	clean = strings.ReplaceAll(clean, " ", "")
+
+	switch clean {
+	case "fenixplus", "fnxplus", "plus", "apoiadores", "fenixapoiadores":
+		return "fenixplus"
+	case "fenixflix", "fnxflix", "flix", "free", "gratuito":
+		return "fenixflix"
+	case "", "web", "hub", "fenixhub", "site":
+		return "web"
+	default:
+		if len(clean) > 40 {
+			clean = clean[:40]
+		}
+		return clean
+	}
+}
+
 func (db *DB) GetPedidos() ([]map[string]interface{}, error) {
-	query := db.Rebind("SELECT id, imdb_id, tipo, COALESCE(episodio, ''), criado_em FROM pedidos_sugeridos ORDER BY id DESC")
+	query := db.Rebind("SELECT id, imdb_id, tipo, COALESCE(episodio, ''), COALESCE(addon, 'web'), COALESCE(titulo, ''), criado_em FROM pedidos_sugeridos ORDER BY id DESC")
 	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
@@ -486,25 +538,29 @@ func (db *DB) GetPedidos() ([]map[string]interface{}, error) {
 	list := make([]map[string]interface{}, 0)
 	for rows.Next() {
 		var id int
-		var imdbID, tipo, episodio string
+		var imdbID, tipo, episodio, addon, titulo string
 		var criadoEm time.Time
-		if err := rows.Scan(&id, &imdbID, &tipo, &episodio, &criadoEm); err != nil {
+		if err := rows.Scan(&id, &imdbID, &tipo, &episodio, &addon, &titulo, &criadoEm); err != nil {
 			continue
 		}
+		normAddon := NormalizeAddon(addon)
 		list = append(list, map[string]interface{}{
 			"id":        id,
 			"imdb_id":   imdbID,
 			"tipo":      tipo,
 			"episodio":  episodio,
+			"addon":     normAddon,
+			"titulo":    titulo,
 			"criado_em": criadoEm.Format(time.RFC3339),
 		})
 	}
 	return list, nil
 }
 
-func (db *DB) CreatePedido(imdbID, tipo, episodio string) error {
-	query := db.Rebind("INSERT INTO pedidos_sugeridos (imdb_id, tipo, episodio) VALUES (?, ?, ?)")
-	_, err := db.Exec(query, imdbID, tipo, episodio)
+func (db *DB) CreatePedido(imdbID, tipo, episodio, addon, titulo string) error {
+	normAddon := NormalizeAddon(addon)
+	query := db.Rebind("INSERT INTO pedidos_sugeridos (imdb_id, tipo, episodio, addon, titulo) VALUES (?, ?, ?, ?, ?)")
+	_, err := db.Exec(query, imdbID, tipo, episodio, normAddon, strings.TrimSpace(titulo))
 	return err
 }
 
@@ -512,6 +568,169 @@ func (db *DB) DeletePedido(id string) error {
 	query := db.Rebind("DELETE FROM pedidos_sugeridos WHERE id = ?")
 	_, err := db.Exec(query, id)
 	return err
+}
+
+type PedidoAddonSummary struct {
+	FenixPlus int `json:"fenixplus"`
+	FenixFlix int `json:"fenixflix"`
+	Web       int `json:"web"`
+	Outros    int `json:"outros"`
+}
+
+type PedidoDayPoint struct {
+	Date      string `json:"date"`
+	FenixPlus int    `json:"fenixplus"`
+	FenixFlix int    `json:"fenixflix"`
+	Outros    int    `json:"outros"`
+	Total     int    `json:"total"`
+}
+
+type PedidoTopItem struct {
+	ImdbID       string   `json:"imdb_id"`
+	Tipo         string   `json:"tipo"`
+	Titulo       string   `json:"titulo"`
+	Total        int      `json:"total"`
+	FenixPlus    int      `json:"fenixplus"`
+	FenixFlix    int      `json:"fenixflix"`
+	Outros       int      `json:"outros"`
+	Episodios    []string `json:"episodios"`
+	UltimoPedido string   `json:"ultimo_pedido"`
+}
+
+type PedidosAnalytics struct {
+	Total       int                      `json:"total"`
+	ByAddon     PedidoAddonSummary       `json:"by_addon"`
+	Timeline    []PedidoDayPoint         `json:"timeline"`
+	TopPedidos  []PedidoTopItem          `json:"top_pedidos"`
+	Recentes    []map[string]interface{} `json:"recentes"`
+	CountsByKey map[string]int           `json:"-"`
+}
+
+func (db *DB) GetPedidosAnalytics() (*PedidosAnalytics, error) {
+	rows, err := db.GetPedidos()
+	if err != nil {
+		return nil, err
+	}
+
+	res := &PedidosAnalytics{
+		Total:       len(rows),
+		Timeline:    make([]PedidoDayPoint, 0, 14),
+		TopPedidos:  make([]PedidoTopItem, 0),
+		Recentes:    make([]map[string]interface{}, 0),
+		CountsByKey: make(map[string]int),
+	}
+
+	// Inicializa timeline dos últimos 14 dias (UTC)
+	now := time.Now().UTC()
+	dayIndex := make(map[string]int, 14)
+	for i := 13; i >= 0; i-- {
+		d := now.AddDate(0, 0, -i).Format("2006-01-02")
+		dayIndex[d] = len(res.Timeline)
+		res.Timeline = append(res.Timeline, PedidoDayPoint{Date: d})
+	}
+
+	type agg struct {
+		item   PedidoTopItem
+		epSeen map[string]bool
+	}
+	topMap := make(map[string]*agg)
+
+	for idx, row := range rows {
+		if idx < 50 {
+			res.Recentes = append(res.Recentes, row)
+		}
+
+		imdbID, _ := row["imdb_id"].(string)
+		tipo, _ := row["tipo"].(string)
+		episodio, _ := row["episodio"].(string)
+		addon, _ := row["addon"].(string)
+		titulo, _ := row["titulo"].(string)
+		criadoEmStr, _ := row["criado_em"].(string)
+
+		normAddon := NormalizeAddon(addon)
+		switch normAddon {
+		case "fenixplus":
+			res.ByAddon.FenixPlus++
+		case "fenixflix":
+			res.ByAddon.FenixFlix++
+		case "web":
+			res.ByAddon.Web++
+		default:
+			res.ByAddon.Outros++
+		}
+
+		if len(criadoEmStr) >= 10 {
+			dayKey := criadoEmStr[:10]
+			if pos, ok := dayIndex[dayKey]; ok {
+				pt := &res.Timeline[pos]
+				pt.Total++
+				switch normAddon {
+				case "fenixplus":
+					pt.FenixPlus++
+				case "fenixflix":
+					pt.FenixFlix++
+				default:
+					pt.Outros++
+				}
+			}
+		}
+
+		cleanID := strings.TrimSpace(imdbID)
+		if cleanID != "" {
+			res.CountsByKey[strings.ToLower(cleanID)]++
+		}
+
+		groupKey := strings.ToLower(cleanID) + "|" + strings.ToLower(strings.TrimSpace(tipo))
+		entry, exists := topMap[groupKey]
+		if !exists {
+			entry = &agg{
+				item: PedidoTopItem{
+					ImdbID:       cleanID,
+					Tipo:         tipo,
+					Titulo:       titulo,
+					Episodios:    make([]string, 0),
+					UltimoPedido: criadoEmStr,
+				},
+				epSeen: make(map[string]bool),
+			}
+			topMap[groupKey] = entry
+		}
+		entry.item.Total++
+		if entry.item.Titulo == "" && titulo != "" {
+			entry.item.Titulo = titulo
+		}
+		switch normAddon {
+		case "fenixplus":
+			entry.item.FenixPlus++
+		case "fenixflix":
+			entry.item.FenixFlix++
+		default:
+			entry.item.Outros++
+		}
+		if ep := strings.TrimSpace(episodio); ep != "" && !entry.epSeen[ep] {
+			entry.epSeen[ep] = true
+			entry.item.Episodios = append(entry.item.Episodios, ep)
+		}
+	}
+
+	for _, a := range topMap {
+		res.TopPedidos = append(res.TopPedidos, a.item)
+	}
+
+	// Ordena top pedidos por total decrescente, depois mais recente
+	for i := 0; i < len(res.TopPedidos); i++ {
+		for j := i + 1; j < len(res.TopPedidos); j++ {
+			if res.TopPedidos[j].Total > res.TopPedidos[i].Total ||
+				(res.TopPedidos[j].Total == res.TopPedidos[i].Total && res.TopPedidos[j].UltimoPedido > res.TopPedidos[i].UltimoPedido) {
+				res.TopPedidos[i], res.TopPedidos[j] = res.TopPedidos[j], res.TopPedidos[i]
+			}
+		}
+	}
+	if len(res.TopPedidos) > 30 {
+		res.TopPedidos = res.TopPedidos[:30]
+	}
+
+	return res, nil
 }
 
 // ----------------------------------------------------------------------------

@@ -2,33 +2,38 @@ package config
 
 import (
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	Port                   string
-	DatabaseURL            string
-	AdminPassword          string
-	AjudantePassword       string
-	JWTSecret              string
-	DiscordClientID        string
-	DiscordClientSecret    string
-	DiscordRedirectURI     string
-	DiscordBotToken        string
-	DiscordGuildID         string
-	DiscordAjudanteRoleID   string
-	DiscordColaboradorRoleID string
-	TMDBApiKey             string
-	TMDBToken              string
-	Environment            string
-	HFToken                string
-	HFDatabaseRepo         string
-	HFDatabaseType         string
-	HFRepoName             string
-	HFRepoType             string
-	DatabaseSource         string
-	TelegramAPIURL         string
+	Port                        string
+	DatabaseURL                 string
+	AdminPassword               string
+	AjudantePassword            string
+	JWTSecret                   string
+	DiscordClientID             string
+	DiscordClientSecret         string
+	DiscordRedirectURI          string
+	DiscordBotToken             string
+	DiscordGuildID              string
+	DiscordAjudanteRoleID       string
+	DiscordColaboradorRoleID    string
+	TMDBApiKey                  string
+	TMDBToken                   string
+	Environment                 string
+	HFToken                     string
+	HFDatabaseRepo              string
+	HFDatabaseType              string
+	HFRepoName                  string
+	HFRepoType                  string
+	DatabaseSource              string
+	TelegramAPIURL              string
+	TelegramBackupBotToken      string
+	TelegramBackupChatID        string
+	TelegramBackupIntervalHours int
 }
 
 func LoadConfig() *Config {
@@ -79,33 +84,45 @@ func LoadConfig() *Config {
 	if hfRepoType == "" {
 		hfRepoType = "dataset"
 	}
-	dbSource := os.Getenv("DATABASE_SOURCE")
-	if dbSource == "" && hfToken != "" {
-		dbSource = "huggingface"
+
+	// Banco principal: PostgreSQL/SQLite por padrão (Hugging Face desativado por padrão)
+	dbSource := strings.ToLower(strings.TrimSpace(os.Getenv("DATABASE_SOURCE")))
+	if dbSource == "" {
+		dbSource = "postgres"
+	}
+
+	backupInterval := 24
+	if rawInt := strings.TrimSpace(os.Getenv("TELEGRAM_BACKUP_INTERVAL_HOURS")); rawInt != "" {
+		if parsed, err := strconv.Atoi(rawInt); err == nil && parsed >= 0 {
+			backupInterval = parsed
+		}
 	}
 
 	return &Config{
-		Port:                   port,
-		DatabaseURL:            os.Getenv("DATABASE_URL"),
-		AdminPassword:          adminPass,
-		AjudantePassword:       ajudantePass,
-		JWTSecret:              jwtSecret,
-		DiscordClientID:        os.Getenv("DISCORD_CLIENT_ID"),
-		DiscordClientSecret:    os.Getenv("DISCORD_CLIENT_SECRET"),
-		DiscordRedirectURI:     os.Getenv("DISCORD_REDIRECT_URI"),
-		DiscordBotToken:        os.Getenv("DISCORD_BOT_TOKEN"),
-		DiscordGuildID:         os.Getenv("DISCORD_GUILD_ID"),
-		DiscordAjudanteRoleID:   os.Getenv("DISCORD_AJUDANTE_ROLE_ID"),
-		DiscordColaboradorRoleID: os.Getenv("DISCORD_COLABORADOR_ROLE_ID"),
-		TMDBApiKey:             os.Getenv("TMDB_API_KEY"),
-		TMDBToken:              os.Getenv("TMDB_TOKEN"),
-		Environment:            env,
-		HFToken:                hfToken,
-		HFDatabaseRepo:         hfDatabaseRepo,
-		HFDatabaseType:         hfDatabaseType,
-		HFRepoName:             hfRepoName,
-		HFRepoType:             hfRepoType,
-		DatabaseSource:         dbSource,
-		TelegramAPIURL:         os.Getenv("TELEGRAM_API_URL"),
+		Port:                        port,
+		DatabaseURL:                 os.Getenv("DATABASE_URL"),
+		AdminPassword:               adminPass,
+		AjudantePassword:            ajudantePass,
+		JWTSecret:                   jwtSecret,
+		DiscordClientID:             os.Getenv("DISCORD_CLIENT_ID"),
+		DiscordClientSecret:         os.Getenv("DISCORD_CLIENT_SECRET"),
+		DiscordRedirectURI:          os.Getenv("DISCORD_REDIRECT_URI"),
+		DiscordBotToken:             os.Getenv("DISCORD_BOT_TOKEN"),
+		DiscordGuildID:              os.Getenv("DISCORD_GUILD_ID"),
+		DiscordAjudanteRoleID:       os.Getenv("DISCORD_AJUDANTE_ROLE_ID"),
+		DiscordColaboradorRoleID:    os.Getenv("DISCORD_COLABORADOR_ROLE_ID"),
+		TMDBApiKey:                  os.Getenv("TMDB_API_KEY"),
+		TMDBToken:                   os.Getenv("TMDB_TOKEN"),
+		Environment:                 env,
+		HFToken:                     hfToken,
+		HFDatabaseRepo:              hfDatabaseRepo,
+		HFDatabaseType:              hfDatabaseType,
+		HFRepoName:                  hfRepoName,
+		HFRepoType:                  hfRepoType,
+		DatabaseSource:              dbSource,
+		TelegramAPIURL:              os.Getenv("TELEGRAM_API_URL"),
+		TelegramBackupBotToken:      strings.TrimSpace(os.Getenv("TELEGRAM_BACKUP_BOT_TOKEN")),
+		TelegramBackupChatID:        strings.TrimSpace(os.Getenv("TELEGRAM_BACKUP_CHAT_ID")),
+		TelegramBackupIntervalHours: backupInterval,
 	}
 }
