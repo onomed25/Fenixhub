@@ -2,12 +2,15 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -155,51 +158,248 @@ func (h *Handler) StreamVideo(c *gin.Context) {
 // Catálogo
 // ----------------------------------------------------------------------------
 
+const catalogVaryHeader = "Authorization, X-Admin-Password, X-Ajudante-Password, X-Colaborador-Password, Cookie"
+
+var seriesEpisodeRegex = regexp.MustCompile(`(?i)S(\d+)E(\d+)`)
+
+func ifNoneMatchMatches(headerVal, currentETag string) bool {
+	if strings.TrimSpace(headerVal) == "" {
+		return false
+	}
+	normalizedTarget := strings.TrimPrefix(strings.TrimSpace(currentETag), "W/")
+	for _, part := range strings.Split(headerVal, ",") {
+		candidate := strings.TrimSpace(part)
+		if candidate == "*" {
+			return true
+		}
+		candidate = strings.TrimPrefix(candidate, "W/")
+		if candidate == normalizedTarget {
+			return true
+		}
+	}
+	return false
+}
+
+func writeJSONWithETag(c *gin.Context, status int, payload interface{}, cacheControl, varyHeader string) {
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		c.JSON(500, gin.H{"erro": "Falha ao serializar resposta."})
+		return
+	}
+
+	sum := sha256.Sum256(bodyBytes)
+	etag := fmt.Sprintf("\"%x\"", sum[:16])
+
+	c.Header("ETag", etag)
+	if cacheControl != "" {
+		c.Header("Cache-Control", cacheControl)
+	}
+	if varyHeader != "" {
+		c.Header("Vary", varyHeader)
+	}
+
+	if ifNoneMatchMatches(c.GetHeader("If-None-Match"), etag) {
+		c.Status(http.StatusNotModified)
+		return
+	}
+
+	c.Data(status, "application/json; charset=utf-8", bodyBytes)
+}
+
+func summarizeCatalogItem(item map[string]interface{}) map[string]interface{} {
+	summary := make(map[string]interface{}, 18)
+	for _, key := range []string{
+		"id", "nome_do_json", "type", "title", "name", "titulo",
+		"poster", "year", "views", "is_oculto", "is_pendente",
+		"criado_em", "atualizado_em", "orderIndex",
+		"colaborador", "colaborador_id", "colaborador_avatar", "colaborador_role",
+	} {
+		if val, ok := item[key]; ok && val != nil {
+			summary[key] = val
+		}
+	}
+
+	colabSet := make(map[string]struct{})
+	colabIDSet := make(map[string]struct{})
+	addColab := func(m map[string]interface{}) {
+		if raw, ok := m["colaborador"].(string); ok {
+			trimmed := strings.TrimSpace(raw)
+			if trimmed != "" {
+				colabSet[trimmed] = struct{}{}
+			}
+		}
+		if rawID, ok := m["colaborador_id"]; ok && rawID != nil {
+			idStr := strings.TrimSpace(fmt.Sprintf("%v", rawID))
+			if idStr != "" && idStr != "<nil>" {
+				colabIDSet[idStr] = struct{}{}
+			}
+		}
+	}
+	addColab(item)
+
+	latestStreamTs := ""
+	checkTimestamp := func(m map[string]interface{}) {
+		for _, k := range []string{"criado_em", "created_at"} {
+			if v, ok := m[k].(string); ok {
+				trimmed := strings.TrimSpace(v)
+				if trimmed != "" && trimmed > latestStreamTs {
+					latestStreamTs = trimmed
+				}
+			}
+		}
+	}
+
+	streamsCount := 0
+	seasonCounts := make(map[string]int)
+	foundCount := 0
+	mediaType, _ := item["type"].(string)
+
+	if list, ok := item["streams"].([]interface{}); ok {
+		streamsCount = len(list)
+		foundEpisodes := make(map[string]struct{})
+		for _, entry := range list {
+			sm, ok := entry.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			addColab(sm)
+			checkTimestamp(sm)
+			if mediaType == "series" {
+				if name, ok := sm["name"].(string); ok {
+					if matches := seriesEpisodeRegex.FindStringSubmatch(name); len(matches) == 3 {
+						sNum, errS := strconv.Atoi(matches[1])
+						eNum, errE := strconv.Atoi(matches[2])
+						if errS == nil && errE == nil {
+							epKey := fmt.Sprintf("S%02dE%02d", sNum, eNum)
+							if _, seen := foundEpisodes[epKey]; !seen {
+								foundEpisodes[epKey] = struct{}{}
+								sKey := strconv.Itoa(sNum)
+								seasonCounts[sKey]++
+								foundCount++
+							}
+						}
+					}
+				}
+			}
+		}
+	} else if seasonMap, ok := item["streams"].(map[string]interface{}); ok {
+		for seasonKey, epVal := range seasonMap {
+			epMap, ok := epVal.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			epWithStreams := 0
+			for _, sVal := range epMap {
+				sList, ok := sVal.([]interface{})
+				if !ok || len(sList) == 0 {
+					continue
+				}
+				epWithStreams++
+				streamsCount += len(sList)
+				for _, entry := range sList {
+					if sm, ok := entry.(map[string]interface{}); ok {
+						addColab(sm)
+						checkTimestamp(sm)
+					}
+				}
+			}
+			if epWithStreams > 0 {
+				seasonCounts[seasonKey] = epWithStreams
+				foundCount += epWithStreams
+			}
+		}
+	}
+
+	summary["streams_count"] = streamsCount
+	if latestStreamTs != "" {
+		summary["latest_stream_criado_em"] = latestStreamTs
+	}
+	if len(colabSet) > 0 {
+		colabs := make([]string, 0, len(colabSet))
+		for c := range colabSet {
+			colabs = append(colabs, c)
+		}
+		sort.Strings(colabs)
+		summary["colaboradores"] = colabs
+	}
+	if len(colabIDSet) > 0 {
+		colabIDs := make([]string, 0, len(colabIDSet))
+		for id := range colabIDSet {
+			colabIDs = append(colabIDs, id)
+		}
+		sort.Strings(colabIDs)
+		summary["colaborador_ids"] = colabIDs
+	}
+	if mediaType == "series" || len(seasonCounts) > 0 {
+		summary["season_counts"] = seasonCounts
+		summary["found_count"] = foundCount
+		summary["total_seasons"] = len(seasonCounts)
+	}
+
+	return summary
+}
+
 func (h *Handler) GetCatalog(c *gin.Context) {
 	privileged := auth.IsPrivileged(c, h.cfg)
+
+	var items []map[string]interface{}
+	var err error
+	cacheHit := false
 
 	if !privileged {
 		h.catalogCacheMu.RLock()
 		if h.cachedCatalog != nil && time.Since(h.lastCatalogUpdate) < h.cacheTTL {
-			data := h.cachedCatalog
-			h.catalogCacheMu.RUnlock()
-			c.Header("X-Cache", "HIT")
-			c.Header("Cache-Control", "public, max-age=30")
-			c.JSON(200, data)
-			return
+			items = h.cachedCatalog
+			cacheHit = true
 		}
 		h.catalogCacheMu.RUnlock()
 	}
 
-	var items []map[string]interface{}
-	var err error
-
-	if h.hfClient != nil && h.hfClient.IsConfigured() {
-		items, err = h.hfClient.FetchCatalog(false)
-		if err != nil {
-			fmt.Printf("⚠️ Erro ao buscar catálogo do Hugging Face, usando banco local: %v\n", err)
+	if !cacheHit {
+		if h.hfClient != nil && h.hfClient.IsConfigured() {
+			items, err = h.hfClient.FetchCatalog(false)
+			if err != nil {
+				fmt.Printf("⚠️ Erro ao buscar catálogo do Hugging Face, usando banco local: %v\n", err)
+				items, err = h.db.GetCatalog(privileged)
+			}
+		} else {
 			items, err = h.db.GetCatalog(privileged)
 		}
+
+		if err != nil && len(items) == 0 {
+			c.JSON(500, gin.H{"erro": "Falha ao consultar catálogo."})
+			return
+		}
+
+		if !privileged {
+			h.catalogCacheMu.Lock()
+			h.cachedCatalog = items
+			h.lastCatalogUpdate = time.Now()
+			h.catalogCacheMu.Unlock()
+		}
+	}
+
+	if cacheHit {
+		c.Header("X-Cache", "HIT")
 	} else {
-		items, err = h.db.GetCatalog(privileged)
-	}
-
-	if err != nil && len(items) == 0 {
-		c.JSON(500, gin.H{"erro": "Falha ao consultar catálogo."})
-		return
-	}
-
-	if !privileged {
-		h.catalogCacheMu.Lock()
-		h.cachedCatalog = items
-		h.lastCatalogUpdate = time.Now()
-		h.catalogCacheMu.Unlock()
+		c.Header("X-Cache", "MISS")
 	}
 
 	typeFilter := strings.ToLower(strings.TrimSpace(c.Query("type")))
 	split := c.Query("split") == "true"
+	lite := c.Query("lite") == "true" || c.Query("lite") == "1" || c.Query("summary") == "true"
 
-	c.Header("X-Cache", "MISS")
+	cacheControl := "public, no-cache"
+	if privileged {
+		cacheControl = "private, no-cache"
+	}
+
+	project := func(item map[string]interface{}) map[string]interface{} {
+		if lite {
+			return summarizeCatalogItem(item)
+		}
+		return item
+	}
 
 	if split {
 		filmes := make([]map[string]interface{}, 0)
@@ -207,15 +407,15 @@ func (h *Handler) GetCatalog(c *gin.Context) {
 		for _, item := range items {
 			mType, _ := item["type"].(string)
 			if mType == "movie" {
-				filmes = append(filmes, item)
+				filmes = append(filmes, project(item))
 			} else if mType == "series" {
-				series = append(series, item)
+				series = append(series, project(item))
 			}
 		}
-		c.JSON(200, gin.H{
+		writeJSONWithETag(c, 200, gin.H{
 			"filmes": filmes,
 			"series": series,
-		})
+		}, cacheControl, catalogVaryHeader)
 		return
 	}
 
@@ -224,16 +424,25 @@ func (h *Handler) GetCatalog(c *gin.Context) {
 		for _, item := range items {
 			mType, _ := item["type"].(string)
 			if (typeFilter == "movie" || typeFilter == "filme" || typeFilter == "filmes") && mType == "movie" {
-				filtered = append(filtered, item)
+				filtered = append(filtered, project(item))
 			} else if (typeFilter == "series" || typeFilter == "serie") && mType == "series" {
-				filtered = append(filtered, item)
+				filtered = append(filtered, project(item))
 			}
 		}
-		c.JSON(200, filtered)
+		writeJSONWithETag(c, 200, filtered, cacheControl, catalogVaryHeader)
 		return
 	}
 
-	c.JSON(200, items)
+	if lite {
+		summarized := make([]map[string]interface{}, len(items))
+		for i, item := range items {
+			summarized[i] = summarizeCatalogItem(item)
+		}
+		writeJSONWithETag(c, 200, summarized, cacheControl, catalogVaryHeader)
+		return
+	}
+
+	writeJSONWithETag(c, 200, items, cacheControl, catalogVaryHeader)
 }
 
 func (h *Handler) GetAll(c *gin.Context) {
@@ -243,7 +452,7 @@ func (h *Handler) GetAll(c *gin.Context) {
 			c.JSON(500, gin.H{"erro": "Falha ao listar nomes dos itens."})
 			return
 		}
-		c.JSON(200, names)
+		writeJSONWithETag(c, 200, names, "public, no-cache", "")
 		return
 	}
 	h.GetCatalog(c)
@@ -266,21 +475,26 @@ func (h *Handler) GetContent(c *gin.Context) {
 		return
 	}
 
-	// Incrementa visualizações para ranking de populares
-	id, _ := item["id"].(string)
-	if id == "" {
-		id, _ = item["nome_do_json"].(string)
-	}
-	if id == "" {
-		id = nome
+	noTrack := c.Query("no_track") == "1" || c.Query("no_track") == "true"
+	if !noTrack {
+		// Incrementa visualizações para ranking de populares
+		id, _ := item["id"].(string)
+		if id == "" {
+			id, _ = item["nome_do_json"].(string)
+		}
+		if id == "" {
+			id = nome
+		}
+
+		if h.viewsTracker != nil {
+			newViews := h.viewsTracker.IncrementViews(id, nome, 0)
+			item["views"] = newViews
+		}
+		c.JSON(200, item)
+		return
 	}
 
-	if h.viewsTracker != nil {
-		newViews := h.viewsTracker.IncrementViews(id, nome, 0)
-		item["views"] = newViews
-	}
-
-	c.JSON(200, item)
+	writeJSONWithETag(c, 200, item, "private, no-cache", "")
 }
 
 func (h *Handler) GetCount(c *gin.Context) {

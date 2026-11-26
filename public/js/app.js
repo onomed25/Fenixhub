@@ -4376,6 +4376,183 @@ self.onmessage = async (e) => {
                 `;
             },
             
+            getMovieStreamCount: (item) => {
+                if (!item) return 0;
+                if (Array.isArray(item.streams)) return item.streams.length;
+                return typeof item.streams_count === 'number' ? item.streams_count : 0;
+            },
+
+            normalizeItemStreams: (item) => {
+                if (!item) return item;
+                item.seriesData = item.seriesData || { totalExpected: 0, foundCount: 0, missing: 0, percent: 0, foundSet: new Set(), seasonMap: {}, totalSeasons: 0 };
+
+                if (item.type === 'series') {
+                    const videos = item.nuviometaVideos || item.cinemetaVideos;
+                    if (videos && Array.isArray(videos)) {
+                        let expectedReal = 0;
+                        const seasonSet = new Set();
+                        videos.forEach(v => {
+                            if (v.season > 0) {
+                                expectedReal++;
+                                seasonSet.add(v.season);
+                                if (!item.seriesData.seasonMap[v.season]) item.seriesData.seasonMap[v.season] = { found: 0, expected: 0 };
+                                item.seriesData.seasonMap[v.season].expected++;
+                            }
+                        });
+                        item.seriesData.totalExpected = expectedReal;
+                        item.seriesData.totalSeasons = seasonSet.size;
+                    }
+
+                    const hasFullStreams = item.streams && (Array.isArray(item.streams) || typeof item.streams === 'object');
+                    if (hasFullStreams) {
+                        const newStreams = [];
+                        const foundIds = new Set();
+
+                        if (!Array.isArray(item.streams)) {
+                            Object.keys(item.streams).forEach(seasonNum => {
+                                const seasonObj = item.streams[seasonNum];
+                                if (!item.seriesData.seasonMap[seasonNum]) item.seriesData.seasonMap[seasonNum] = { found: 0, expected: 0 };
+                                item.seriesData.seasonMap[seasonNum].found = Object.keys(seasonObj).length;
+
+                                Object.keys(seasonObj).forEach(epNum => {
+                                    const sources = seasonObj[epNum];
+                                    if (sources && sources.length > 0) {
+                                        const s = seasonNum.padStart(2, '0');
+                                        const e = epNum.padStart(2, '0');
+                                        const epId = `S${s}E${e}`;
+
+                                        sources.forEach((source, index) => {
+                                            const linkName = source.name || source.description || `Opção ${index + 1}`;
+                                            newStreams.push({
+                                                name: `${epId} - ${linkName}`,
+                                                url: source.url,
+                                                colaborador: source.colaborador || item.colaborador,
+                                                colaborador_role: source.colaborador_role || item.colaborador_role,
+                                                colaborador_id: source.colaborador_id || item.colaborador_id,
+                                                colaborador_avatar: source.colaborador_avatar || item.colaborador_avatar
+                                            });
+                                        });
+                                        foundIds.add(epId);
+                                    }
+                                });
+                            });
+                            item.streams = newStreams;
+                        } else {
+                            item.streams.forEach((stream) => {
+                                if (!stream.colaborador && item.colaborador) {
+                                    stream.colaborador = item.colaborador;
+                                    stream.colaborador_role = item.colaborador_role;
+                                    stream.colaborador_id = item.colaborador_id;
+                                    stream.colaborador_avatar = item.colaborador_avatar;
+                                }
+                                const match = (stream.name || '').match(/S(\d+)E(\d+)/i);
+                                if (match) {
+                                    const s = parseInt(match[1], 10);
+                                    const e = parseInt(match[2], 10);
+                                    const epId = `S${String(s).padStart(2, '0')}E${String(e).padStart(2, '0')}`;
+                                    if (!item.seriesData.seasonMap[s]) item.seriesData.seasonMap[s] = { found: 0, expected: 0 };
+                                    if (!foundIds.has(epId)) {
+                                        foundIds.add(epId);
+                                        item.seriesData.seasonMap[s].found = (item.seriesData.seasonMap[s].found || 0) + 1;
+                                    }
+                                }
+                            });
+                        }
+                        item.seriesData.foundSet = foundIds;
+                        item.seriesData.foundCount = foundIds.size;
+                        item._fullLoaded = true;
+                    } else {
+                        const seasonCounts = item.season_counts || {};
+                        Object.keys(seasonCounts).forEach(seasonNum => {
+                            if (!item.seriesData.seasonMap[seasonNum]) item.seriesData.seasonMap[seasonNum] = { found: 0, expected: 0 };
+                            item.seriesData.seasonMap[seasonNum].found = Number(seasonCounts[seasonNum]) || 0;
+                        });
+                        item.seriesData.foundCount = typeof item.found_count === 'number'
+                            ? item.found_count
+                            : Object.values(seasonCounts).reduce((sum, n) => sum + (Number(n) || 0), 0);
+                        if (!item.seriesData.totalSeasons && typeof item.total_seasons === 'number') {
+                            item.seriesData.totalSeasons = item.total_seasons;
+                        }
+                    }
+
+                    if (!item.seriesData.totalSeasons) {
+                        item.seriesData.totalSeasons = Object.keys(item.seriesData.seasonMap || {}).length;
+                    }
+                    const total = item.seriesData.totalExpected;
+                    const found = item.seriesData.foundCount;
+                    item.seriesData.missing = total > 0 ? Math.max(0, total - found) : 0;
+                    item.seriesData.percent = total > 0 ? Math.round((found / total) * 100) : 0;
+                } else {
+                    if (Array.isArray(item.streams)) {
+                        item._fullLoaded = true;
+                        item.streams_count = item.streams.length;
+                    } else if (!item._fullLoaded) {
+                        item.streams_count = typeof item.streams_count === 'number' ? item.streams_count : 0;
+                    }
+                }
+                return item;
+            },
+
+            ensureFullItem: async (idOrItem) => {
+                const item = typeof idOrItem === 'string'
+                    ? cat.allItems.find(i => i.id === idOrItem || i.nome_do_json === idOrItem)
+                    : idOrItem;
+                if (!item) return null;
+                if (item._fullLoaded) return item;
+                if (item._fullPromise) return item._fullPromise;
+
+                const candidates = [];
+                if (item.id) candidates.push(item.id);
+                if (item.nome_do_json && item.nome_do_json !== item.id) candidates.push(item.nome_do_json);
+
+                item._fullPromise = (async () => {
+                    try {
+                        const headers = {};
+                        const discordToken = localStorage.getItem('discord_token');
+                        const adminSenha = sessionStorage.getItem('fenixflix_senha');
+                        if (discordToken) headers['Authorization'] = `Bearer ${discordToken}`;
+                        if (adminSenha) headers['x-admin-password'] = adminSenha;
+
+                        let fullData = null;
+                        for (const candidate of candidates) {
+                            const res = await fetch(`${API_URL}/api/content/${encodeURIComponent(candidate)}?no_track=1`, { headers });
+                            if (res.ok) {
+                                fullData = await res.json();
+                                break;
+                            }
+                        }
+                        if (!fullData) {
+                            throw new Error("Conteúdo não encontrado.");
+                        }
+
+                        const preservedTitle = item.title;
+                        const preservedPoster = item.poster;
+                        const preservedYear = item.year;
+                        const preservedVideos = item.cinemetaVideos;
+                        const preservedNuvioVideos = item.nuviometaVideos;
+                        const preservedOrder = item.recentOrder;
+
+                        Object.assign(item, fullData);
+                        if (preservedTitle && !item.title) item.title = preservedTitle;
+                        if (preservedPoster && !item.poster) item.poster = preservedPoster;
+                        if (preservedYear && !item.year) item.year = preservedYear;
+                        if (preservedVideos && !item.cinemetaVideos) item.cinemetaVideos = preservedVideos;
+                        if (preservedNuvioVideos && !item.nuviometaVideos) item.nuviometaVideos = preservedNuvioVideos;
+                        item.recentOrder = preservedOrder;
+
+                        // Reset seasonMap before rebuilding from full streams
+                        item.seriesData = { totalExpected: 0, foundCount: 0, missing: 0, percent: 0, foundSet: new Set(), seasonMap: {}, totalSeasons: 0 };
+                        cat.normalizeItemStreams(item);
+                        item._fullLoaded = true;
+                        return item;
+                    } finally {
+                        delete item._fullPromise;
+                    }
+                })();
+
+                return item._fullPromise;
+            },
+
             init: async () => {
                 cat.setLoading(true);
                 cat.allItems = [];
@@ -4388,7 +4565,7 @@ self.onmessage = async (e) => {
                     if (discordToken) headers['Authorization'] = `Bearer ${discordToken}`;
                     if (adminSenha) headers['x-admin-password'] = adminSenha;
 
-                    const response = await fetch(API_URL + '/api/catalog?_t=' + Date.now(), { headers });
+                    const response = await fetch(API_URL + '/api/catalog?lite=true', { headers });
                     if (!response.ok) {
                         const errData = await response.json().catch(() => ({}));
                         if (errData.isHf || errData.hfError) {
@@ -4427,90 +4604,7 @@ self.onmessage = async (e) => {
                             } catch (e) {}
                         }
 
-                        if (item.type === 'series') {
-                            const videos = item.nuviometaVideos || item.cinemetaVideos;
-                            if (videos && Array.isArray(videos)) {
-                                let expectedReal = 0; 
-                                const seasonSet = new Set();
-                                videos.forEach(v => {
-                                    if (v.season > 0) { 
-                                        expectedReal++;
-                                        seasonSet.add(v.season);
-                                        if(!item.seriesData.seasonMap[v.season]) item.seriesData.seasonMap[v.season] = { found: 0, expected: 0 };
-                                        item.seriesData.seasonMap[v.season].expected++;
-                                    }
-                                });
-                                item.seriesData.totalExpected = expectedReal; 
-                                item.seriesData.totalSeasons = seasonSet.size;
-                            }   
-
-                            const newStreams = [];
-                            const foundIds = new Set();
-                            
-                            if (item.streams && !Array.isArray(item.streams)) {
-                                Object.keys(item.streams).forEach(seasonNum => {
-                                    const seasonObj = item.streams[seasonNum];
-                                    if(!item.seriesData.seasonMap[seasonNum]) item.seriesData.seasonMap[seasonNum] = { found: 0, expected: 0 };
-                                    item.seriesData.seasonMap[seasonNum].found = Object.keys(seasonObj).length;
-
-                                    Object.keys(seasonObj).forEach(epNum => {
-                                        const sources = seasonObj[epNum];
-                                        if (sources && sources.length > 0) {
-                                            const s = seasonNum.padStart(2, '0');
-                                            const e = epNum.padStart(2, '0');
-                                            const epId = `S${s}E${e}`;
-                                            
-                                            sources.forEach((source, index) => {
-                                                const linkName = source.name || source.description || `Opção ${index + 1}`;
-                                                newStreams.push({ 
-                                                    name: `${epId} - ${linkName}`, 
-                                                    url: source.url,
-                                                    colaborador: source.colaborador || item.colaborador,
-                                                    colaborador_role: source.colaborador_role || item.colaborador_role,
-                                                    colaborador_id: source.colaborador_id || item.colaborador_id,
-                                                    colaborador_avatar: source.colaborador_avatar || item.colaborador_avatar
-                                                });
-                                            });
-                                            foundIds.add(epId);
-                                        }
-                                    });
-                                });
-                                item.streams = newStreams;
-                            } else if (item.streams && Array.isArray(item.streams)) {
-                                item.streams.forEach((stream) => {
-                                    if (!stream.colaborador && item.colaborador) {
-                                        stream.colaborador = item.colaborador;
-                                        stream.colaborador_role = item.colaborador_role;
-                                        stream.colaborador_id = item.colaborador_id;
-                                        stream.colaborador_avatar = item.colaborador_avatar;
-                                    }
-                                    const match = (stream.name || '').match(/S(\d+)E(\d+)/i);
-                                    if (match) {
-                                        const s = parseInt(match[1], 10);
-                                        const e = parseInt(match[2], 10);
-                                        const epId = `S${String(s).padStart(2, '0')}E${String(e).padStart(2, '0')}`;
-                                        if (!item.seriesData.seasonMap[s]) item.seriesData.seasonMap[s] = { found: 0, expected: 0 };
-                                        if (!foundIds.has(epId)) {
-                                            foundIds.add(epId);
-                                            item.seriesData.seasonMap[s].found = (item.seriesData.seasonMap[s].found || 0) + 1;
-                                        }
-                                    }
-                                });
-                            }
-                            item.seriesData.foundSet = foundIds;
-                            item.seriesData.foundCount = foundIds.size;
-                            if (!item.seriesData.totalSeasons) {
-                                item.seriesData.totalSeasons = Object.keys(item.seriesData.seasonMap || {}).length;
-                            }
-                            const total = item.seriesData.totalExpected;
-                            const found = item.seriesData.foundCount;
-                            item.seriesData.missing = total > 0 ? Math.max(0, total - found) : 0;
-                            item.seriesData.percent = total > 0 ? Math.round((found / total) * 100) : 0;
-                        } else {
-                            if (!item.streams) item.streams = [];
-                        }
-
-                        return item;
+                        return cat.normalizeItemStreams(item);
                     });
 
                     cat.updateGlobalStats();
@@ -4551,6 +4645,10 @@ self.onmessage = async (e) => {
                 }
                 if (item.atualizado_em) {
                     const t = new Date(item.atualizado_em).getTime();
+                    if (!isNaN(t) && t > maxTimestamp) maxTimestamp = t;
+                }
+                if (item.latest_stream_criado_em) {
+                    const t = new Date(item.latest_stream_criado_em).getTime();
                     if (!isNaN(t) && t > maxTimestamp) maxTimestamp = t;
                 }
 
@@ -4634,8 +4732,16 @@ self.onmessage = async (e) => {
                 window.forcePendenteForEdit = false;
                 window.isEditingExisting = true;
 
-                const item = cat.allItems.find(i => i.id === id);
+                let item = cat.allItems.find(i => i.id === id);
                 if (!item) return;
+
+                try {
+                    item = await cat.ensureFullItem(item);
+                } catch (err) {
+                    console.error(err);
+                    showToast("Falha ao carregar links para edição.", "error");
+                    return;
+                }
 
                 let exportData = {
                     id: item.id,
@@ -4700,15 +4806,23 @@ self.onmessage = async (e) => {
                 showToast(`Editando: ${item.title || item.id} (Substituirá o antigo ao salvar)`, "info");
             },
 
-            downloadJson: (id) => {
+            downloadJson: async (id) => {
                 const isLogged = localStorage.getItem('discord_token') || sessionStorage.getItem('fenixflix_senha');
                 if (!isLogged) {
                     showToast("Você precisa logar com o Discord primeiro para baixar arquivos!", "error");
                     return;
                 }
 
-                const item = cat.allItems.find(i => i.id === id);
+                let item = cat.allItems.find(i => i.id === id);
                 if (!item) return;
+
+                try {
+                    item = await cat.ensureFullItem(item);
+                } catch (err) {
+                    console.error(err);
+                    showToast("Falha ao carregar JSON completo para download.", "error");
+                    return;
+                }
 
                 let exportData = {
                     id: item.id,
@@ -4821,7 +4935,7 @@ self.onmessage = async (e) => {
                     const fillPercent = (totalExpected > 0) ? percent : (foundCount > 0 ? 100 : 0);
                     footerHtml = `<div class="mt-2.5"><div class="flex justify-between items-end mb-1.5">${statusText}${countHtml}</div><div class="h-1 w-full bg-zinc-800 rounded-full overflow-hidden"><div class="h-full ${barColor} progress-fill" style="width: ${item.loaded ? fillPercent : 5}%"></div></div></div>`;
                 } else {
-                    const streamCount = item.streams ? item.streams.length : 0;
+                    const streamCount = cat.getMovieStreamCount(item);
                     const hasLink = streamCount > 0;
                     footerHtml = `<div class="mt-auto pt-2.5 flex justify-between items-center"><span class="text-[10px] text-zinc-500 font-mono">${safeYear}</span><span class="${hasLink ? 'text-zinc-300' : 'text-red-400'} text-[10px] font-medium flex items-center gap-1.5">${hasLink ? streamCount + ' opções' : 'Sem links'}</span></div>`;
                 }
@@ -4913,10 +5027,25 @@ self.onmessage = async (e) => {
                     const isItemFromUser = (i) => {
                         if (!i) return false;
                         if (targetId && i.colaborador_id && String(i.colaborador_id).trim() === targetId) return true;
+                        if (Array.isArray(i.colaborador_ids)) {
+                            for (let idx = 0; idx < i.colaborador_ids.length; idx++) {
+                                if (targetId && String(i.colaborador_ids[idx]).trim() === targetId) return true;
+                            }
+                        }
                         if (i.colaborador && typeof i.colaborador === 'string') {
                             const cLower = i.colaborador.trim().toLowerCase();
                             if (targetNames.has(cLower)) return true;
                             if (isAdminLogged && cLower === 'admin') return true;
+                        }
+                        if (Array.isArray(i.colaboradores)) {
+                            for (let idx = 0; idx < i.colaboradores.length; idx++) {
+                                const cName = i.colaboradores[idx];
+                                if (typeof cName === 'string') {
+                                    const scLower = cName.trim().toLowerCase();
+                                    if (targetNames.has(scLower)) return true;
+                                    if (isAdminLogged && scLower === 'admin') return true;
+                                }
+                            }
                         }
                         if (Array.isArray(i.streams)) {
                             for (let idx = 0; idx < i.streams.length; idx++) {
@@ -4988,7 +5117,7 @@ self.onmessage = async (e) => {
                     cat.filteredItems = matched;
                 } else if (type === 'missing_all') {
                     cat.filteredItems = cat.allItems.filter(i => {
-                        if (i.type === 'movie') return !i.streams || i.streams.length === 0;
+                        if (i.type === 'movie') return cat.getMovieStreamCount(i) === 0;
                         if (i.type === 'series') return i.seriesData && i.seriesData.missing > 0;
                         return false;
                     });
@@ -5030,7 +5159,7 @@ self.onmessage = async (e) => {
                 let totalEpsPossuidos = 0, totalFaltantes = 0;
                 cat.allItems.forEach(i => {
                     if(i.type === 'series') { totalEpsPossuidos += i.seriesData.foundCount; totalFaltantes += i.seriesData.missing; }
-                    if(i.type === 'movie') { if(!i.streams || i.streams.length === 0) totalFaltantes++; }
+                    if(i.type === 'movie') { if(cat.getMovieStreamCount(i) === 0) totalFaltantes++; }
                 });
 
                 document.getElementById('countTotalEps').innerText = totalEpsPossuidos;
@@ -5305,10 +5434,13 @@ self.onmessage = async (e) => {
                 return Math.abs(actualWidth - targetWidth) / targetWidth <= 0.1;
             },
 
-            openLinks: (id) => {
-                const item = cat.allItems.find(i => i.id === id);
+            openLinks: async (id) => {
+                let item = cat.allItems.find(i => i.id === id);
                 if (!item) return;
-                
+
+                const reqToken = Date.now() + Math.random();
+                cat._activeModalRequest = reqToken;
+
                 document.getElementById('modalTitle').innerText = item.title || item.id;
                 
                 const btnEdit = document.getElementById('btnModalEdit');
@@ -5328,6 +5460,32 @@ self.onmessage = async (e) => {
                 const statsEl = document.getElementById('modalStats');
                 const content = document.getElementById('modalContent');
                 content.innerHTML = '';
+
+                if (!item._fullLoaded) {
+                    statsEl.innerHTML = `<span class="text-zinc-500">Carregando links...</span>`;
+                    content.innerHTML = `
+                        <div class="flex flex-col items-center justify-center py-16 text-zinc-400 gap-3">
+                            <span class="loader w-6 h-6"></span>
+                            <span class="text-xs">Carregando opções de reprodução...</span>
+                        </div>
+                    `;
+                    document.getElementById('modalTotalLinks').innerText = `...`;
+                    document.getElementById('linkModal').classList.remove('hidden');
+
+                    try {
+                        item = await cat.ensureFullItem(item);
+                    } catch (err) {
+                        if (cat._activeModalRequest !== reqToken) return;
+                        content.innerHTML = `<div class="text-red-400 text-center py-12 text-sm">Falha ao carregar links deste título.</div>`;
+                        statsEl.innerHTML = `<span class="text-red-400">Erro ao carregar</span>`;
+                        document.getElementById('modalTotalLinks').innerText = `0 links`;
+                        return;
+                    }
+                    if (cat._activeModalRequest !== reqToken || document.getElementById('linkModal').classList.contains('hidden')) {
+                        return;
+                    }
+                    content.innerHTML = '';
+                }
 
                 if (item.type === 'series') {
                     const { foundCount, totalExpected, missing, totalSeasons, seasonMap } = item.seriesData || {};
